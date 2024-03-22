@@ -10,10 +10,13 @@
 #define TEST_USBH_HID       1
 #define TEST_USBH_MSC       1
 #define TEST_USBH_MSC_FATFS 1
+#define TEST_USBH_AUDIO     0
+#define TEST_USBH_VIDEO     0
 #define TEST_USBH_CDC_ECM   1
 #define TEST_USBH_CDC_NCM   1
 #define TEST_USBH_RNDIS     1
 #define TEST_USBH_ASIX      1
+#define TEST_USBH_RTL8152   1
 
 #if TEST_USBH_CDC_ACM
 USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t cdc_buffer[512];
@@ -87,7 +90,6 @@ find_class:
         USB_LOG_RAW("bulk in error,ret:%d\r\n", ret);
     } else {
     }
-    
     // clang-format off
 delete: 
     usb_osal_thread_delete(NULL);
@@ -108,6 +110,9 @@ void usbh_hid_callback(void *arg, int nbytes)
         }
         USB_LOG_RAW("nbytes:%d\r\n", nbytes);
         usbh_submit_urb(&hid_class->intin_urb);
+    } else if (nbytes == -USB_ERR_NAK) { /* for dwc2 */
+        usbh_submit_urb(&hid_class->intin_urb);
+    } else {
     }
 }
 
@@ -156,14 +161,14 @@ int usb_msc_fatfs_test()
         memcpy(&read_write_buffer[i * 25], tmp_data, strlen(tmp_data));
     }
 
-    res_sd = f_mount(&fs, "/usb", 1);
+    res_sd = f_mount(&fs, "2:", 1);
     if (res_sd != FR_OK) {
         USB_LOG_RAW("mount fail,res:%d\r\n", res_sd);
         return -1;
     }
 
     USB_LOG_RAW("test fatfs write\r\n");
-    res_sd = f_open(&fnew, "/usb/test.txt", FA_CREATE_ALWAYS | FA_WRITE);
+    res_sd = f_open(&fnew, "2:test.txt", FA_CREATE_ALWAYS | FA_WRITE);
     if (res_sd == FR_OK) {
         res_sd = f_write(&fnew, read_write_buffer, sizeof(read_write_buffer), &fnum);
         if (res_sd == FR_OK) {
@@ -179,7 +184,7 @@ int usb_msc_fatfs_test()
     }
     USB_LOG_RAW("test fatfs read\r\n");
 
-    res_sd = f_open(&fnew, "/usb/test.txt", FA_OPEN_EXISTING | FA_READ);
+    res_sd = f_open(&fnew, "2:test.txt", FA_OPEN_EXISTING | FA_READ);
     if (res_sd == FR_OK) {
         res_sd = f_read(&fnew, read_write_buffer, sizeof(read_write_buffer), &fnum);
         if (res_sd == FR_OK) {
@@ -193,10 +198,10 @@ int usb_msc_fatfs_test()
         USB_LOG_RAW("open fail\r\n");
         goto unmount;
     }
-    f_mount(NULL, "/usb", 1);
+    f_mount(NULL, "2:", 1);
     return 0;
 unmount:
-    f_mount(NULL, "/usb", 1);
+    f_mount(NULL, "2:", 1);
     return -1;
 }
 #endif
@@ -232,8 +237,6 @@ find_class:
 #endif
 
 #if TEST_USBH_MSC_FATFS
-    extern void fatfs_usbh_driver_register(void);
-    fatfs_usbh_driver_register();
     usb_msc_fatfs_test();
 #endif
     // clang-format off
@@ -369,7 +372,7 @@ void usbh_videostreaming_parse_yuyv2(struct usbh_urb *urb, struct usbh_videostre
 }
 #endif
 
-#if TEST_USBH_CDC_ECM || TEST_USBH_CDC_NCM || TEST_USBH_RNDIS || TEST_USBH_ASIX
+#if TEST_USBH_CDC_ECM || TEST_USBH_CDC_NCM || TEST_USBH_RNDIS || TEST_USBH_ASIX || TEST_USBH_RTL8152
 #include "netif/etharp.h"
 #include "lwip/netif.h"
 #include "lwip/pbuf.h"
@@ -380,10 +383,6 @@ void usbh_videostreaming_parse_yuyv2(struct usbh_urb *urb, struct usbh_videostre
 #endif
 
 #ifdef __RTTHREAD__
-
-#ifndef RT_USING_TIMER_SOFT
-#error must enable RT_USING_TIMER_SOFT to support timer callback in thread
-#endif
 
 #include <rtthread.h>
 #include <rtdevice.h>
@@ -867,7 +866,7 @@ void usbh_asix_run(struct usbh_asix *asix_class)
     asix_dev.eth_tx = rt_usbh_asix_eth_tx;
     asix_dev.parent.user_data = asix_class;
 
-    eth_device_init(&asix_dev, "u0");
+    eth_device_init(&asix_dev, "u2");
     eth_device_linkchange(&asix_dev, RT_TRUE);
 
     usb_osal_thread_create("usbh_asix_rx", 2048, CONFIG_USBHOST_PSC_PRIO + 1, usbh_asix_rx_thread, asix_dev.netif);
@@ -893,7 +892,7 @@ void usbh_asix_run(struct usbh_asix *asix_class)
         }
     }
 
-    usb_osal_thread_create("usbh_asix_rx", 2048, 20, usbh_asix_rx_thread, netif);
+    usb_osal_thread_create("usbh_asix_rx", 2048, CONFIG_USBHOST_PSC_PRIO + 1, usbh_asix_rx_thread, netif);
 #if LWIP_DHCP
     dhcp_start(netif);
     xTimerStart(dhcp_handle1, 0);
@@ -907,6 +906,118 @@ void usbh_asix_stop(struct usbh_asix *asix_class)
     eth_device_deinit(&asix_dev);
 #else
     struct netif *netif = &g_asix_netif;
+#if LWIP_DHCP
+    dhcp_stop(netif);
+    dhcp_cleanup(netif);
+#endif
+    netif_set_down(netif);
+    netif_remove(netif);
+#endif
+}
+#endif
+
+#if TEST_USBH_RTL8152
+#include "usbh_rtl8152.h"
+
+struct netif g_rtl8152_netif;
+
+#ifdef __RTTHREAD__
+static struct eth_device rtl8152_dev;
+
+static rt_err_t rt_usbh_rtl8152_control(rt_device_t dev, int cmd, void *args)
+{
+    struct usbh_rtl8152 *rtl8152_class = (struct usbh_rtl8152 *)dev->user_data;
+
+    switch (cmd) {
+        case NIOCTL_GADDR:
+
+            /* get mac address */
+            if (args)
+                rt_memcpy(args, rtl8152_class->mac, 6);
+            else
+                return -RT_ERROR;
+
+            break;
+
+        default:
+            break;
+    }
+
+    return RT_EOK;
+}
+
+static rt_err_t rt_usbh_rtl8152_eth_tx(rt_device_t dev, struct pbuf *p)
+{
+    return usbh_rtl8152_linkoutput(NULL, p);
+}
+#endif
+
+static err_t usbh_rtl8152_if_init(struct netif *netif)
+{
+    LWIP_ASSERT("netif != NULL", (netif != NULL));
+
+    netif->mtu = 1500;
+    netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_LINK_UP | NETIF_FLAG_UP;
+    netif->state = NULL;
+    netif->name[0] = 'E';
+    netif->name[1] = 'X';
+    netif->output = etharp_output;
+    netif->linkoutput = usbh_rtl8152_linkoutput;
+    return ERR_OK;
+}
+
+void usbh_rtl8152_run(struct usbh_rtl8152 *rtl8152_class)
+{
+#ifdef __RTTHREAD__
+    struct netdev *netdev;
+
+    memset(&rtl8152_dev, 0, sizeof(struct eth_device));
+
+    rtl8152_dev.parent.control = rt_usbh_rtl8152_control;
+    rtl8152_dev.eth_rx = NULL;
+    rtl8152_dev.eth_tx = rt_usbh_rtl8152_eth_tx;
+    rtl8152_dev.parent.user_data = rtl8152_class;
+
+    eth_device_init(&rtl8152_dev, "u0");
+    eth_device_linkchange(&rtl8152_dev, RT_TRUE);
+
+    usb_osal_thread_create("usbh_rtl8152_rx", 2048, CONFIG_USBHOST_PSC_PRIO + 1, usbh_rtl8152_rx_thread, rtl8152_dev.netif);
+#else
+    struct netif *netif = &g_rtl8152_netif;
+
+    netif->hwaddr_len = 6;
+    memcpy(netif->hwaddr, rtl8152_class->mac, 6);
+
+    IP4_ADDR(&rtl8152_class->ipaddr, 0, 0, 0, 0);
+    IP4_ADDR(&rtl8152_class->netmask, 0, 0, 0, 0);
+    IP4_ADDR(&rtl8152_class->gateway, 0, 0, 0, 0);
+
+    netif = netif_add(netif, &rtl8152_class->ipaddr, &rtl8152_class->netmask, &rtl8152_class->gateway, NULL, usbh_rtl8152_if_init, tcpip_input);
+    netif_set_default(netif);
+    while (!netif_is_up(netif)) {
+    }
+
+    dhcp_handle1 = xTimerCreate((const char *)"dhcp1", (TickType_t)200, (UBaseType_t)pdTRUE, (void *const)netif, (TimerCallbackFunction_t)dhcp_timeout);
+    if (dhcp_handle1 == NULL) {
+        USB_LOG_ERR("timer creation failed! \r\n");
+        while (1) {
+        }
+    }
+
+    usb_osal_thread_create("usbh_rtl8152_rx", 2048, 20, usbh_rtl8152_rx_thread, netif);
+#if LWIP_DHCP
+    dhcp_start(netif);
+    xTimerStart(dhcp_handle1, 0);
+#endif
+#endif
+}
+
+void usbh_rtl8152_stop(struct usbh_rtl8152 *rtl8152_class)
+{
+#ifdef __RTTHREAD__
+    eth_device_deinit(&rtl8152_dev);
+#else
+    struct netif *netif = &g_rtl8152_netif;
 #if LWIP_DHCP
     dhcp_stop(netif);
     dhcp_cleanup(netif);
@@ -952,12 +1063,36 @@ void usbh_msc_stop(struct usbh_msc *msc_class)
 }
 #endif
 
+void usbh_audio_run(struct usbh_audio *audio_class)
+{
+#if TEST_USBH_AUDIO
+#error "if you want to use iso, please contact with me"
+    usb_osal_thread_create("usbh_audio", 2048, CONFIG_USBHOST_PSC_PRIO + 1, usbh_audio_thread, NULL);
+#endif
+}
+
+void usbh_audio_stop(struct usbh_audio *audio_class)
+{
+}
+
+// void usbh_video_run(struct usbh_video *video_class)
+// {
+// #if TEST_USBH_VIDEO
+// #error "if you want to use iso, please contact with me"
+//     usb_osal_thread_create("usbh_video", 2048, CONFIG_USBHOST_PSC_PRIO + 1, usbh_video_thread, NULL);
+// #endif
+// }
+
+// void usbh_video_stop(struct usbh_video *video_class)
+// {
+// }
+
 void usbh_class_test(void)
 {
 #ifdef __RTTHREAD__
     /* do nothing */
 #else
-#if TEST_USBH_CDC_ECM || TEST_USBH_CDC_NCM || TEST_USBH_RNDIS || TEST_USBH_ASIX
+#if TEST_USBH_CDC_ECM || TEST_USBH_CDC_NCM || TEST_USBH_RNDIS || TEST_USBH_ASIX || TEST_USBH_RTL8152
     /* Initialize the LwIP stack */
     tcpip_init(NULL, NULL);
 #endif

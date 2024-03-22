@@ -6,69 +6,26 @@ find_package(bouffalo_sdk REQUIRED HINTS $ENV{BL_SDK_BASE})
 
 sdk_add_include_directories(.)
 
-sdk_add_include_directories(cherryusb/common)
-sdk_add_include_directories(cherryusb/osal)
-sdk_add_include_directories(cherryusb/core)
-sdk_add_include_directories(cherryusb/class/cdc)
-sdk_add_include_directories(cherryusb/class/hid)
-sdk_add_include_directories(cherryusb/class/msc)
-sdk_add_include_directories(cherryusb/class/audio)
-sdk_add_include_directories(cherryusb/class/video)
-sdk_add_include_directories(cherryusb/class/hub)
-sdk_add_include_directories(cherryusb/class/wireless)
-sdk_add_include_directories(cherryusb/class/vendor/net)
-sdk_add_include_directories(cherryusb/class/vendor/serial)
+set(CONFIG_CHERRYUSB_HOST 1)
+set(CONFIG_CHERRYUSB_HOST_CDC_ACM 1)
+set(CONFIG_CHERRYUSB_HOST_CDC_ECM 1)
+set(CONFIG_CHERRYUSB_HOST_CDC_NCM 1)
+set(CONFIG_CHERRYUSB_HOST_HID 1)
+set(CONFIG_CHERRYUSB_HOST_MSC 1)
+set(CONFIG_CHERRYUSB_HOST_VIDEO 1)
+set(CONFIG_CHERRYUSB_HOST_AUDIO 1)
+set(CONFIG_CHERRYUSB_HOST_CDC_RNDIS 1)
+set(CONFIG_CHERRYUSB_HOST_BLUETOOTH 1)
+set(CONFIG_CHERRYUSB_HOST_ASIX 1)
+set(CONFIG_CHERRYUSB_HOST_RTL8152 1)
+set(CONFIG_CHERRYUSB_OSAL "freertos")
+set(CONFIG_CHERRYUSB_HOST_HCD "ehci_bouffalo")
 
-target_sources(app PRIVATE cherryusb/core/usbh_core.c)
-target_sources(app PRIVATE cherryusb/port/ehci/usb_hc_ehci.c)
-target_sources(app PRIVATE cherryusb/port/ehci/usb_glue_bouffalo.c)
-target_sources(app PRIVATE cherryusb/osal/usb_osal_freertos.c)
-target_sources(app PRIVATE cherryusb/class/cdc/usbh_cdc_acm.c)
-target_sources(app PRIVATE cherryusb/class/cdc/usbh_cdc_ecm.c)
-target_sources(app PRIVATE cherryusb/class/cdc/usbh_cdc_ncm.c)
-target_sources(app PRIVATE cherryusb/class/msc/usbh_msc.c)
-target_sources(app PRIVATE cherryusb/class/hid/usbh_hid.c)
-target_sources(app PRIVATE cherryusb/class/hub/usbh_hub.c)
-target_sources(app PRIVATE cherryusb/class/video/usbh_video.c)
-target_sources(app PRIVATE cherryusb/class/audio/usbh_audio.c)
-target_sources(app PRIVATE cherryusb/class/wireless/usbh_rndis.c)
-target_sources(app PRIVATE cherryusb/class/wireless/usbh_bluetooth.c)
-target_sources(app PRIVATE cherryusb/class/vendor/net/usbh_asix.c)
+include(cherryusb/cherryusb.cmake)
+target_sources(app PRIVATE ${cherryusb_srcs})
+sdk_add_include_directories(${cherryusb_incs})
 
-set(BLUETOOTH_PATH cherryusb/third_party/zephyr_bluetooth-2.7.5)
-
-add_subdirectory(${BLUETOOTH_PATH}/zephyr_bluetooth)
-target_link_libraries(zephyr_bluetooth sdk_intf_lib)
-target_link_libraries(app zephyr_bluetooth)
-
-target_sources(app PRIVATE 
-${BLUETOOTH_PATH}/ble_hci_usbh.c 
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/beacon/src/main.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/central/src/main.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/central_hr/src/main.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/central_ht/src/main.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/central_multilink/src/main.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/central_multilink/src/central_multilink.c
-# ${BLUETOOTH_PATH}/zephyr_bluetooth/examples/handsfree/src/main.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/ibeacon/src/main.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/peripheral/src/main.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/peripheral/src/cts.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/peripheral_csc/src/main.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/peripheral_dis/src/main.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/peripheral_esp/src/main.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/peripheral_hids/src/main.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/peripheral_hids/src/hog.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/peripheral_hr/src/main.c
-# ${BLUETOOTH_PATH}/zephyr_bluetooth/examples/peripheral_ht/src/main.c
-# ${BLUETOOTH_PATH}/zephyr_bluetooth/examples/peripheral_ht/src/hts.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/peripheral_identity/src/main.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/peripheral_identity/src/peripheral_identity.c
-# ${BLUETOOTH_PATH}/zephyr_bluetooth/examples/peripheral_ots/src/main.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/peripheral_sc_only/src/main.c
-${BLUETOOTH_PATH}/zephyr_bluetooth/examples/scan_adv/src/main.c
-)
-
-target_sources(app PRIVATE usb_host.c)
+target_sources(app PRIVATE usb_host.c usb_video.c)
 sdk_set_main_file(main.c)
 sdk_set_linker_script(bl616_flash.ld)
 project(cherryusb)
