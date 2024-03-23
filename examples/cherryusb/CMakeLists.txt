@@ -25,7 +25,7 @@ include(cherryusb/cherryusb.cmake)
 target_sources(app PRIVATE ${cherryusb_srcs})
 sdk_add_include_directories(${cherryusb_incs})
 
-target_sources(app PRIVATE usb_host.c usb_video.c)
+target_sources(app PRIVATE usb_host.c)
 sdk_set_main_file(main.c)
 sdk_set_linker_script(bl616_flash.ld)
 project(cherryusb)
