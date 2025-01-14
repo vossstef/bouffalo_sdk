@@ -121,7 +121,7 @@
 /* Controls if TCP should queue segments that arrive out of
    order. Define to 0 if your device is low on memory
 */
-#define TCP_QUEUE_OOSEQ         0
+#define TCP_QUEUE_OOSEQ         1
 
 /*  TCP_SND_QUEUELEN: TCP sender buffer space (pbufs). This must be at least
   as much as (2 * TCP_SND_BUF/TCP_MSS) for things to work.
@@ -129,7 +129,7 @@
 #define TCP_SND_QUEUELEN        (4* TCP_SND_BUF/TCP_MSS)
 
 /* TCP receive window. */
-#define TCP_WND                 (2*TCP_MSS)
+#define TCP_WND                 (16*TCP_MSS)
 
 /*
  *  -----------------------------------
@@ -181,7 +181,7 @@
  *  ---------------------------------
  */
 
-#define TCPIP_THREAD_NAME              "TCP/IP"
+#define TCPIP_THREAD_NAME              "tcpip"
 #define TCPIP_THREAD_STACKSIZE          1500
 #define TCPIP_MBOX_SIZE                 64
 #define DEFAULT_RAW_RECVMBOX_SIZE       1000
@@ -189,10 +189,11 @@
 #define DEFAULT_TCP_RECVMBOX_SIZE       100
 #define DEFAULT_ACCEPTMBOX_SIZE         1500
 #define DEFAULT_THREAD_STACKSIZE        500
-#define TCPIP_THREAD_PRIO               0
+#define TCPIP_THREAD_PRIO               31
 #define LWIP_SINGLE_NETIF               1
 #define LWIP_COMPAT_MUTEX               0
 
 #define LWIP_TCPIP_CORE_LOCKING_INPUT 1
+#define LWIP_TCPIP_CORE_LOCKING         1
 
 #endif /* __LWIPOPTS_H__ */

@@ -158,7 +158,7 @@ SECTIONS
         __nocache_noinit_ram_data_end__ = .;
     } > ram_nocache
 
-    /* Skip the nocache region */ 
+    /* Skip the nocache region */
     .ram_skip_nocache_region (NOLOAD) :
     {
         . += (__nocache_noinit_ram_data_end__ - ORIGIN(ram_nocache));
@@ -171,6 +171,7 @@ SECTIONS
         . = ALIGN(4);
         __tcm_code_start__ = .;
 
+        *(.fast*)
         *(.tcm_code.*)
         *(.tcm_const.*)
         *(.sclock_rlt_code.*)
@@ -345,7 +346,7 @@ SECTIONS
 
     __psram_limit = ORIGIN(ram_psram) + LENGTH(ram_psram);
     ASSERT(__psram_limit - __psram_heap_base >= psram_heap_min_size, "psram heap region overflow")
- 
+
     .wifibss (NOLOAD) :
     {
       PROVIDE( __wifi_bss_start = ADDR(.wifibss) );
