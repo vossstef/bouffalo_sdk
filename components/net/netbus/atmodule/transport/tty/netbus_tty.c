@@ -60,6 +60,7 @@ int netbus_tty_init(netbus_tty_ctx_t *pctx, uint32_t txbuf_size, uint32_t rxbuf_
 
 int netbus_tty_send(netbus_tty_ctx_t *pctx, const uint8_t *p_data, uint32_t len, uint32_t timeout)
 {
+    int ret;
     //return len;
 #if 0
     int ret = 0;
@@ -86,7 +87,7 @@ int netbus_tty_send(netbus_tty_ctx_t *pctx, const uint8_t *p_data, uint32_t len,
         return -1;
     }
     //bflb_tty_upld_send(p_data, len);
-    nethub_ctrl_upld_send((uint8_t *)p_data, len);
+    ret = nethub_ctrl_upld_send((uint8_t *)p_data, len);
     xSemaphoreGive(pctx->w_mutex);
 
 #if NETBUS_TTY_DEBUG
@@ -101,7 +102,7 @@ int netbus_tty_send(netbus_tty_ctx_t *pctx, const uint8_t *p_data, uint32_t len,
 #endif
 
 #endif
-    return (int)len;
+    return ret == 0 ? (int)len : ret;
 }
 
 int netbus_tty_receive(netbus_tty_ctx_t *pctx, uint8_t *p_buffer, uint32_t buf_len, uint32_t timeout)

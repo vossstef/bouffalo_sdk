@@ -96,12 +96,10 @@ bool unwind_table_init(const uint8_t *data);
  * - Returns false if entry not found (caller should treat as leaf function)
  *
  * @param pc            Program counter address
- * @param segments      Segment descriptor array
- * @param num_segments  Number of segments
  * @param entry         [out] Unwind entry structure
  * @return true if entry found, false if leaf function (not in table)
  */
-bool find_unwind_entry(uint32_t pc, const segment_desc_t *segments, int num_segments, unwind_entry_t *entry);
+bool find_unwind_entry(uint32_t pc, unwind_entry_t *entry);
 
 /**
  * @brief Unwind one stack frame
@@ -114,14 +112,11 @@ bool find_unwind_entry(uint32_t pc, const segment_desc_t *segments, int num_segm
  *
  * @param pc            Current program counter
  * @param sp            Current stack pointer
- * @param segments      Segment descriptor array
- * @param num_segments  Number of segments
  * @param new_pc        [out] Previous frame's program counter
  * @param new_sp        [out] Previous frame's stack pointer
  * @return true if unwind succeeded, false on error
  */
 bool unwind_frame(uint32_t pc, uint32_t sp,
-                  const segment_desc_t *segments, int num_segments,
                   uint32_t *new_pc, uint32_t *new_sp);
 
 /**

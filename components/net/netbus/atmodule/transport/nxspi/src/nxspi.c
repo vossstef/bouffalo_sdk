@@ -56,23 +56,6 @@ volatile uint8_t g_cs_rising   = 0;
 extern struct bflb_device_s *dma0_ch0;
 extern struct bflb_device_s *dma0_ch1;
 
-// Handles timeout if SPI fails to reach complete state within 1 second of start
-void spi_start_timeout_handler(TimerHandle_t xTimer)
-{
-    (void)xTimer;
-    NX_LOGW("wait timeout after start.\r\n");
-
-    return;//todo: fixme
-    /* Set bit */
-    if (xPortIsInsideInterrupt()) {
-        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        xTaskNotifyFromISR(g_nxspi.task_hdl, NTF_START_TIMEOUT, eSetBits, &xHigherPriorityTaskWoken);
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-    } else {
-        xTaskNotify(g_nxspi.task_hdl, NTF_START_TIMEOUT, eSetBits);
-    }
-}
-
 // cb when write
 void dataready_update_cb(void)
 {
@@ -251,13 +234,6 @@ void __trans_start()
     nxspi_hwspi_ts((uint8_t *)&up_header, (uint8_t *)&dn_header, sizeof(dn_header),
                 send, recv, NXBD_MTU,
                 __spihdreceived_cb_isr, NULL);
-#if 0
-    res = xTimerStart(g_nxspi.timer, NXSPI_START_TIMEOUT);
-    if (res != pdPASS) {
-        printf("Failed to start timer!\r\n");
-    }
-#endif
-
     /* debug after_start */
     g_nxspi.tfsize_after_start = ((*(volatile uint32_t *)0x2000C20C)&4095);
     g_nxspi.dst_after_start    = (*(volatile uint32_t *)0x2000C204);
@@ -334,8 +310,7 @@ int _bdreceived(void)
 
     len = NXSPI_GETMAX_LEN(dn_header.len, up_header.len);
 
-    // check
-    if ((len < 0) || (len > NXBD_MTU)) {
+    if ((g_nxspi.dnmsg == NULL) || (len > NXBD_MTU)) {
         NX_LOGD("early dn_header.len:%d, up_header.len:%d, len:%ld\r\n", dn_header.len, up_header.len, len);
         return 0;
     }
@@ -425,10 +400,6 @@ void state_machine()
                 }
             }
         } else if (NXSPI_SM_COMPLETE ==  g_nxspi.sm) {
-#if 0
-            xTimerReset(g_nxspi.timer, 0);
-            xTimerStop(g_nxspi.timer, 0);
-#endif
             // check bd done ?
 #if 0
             {
@@ -483,6 +454,10 @@ trans_desc_t *nxspi_writebuf_pop(uint8_t type, uint32_t timeout)
 {
     BaseType_t result;
     trans_desc_t *msg;
+    if (type >= NXSPI_TYPE_MAX) {
+        return NULL;
+    }
+
     result = xQueueReceive(g_nxspi.upfq, &msg, timeout);
     if (result != pdPASS) {
         return NULL;
@@ -514,7 +489,7 @@ int nxspi_write(uint8_t type, uint8_t *buf, uint16_t len, uint32_t timeout)
 
     //printf("nxspi_write type:%d, len:%d\r\n", type, len);
 
-    if (len > NXBD_MTU) {
+    if ((type >= NXSPI_TYPE_MAX) || ((buf == NULL) && (len > 0)) || (len > NXBD_MTU)) {
         return -1;
     }
 
@@ -526,7 +501,9 @@ int nxspi_write(uint8_t type, uint8_t *buf, uint16_t len, uint32_t timeout)
 
     // buf to msg, msg to q
     msg->type = type;
-    memcpy(msg->payload, buf, len);
+    if (len > 0) {
+        memcpy(msg->payload, buf, len);
+    }
     msg->len = len;
     if (len&NXSPI_ALGIN_MASK) {
         for (int i = 0; i < (NXSPI_ALGIN_BYTES - (len&NXSPI_ALGIN_MASK)); i++) {

@@ -22,9 +22,57 @@
 
 #if defined(CONFIG_FREERTOS)
 #include <FreeRTOS.h>
+#include "queue.h"
 #include "task.h"
 #include "semphr.h"
-#include "filesystem_reader.h"
+#endif
+
+#if defined(CONFIG_FREERTOS)
+static QueueHandle_t pool_queue;
+static QueueHandle_t out_queue;
+
+int frame_buffer_pool_init(jpg_buffer_t *buffers, uint8_t *data, uint32_t buffer_count, size_t buffer_size)
+{
+    pool_queue = xQueueCreate(buffer_count, sizeof(jpg_buffer_t *));
+    if (pool_queue == NULL) {
+        return -1;
+    }
+
+    out_queue = xQueueCreate(buffer_count, sizeof(jpg_buffer_t *));
+    if (out_queue == NULL) {
+        vQueueDelete(pool_queue);
+        pool_queue = NULL;
+        return -1;
+    }
+
+    for (uint32_t i = 0; i < buffer_count; i++) {
+        buffers[i].data = data + i * buffer_size;
+        buffers[i].size = 0;
+        frame_buffer_release(&buffers[i]);
+    }
+
+    return 0;
+}
+
+int frame_buffer_get(jpg_buffer_t **buffer, TickType_t timeout)
+{
+    return xQueueReceive(pool_queue, buffer, timeout) == pdTRUE ? 0 : -1;
+}
+
+int frame_buffer_push(jpg_buffer_t *buffer, TickType_t timeout)
+{
+    return xQueueSend(out_queue, &buffer, timeout) == pdTRUE ? 0 : -1;
+}
+
+int frame_buffer_pop(jpg_buffer_t **buffer, TickType_t timeout)
+{
+    return xQueueReceive(out_queue, buffer, timeout) == pdTRUE ? 0 : -1;
+}
+
+int frame_buffer_release(jpg_buffer_t *buffer)
+{
+    return xQueueSend(pool_queue, &buffer, 0) == pdTRUE ? 0 : -1;
+}
 #endif
 
 #if !VIDEO_FULLSCREEN
@@ -383,8 +431,6 @@ void image_switch_task(void *param)
     volatile uint32_t *pcount;
     uint32_t last_count = 0;
     jpg_buffer_t *jpg_buffer;
-    QueueHandle_t full_queue = filesystem_get_full_queue();
-    QueueHandle_t empty_queue = filesystem_get_empty_queue();
     uint8_t yuv_idx = 0;
     uint32_t reset_count = 0;
     uint32_t timeout_count = 0, success_count = 0;
@@ -401,7 +447,7 @@ void image_switch_task(void *param)
     LOG_I("image switch task started (DPI), target=%u fps\r\n", (unsigned)VIDEO_TARGET_FPS);
 
     while (1) {
-        if (xQueueReceive(full_queue, &jpg_buffer, (TickType_t)100) != pdTRUE) {
+        if (frame_buffer_pop(&jpg_buffer, (TickType_t)100) != 0) {
             continue;
         }
 
@@ -456,7 +502,7 @@ void image_switch_task(void *param)
                 reset_count = 0;
                 printf("******  mjdec reset!  ******\r\n");
             }
-            xQueueSend(empty_queue, &jpg_buffer, (TickType_t)0);
+            frame_buffer_release(jpg_buffer);
             continue;
         }
         dpi_mjdec_stop();
@@ -464,7 +510,7 @@ void image_switch_task(void *param)
 
         if (compose_centered(yuv_images[yuv_idx]) < 0) {
             timeout_count++;                       
-            xQueueSend(empty_queue, &jpg_buffer, (TickType_t)0);
+            frame_buffer_release(jpg_buffer);
             continue;                        /* skip */
         }
         /* Hand the composited panel buffer to the OSD SEOF ISR and arm the latch. */
@@ -482,7 +528,7 @@ void image_switch_task(void *param)
         last_count = *pcount;
 #endif
 
-        xQueueSend(empty_queue, &jpg_buffer, (TickType_t)0);
+        frame_buffer_release(jpg_buffer);
         yuv_idx = (yuv_idx + 1) % 2;
         success_count++;
 
@@ -843,8 +889,6 @@ int dpi_manager_init(void)
 void image_switch_task(void *param)
 {
     jpg_buffer_t *jpg_buffer;
-    QueueHandle_t full_queue = filesystem_get_full_queue();
-    QueueHandle_t empty_queue = filesystem_get_empty_queue();
     const TickType_t frame_period_ticks = pdMS_TO_TICKS(VIDEO_FRAME_PERIOD_MS);
     TickType_t last_frame_wake;
     int parity = 0;
@@ -860,7 +904,7 @@ void image_switch_task(void *param)
     LOG_I("image switch task started, target=%u fps\r\n", (unsigned)VIDEO_TARGET_FPS);
 
     while (1) {
-        if (xQueueReceive(full_queue, &jpg_buffer, (TickType_t)100) != pdTRUE) {
+        if (frame_buffer_pop(&jpg_buffer, (TickType_t)100) != 0) {
             continue;
         }
 
@@ -932,7 +976,7 @@ void image_switch_task(void *param)
              * cache work); the init-time clean of the black borders still holds. */
             if (compose_centered(y_buffer[parity], uv_buffer[parity]) < 0) {
                 timeout++;
-                xQueueSend(empty_queue, &jpg_buffer, (TickType_t)0);
+                frame_buffer_release(jpg_buffer);
                 continue;                        /* skip this frame */
             }
 #endif
@@ -943,7 +987,7 @@ void image_switch_task(void *param)
             dpi_show_pending = 1;
         }
 
-        xQueueSend(empty_queue, &jpg_buffer, (TickType_t)0);
+        frame_buffer_release(jpg_buffer);
 
         if (frame_period_ticks > 0) {
             vTaskDelayUntil(&last_frame_wake, frame_period_ticks);

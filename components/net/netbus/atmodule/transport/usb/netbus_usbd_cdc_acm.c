@@ -159,7 +159,7 @@ int netbus_usb_cdcacm_send(netbus_usb_cdc_t *pctx, const uint8_t *p_data, uint32
         xSemaphoreTake(pctx->wdone_sem, timeout);
 
         ret = (remain_len > sizeof(write_buffer)) ? sizeof(write_buffer) : remain_len;
-        memcpy(write_buffer, p_data, ret);
+        memcpy(write_buffer, p_data + send_len, ret);
 
 		send_len += ret;
 		remain_len -= ret;

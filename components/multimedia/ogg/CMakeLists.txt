@@ -1,3 +1,8 @@
-sdk_add_static_library(libs/e907fp/libogg.a)
+
+if("${CHIP}" STREQUAL "bl618dg")
+sdk_add_static_library(libogg_bl618dg.a)
+else()
+sdk_add_static_library(libogg.a)
+endif()
 
 sdk_add_include_directories(include)

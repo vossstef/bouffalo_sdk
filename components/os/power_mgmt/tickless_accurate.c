@@ -73,13 +73,21 @@ volatile int _ffag = 0;
 volatile uint32_t *const pulTimeHigh = (volatile uint32_t *const)((configMTIME_BASE_ADDRESS) + 4UL); /* 8-byte typer so high 32-bit word is 4 bytes up. */
 volatile uint32_t *const pulTimeLow = (volatile uint32_t *const)(configMTIME_BASE_ADDRESS);
 extern const size_t uxTimerIncrementsForOneTick;
-extern char __lp_mon_start[], __lp_mon_end[];
 extern BL_Err_Type GLB_Simple_Set_MCU_System_CLK(uint8_t clkFreq, uint8_t mcuClkDiv, uint8_t mcuPBclkDiv);
 extern void board_recovery(void);
 extern int macswl_ps_sleep_check(void);
 extern int macswl_connected_enter_ops(void);
 extern void macswl_regs_save_ops(void);
 extern uint32_t wifi_get_next_wakeup_timer_time(void);
+
+struct lp_interval {
+    uint64_t arm_mtime;
+};
+
+static struct {
+    struct lp_interval wifi_ps;
+    struct lp_interval ble_recovery;
+} lp_monitor;
 
 static uint64_t get_mtime(void)
 {
@@ -98,22 +106,31 @@ static uint64_t get_mtime(void)
     return current_mtime;
 }
 
-#define INTERVAL(ms, p) ({                                                            \
-    static uint64_t __attribute__((section(".lp_mon_ctx"))) __last_time = 0;          \
-    uint64_t __current_time;                                                          \
-    int ret = 0;                                                                      \
-    uint64_t **q = (uint64_t **)p;                                                    \
-    if (q)                                                                            \
-        *q = &__last_time;                                                            \
-    __current_time = get_mtime();                                                     \
-    if (__last_time == 0) {                                                           \
-        __last_time = __current_time;                                                 \
-    } else if (__current_time > (__last_time + uxTimerIncrementsForOneTick * (ms))) { \
-        __last_time = __current_time;                                                 \
-        ret = 1;                                                                      \
-    }                                                                                 \
-    ret;                                                                              \
-})
+static inline int lp_interval_check(struct lp_interval *interval, uint32_t ms)
+{
+    uint64_t current_time = get_mtime();
+    uint64_t old_time = interval->arm_mtime;
+
+    if (old_time == 0) {
+        interval->arm_mtime = current_time;
+    } else if (current_time > (old_time + uxTimerIncrementsForOneTick * ms)) {
+        interval->arm_mtime = current_time;
+        return 1;
+    }
+
+    return 0;
+}
+
+static inline void lp_interval_reset(struct lp_interval *interval)
+{
+    interval->arm_mtime = 0;
+}
+
+static inline void lp_monitor_reset_all(void)
+{
+    lp_interval_reset(&lp_monitor.wifi_ps);
+    lp_interval_reset(&lp_monitor.ble_recovery);
+}
 
 #if 0
 #define ___WFI()                                                                                                                   \
@@ -204,6 +221,7 @@ int tickless_enter(void)
 int tickless_exit(void)
 {
     enable_tickless = 0;
+    lp_interval_reset(&lp_monitor.wifi_ps);
 
     return 0;
 }
@@ -327,8 +345,8 @@ void lp_hook_pre_sleep(iot2lp_para_t *param)
         return;
     }
 
-    /* clear lp monitor context */
-    memset(__lp_mon_start, 0, __lp_mon_end - __lp_mon_start);
+    /* Clear interval state before the mtime/PDS epoch changes. */
+    lp_monitor_reset_all();
 
     tickless_info("Next wake: %s, next tick:%" __PRI64(u) ", current tick:%" __PRI64(u),
                   wake_task_name, (uint64_t)wake_next_tick, (uint64_t)xTaskGetTickCount());
@@ -473,8 +491,7 @@ void vApplicationSleep(TickType_t xExpectedIdleTime)
     if (likely(rw_main_task_hdl != 0)) {
         /* Get BLE sleep time */
         ble_sleep_rtc = btble_controller_sleep(0);
-        int64_t *p = NULL;
-        int status = INTERVAL(500, &p);
+        int status = lp_interval_check(&lp_monitor.ble_recovery, 500);
         if (ble_sleep_rtc < 0) {
             if (status) {
                 recovery_ble();
@@ -483,8 +500,7 @@ void vApplicationSleep(TickType_t xExpectedIdleTime)
             ___WFI();
             return;
         } else {
-            configASSERT(p != NULL);
-            *p = 0;
+            lp_interval_reset(&lp_monitor.ble_recovery);
         }
 
         tickless_info("ble sleep duration: %d", ble_sleep_rtc);
@@ -532,7 +548,7 @@ void vApplicationSleep(TickType_t xExpectedIdleTime)
     if (likely(connected)) {
         /* check wifi PS state */
         if (macswl_ps_sleep_check() != 0) {
-            if (INTERVAL(5000, NULL)) {
+            if (lp_interval_check(&lp_monitor.wifi_ps, 5000)) {
                 tickless_error("!!! WiFi stuck again, Reset System !!!");
                 /* TODO Reboot */
                 configASSERT(0);

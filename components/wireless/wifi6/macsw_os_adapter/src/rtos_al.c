@@ -45,8 +45,8 @@ const int fhost_tx_priority = RTOS_TASK_PRIORITY(29);
 const int fhost_wpa_priority = RTOS_TASK_PRIORITY(26);
 const int fhost_ipc_priority = RTOS_TASK_PRIORITY(29);
 const int fhost_iperf_priority = RTOS_TASK_PRIORITY(27);
-const int fhost_connect_priority = RTOS_TASK_PRIORITY(2);
-const int fhost_tg_priority = RTOS_TASK_PRIORITY(5);
+const int fhost_connect_priority = RTOS_TASK_PRIORITY(25);
+const int fhost_tg_priority = RTOS_TASK_PRIORITY(26);
 const int fhost_ping_priority = RTOS_TASK_PRIORITY(27);
 
 

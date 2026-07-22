@@ -17,6 +17,12 @@ target_sources(app PRIVATE
                    app/src/app_user.c
                    )
 
+if(CONFIG_NETHUB_PROFILE_USB)
+target_sources(app PRIVATE
+                   app/src/app_usb_composite.c
+                   )
+endif()
+
 # Virtual channel demo (only compile if CONFIG_MR_VIRTUALCHAN is defined)
 if(CONFIG_MR_VIRTUALCHAN)
 target_sources(app PRIVATE app/src/virtualchan/app_vchan.c)

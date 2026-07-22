@@ -10,13 +10,30 @@ GPIO validation case for command-driven chip validation. DUT and tester share th
 | CHIP              | Remark |
 |:-----------------:|:------:|
 | BL616/BL618       | Verified as v1 target |
+| BL618DG           |        |
+| BL616CL           |        |
 
 ## Build
 
 ### DUT build
 
-```bash
+- BL616/BL618
+
+```
 make CHIP=bl616 BOARD=bl616dk
+```
+
+- BL618DG
+
+```
+make CHIP=bl618dg BOARD=bl618dgdk CPU_ID=ap
+make CHIP=bl618dg BOARD=bl618dgdk CPU_ID=np
+```
+
+- BL616CL
+
+```
+make CHIP=bl616cl BOARD=bl616cldk
 ```
 
 ### Tester build

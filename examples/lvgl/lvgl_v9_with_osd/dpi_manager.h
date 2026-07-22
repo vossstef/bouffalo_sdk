@@ -1,9 +1,19 @@
 #ifndef _DPI_MANAGER_H_
 #define _DPI_MANAGER_H_
 
+#include <stddef.h>
 #include <stdint.h>
 #include "lcd.h" /* panel selected in lcd_conf_user.h -> LCD_W / LCD_H */
 #include "video_config.h" /* customer knobs: VIDEO_WIDTH/HEIGHT, VIDEO_TARGET_FPS */
+
+#if defined(CONFIG_FREERTOS)
+#include <FreeRTOS.h>
+#endif
+
+typedef struct {
+    uint8_t *data;
+    size_t size;
+} jpg_buffer_t;
 
 /* Panel resolution follows whatever lcd_conf_user.h selected, so
  * switching panels is just a one-line change there (no edits in this project). */
@@ -57,7 +67,13 @@
 int dpi_manager_init(void);
 
 #if defined(CONFIG_FREERTOS)
-/* Consumer task: pull JPEG buffers from the filesystem full queue, MJDEC-decode
+int frame_buffer_pool_init(jpg_buffer_t *buffers, uint8_t *data, uint32_t buffer_count, size_t buffer_size);
+int frame_buffer_get(jpg_buffer_t **buffer, TickType_t timeout);
+int frame_buffer_push(jpg_buffer_t *buffer, TickType_t timeout);
+int frame_buffer_pop(jpg_buffer_t **buffer, TickType_t timeout);
+int frame_buffer_release(jpg_buffer_t *buffer);
+
+/* Consumer task: pull JPEG buffers from the output queue, MJDEC-decode
  * into ping-pong YUV buffers, switch the DPI background layer to each new frame. */
 void image_switch_task(void *param);
 #endif

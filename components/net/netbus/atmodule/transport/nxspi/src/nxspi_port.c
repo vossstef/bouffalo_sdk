@@ -531,7 +531,7 @@ int nx_dma_channel_lli_reload(struct bflb_device_s *dev, struct bflb_dma_channel
             actual_transfer_offset = 4064 << 2;
             break;
         default:
-            break;
+            return -1;
     }
 
     for (size_t i = 0; i < count; i++) {
@@ -553,7 +553,7 @@ int nx_dma_channel_lli_reload(struct bflb_device_s *dev, struct bflb_dma_channel
                 break;
 
             default:
-                break;
+                return -1;
         }
 
         current_lli_count = actual_transfer_len / 4064 + 1;
@@ -565,15 +565,17 @@ int nx_dma_channel_lli_reload(struct bflb_device_s *dev, struct bflb_dma_channel
             last_transfer_len += 4064;
         }
 
+        if ((lli_count_used_offset > max_lli_count) ||
+            (current_lli_count > max_lli_count - lli_count_used_offset)) {
+            return -ENOMEM;
+        }
+
         nx_dma_lli_config(dev, &lli_pool[lli_count_used_offset], current_lli_count, &transfer[i], actual_transfer_offset, last_transfer_len);
         if (i) {
             lli_pool[lli_count_used_offset - 1].nextlli = (uint32_t)(uintptr_t)&lli_pool[lli_count_used_offset];
         }
         lli_count_used_offset += current_lli_count;
 
-        if (lli_count_used_offset > max_lli_count) {
-            return -ENOMEM;
-        }
     }
 
     putreg32(lli_pool[0].src_addr, channel_base + DMA_CxSRCADDR_OFFSET);
@@ -666,4 +668,3 @@ void nxspi_delay_setgpio_start(uint32_t delay_us)
     bflb_irq_enable(g_nxspi.timer0->irq_num);
     bflb_timer_start(g_nxspi.timer0);
 }
-

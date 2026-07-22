@@ -8,6 +8,7 @@
 | BL702/BL704/BL706 |        |
 | BL616/BL618       |        |
 | BL618DG           |        |
+| BL616CL           |        |
 
 ## Compile
 
@@ -39,4 +40,10 @@ make CHIP=bl618dg BOARD=bl618dgdk CPU_ID=np
 
 ```
 make flash CHIP=chip_name COMX=xxx # xxx is your com name
+```
+
+- BL616CL
+
+```
+make CHIP=bl616cl BOARD=bl616cldk
 ```

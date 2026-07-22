@@ -9,7 +9,6 @@
 | BL702/BL704/BL706 |               |
 | BL702L/BL704L     |               |
 | BL616/BL618       |               |
-| BL618DG           | D0 has no irq |
 
 ## Compile
 
@@ -35,12 +34,6 @@ make CHIP=bl702l BOARD=bl702ldk
 
 ```
 make CHIP=bl616 BOARD=bl616dk
-```
-
-- BL618DG
-
-```
-make CHIP=bl618dg BOARD=bl618dgdk CPU_ID=ap
 ```
 
 ## Flash

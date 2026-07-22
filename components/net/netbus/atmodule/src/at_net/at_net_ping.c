@@ -293,6 +293,8 @@ static int ping_init(void *arg)
 
     if (!pcb) {
         UNLOCK_TCPIP_CORE();
+        utils_memp_deinit(env->pool);
+        env->pool = NULL;
         printf("pcb null, maybe the pcb pool or sys_timeout pool is empty\r\n");
         return -1;
     }

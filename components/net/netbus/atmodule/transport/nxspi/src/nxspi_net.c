@@ -1,33 +1,11 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "FreeRTOS.h"
-#include "timers.h"
 #include "task.h"
 #include "queue.h"
-#include "semphr.h"
-
-// #include "usbd_core.h"
-#include "bflb_mtimer.h"
-#include <bflb_core.h>
-#include "board.h"
-#include <shell.h>
-
-#include <assert.h>
-#include <stdio.h>
-
-//#include "usb.h"
-#include "utils.h"
-
-#include "bflb_mtimer.h"
-#include "bflb_emac.h"
-
-// #include "usbd_core.h"
-// #include "usbd_cdc.h"
-// #include "usbd_cdc_ecm.h"
 #include "lwip/netif.h"
-// #include "eth_phy.h"
-// #include "ephy_general.h"
 
 #include <wifi_pkt_hooks.h>
 #include <net_pkt_filter.h>
@@ -36,6 +14,9 @@
 
 #include <nxspi.h>
 #include <nxspi_net.h>
+
+extern int fhost_tx_start(net_al_if_t net_if, net_al_tx_t net_buf,
+                          cb_fhost_tx cfm_cb, void *cfm_cb_arg);
 
 #define NXSPI_NET_STA_RX_RDY (1 << 0)
 #define NXSPI_NET_AP_RX_RDY (1 << 1)
@@ -60,11 +41,11 @@ static void custom_free(struct pbuf *p)
 int portwifi_eth_tx(nettrans_desc_t *msg, bool is_sta)
 {
     struct pbuf *p = (struct pbuf *)msg;
-    net_al_if_t *net_if;
+    net_al_if_t net_if;
 
     if (!p) {
         printf("alloc error.\r\n");
-        pbuf_free(p);
+        return -1;
     }
 
     if (is_sta) {
@@ -73,7 +54,8 @@ int portwifi_eth_tx(nettrans_desc_t *msg, bool is_sta)
         net_if = fhost_env.vif[1].net_if;
     }
     if (!net_if) {
-    	return -1;
+        pbuf_free(p);
+        return -1;
     }
 
     // Push the buffer and verify the status
@@ -101,6 +83,11 @@ static inline int spinet_rx_process(uint8_t is_sta)
     p = pbuf_alloced_custom(PBUF_RAW_TX, TX_PBUF_FRAME_LEN,
             (PBUF_ALLOC_FLAG_DATA_CONTIGUOUS | PBUF_TYPE_ALLOC_SRC_MASK_STD_HEAP), 
             &g_spinet.dnmsg->pbuf, g_spinet.dnmsg->payload_buf, TX_PBUF_PAYLOAD_LEN);
+    if (!p) {
+        while (xQueueSend(g_spinet.dnfq, &g_spinet.dnmsg, portMAX_DELAY) != pdPASS);
+        g_spinet.dnmsg = NULL;
+        return -1;
+    }
 
     // recv buf
     g_spinet.dbg_dntask_mode = 2;
@@ -142,10 +129,12 @@ static void nxspi_net_ap_notify(void)
     xTaskNotify(g_spinet.dntask_hdl, NXSPI_NET_AP_RX_RDY, eSetBits);
 }
 
-int spinet_dn_task(void *arg)
+static void spinet_dn_task(void *arg)
 {
     int ret;
     uint32_t event = 0;
+
+    (void)arg;
 
     while (1) {
 
@@ -191,20 +180,9 @@ static int spinet_queue_init(void)
     // init sem
     for (i = 0; i < NXBD_DNLD_ITEMS; i++) {
         nettrans_desc_t *msg;
-#if 0
-        struct pbuf_custom *p;
-
-        p = &(dnmsg_desc[i].pbuf);
-        p->custom_free_function = custom_free;
-        p = pbuf_alloced_custom(PBUF_RAW_TX, TX_PBUF_FRAME_LEN, 
-                (PBUF_ALLOC_FLAG_DATA_CONTIGUOUS | PBUF_TYPE_ALLOC_SRC_MASK_STD_HEAP), 
-                &p->pbuf, p->payload_buf, TX_PBUF_PAYLOAD_LEN);
-#endif
         s_dnmsg_desc[i].payload_buf = s_buf + TX_PBUF_PAYLOAD_LEN*i;
         msg = &(s_dnmsg_desc[i]);
         xQueueSend(g_spinet.dnfq, &msg, portMAX_DELAY);
-    }
-    for (i = 0; i < NXBD_UPLD_ITEMS; i++) {
     }
 
     nxspi_rxd_callback_register(nxspi_net_sta_notify, NXSPI_TYPE_NET_STA);
@@ -215,9 +193,12 @@ static int spinet_queue_init(void)
 
 static int dual_stack_peer_input(struct pbuf *p, bool is_sta)
 {
-    nxspi_write((is_sta) ? NXSPI_TYPE_NET_STA : NXSPI_TYPE_NET_AP, (uint8_t *)(uintptr_t)p->payload, p->len, -1);
+    uint16_t len = p->len;
+
+    nxspi_write((is_sta) ? NXSPI_TYPE_NET_STA : NXSPI_TYPE_NET_AP,
+                (uint8_t *)(uintptr_t)p->payload, len, -1);
     g_spinet.write_cnt++;
-    g_spinet.write_bytes += g_spinet.upmsg->len;
+    g_spinet.write_bytes += len;
 
     pbuf_free(p);
 
@@ -226,9 +207,13 @@ static int dual_stack_peer_input(struct pbuf *p, bool is_sta)
 
 int dual_stack_input(struct pbuf *p, bool is_sta)
 {
-    nxspi_write((is_sta) ? NXSPI_TYPE_NET_STA : NXSPI_TYPE_NET_AP, (uint8_t *)(uintptr_t)p->payload, p->len, -1);
+    if (!p) {
+        return -1;
+    }
+    nxspi_write((is_sta) ? NXSPI_TYPE_NET_STA : NXSPI_TYPE_NET_AP,
+                (uint8_t *)(uintptr_t)p->payload, p->len, -1);
     g_spinet.write_cnt++;
-    g_spinet.write_bytes += g_spinet.upmsg->len;
+    g_spinet.write_bytes += p->len;
 
     return 0;
 }
@@ -237,6 +222,10 @@ static void *eth_input_hook(bool is_sta, void *pkt, void *arg)
 {
     struct pbuf *p = (struct pbuf *)pkt;
 
+    (void)arg;
+    if (!p) {
+        return NULL;
+    }
     if (npf_is_8021X(p)) {
         // The packet is an 802.1X protocol packet.
         return p;
@@ -265,22 +254,10 @@ static void *eth_input_hook(bool is_sta, void *pkt, void *arg)
     return NULL;
 }
 
-static int spinet_wifi_init(void)
-{
-    bflb_pkt_eth_input_hook_register(eth_input_hook, NULL);//&ctx->rx_env);
-    return 0;
-}
-
 void spinet_init(void)
 {
-    // init 0
-    memset(&g_spinet, 0, sizeof(spinet_t));
-
     spinet_queue_init();
-    // spinet_usb_init();
-    spinet_wifi_init();
+    bl_pkt_eth_input_hook_register(eth_input_hook, NULL);
 
     xTaskCreate(spinet_dn_task, (char *)"nxspidn", 512, &g_spinet, 25, &g_spinet.dntask_hdl);
-
-    return;
 }

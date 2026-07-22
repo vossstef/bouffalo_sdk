@@ -5,7 +5,6 @@
 #include <stdbool.h>
 
 #include "FreeRTOS.h"
-#include "timers.h"
 #include "task.h"
 #include "queue.h"
 #include "semphr.h"
@@ -31,7 +30,6 @@ extern spi_header_t up_header;
 
 extern char *dn_buf;
 extern char *up_buf;
-extern void spi_start_timeout_handler(TimerHandle_t xTimer);
 extern void nxspi_task_entry(void *arg);
 
 extern struct bflb_dma_channel_lli_pool_s txlli_pool[4];
@@ -46,6 +44,10 @@ int nxspi_fakewrite_forread(nxspi_chan_t type, uint8_t *buf, uint16_t len, uint3
     int total_sent = 0;  // Track the total number of bytes successfully written
     int chunk_size = 0;
     BaseType_t result;
+
+    if ((type < 0) || (type >= NXSPI_TYPE_MAX) || (len > 0 && buf == NULL)) {
+        return -1;
+    }
 
     do {
         // Wait for an available descriptor from the free queue
@@ -65,9 +67,13 @@ int nxspi_fakewrite_forread(nxspi_chan_t type, uint8_t *buf, uint16_t len, uint3
 
         NX_LOGD("%p, %p, %d.\r\n", msg->payload, buf, chunk_size);
         // Copy the chunk of data to the descriptor's payload
-        memcpy(msg->payload, buf, chunk_size);
+        if (chunk_size > 0) {
+            memcpy(msg->payload, buf, chunk_size);
+        }
         msg->len = chunk_size;
-        buf += chunk_size;  // Move the buffer pointer forward by the written chunk size
+        if (buf) {
+            buf += chunk_size;  // Move the buffer pointer forward by the written chunk size
+        }
 
         // Send the message to the queue for transmission
         while (xQueueSend(g_nxspi.dn[type], &msg, portMAX_DELAY) != pdPASS);
@@ -148,16 +154,10 @@ int nxspi_init(void)
 
     /* init queue */
     if (_init_queue()) {
-        NX_LOGD("failed to create queue, %ld\r\n", ret);
+        NX_LOGD("failed to create queue\r\n");
         return -1;
     }
     NX_LOGI("_init_queue\r\n");
-
-    g_nxspi.timer = xTimerCreate("s2c",
-            pdMS_TO_TICKS(NXSPI_START_TIMEOUT),     // per 1 S
-            pdFALSE,                                // auto reload
-            NULL,
-            spi_start_timeout_handler);
 
     g_nxspi.cfg_starttime = 0;
     g_nxspi.cfg_endtime = 0;
@@ -182,8 +182,9 @@ int nxspi_rxd_callback_register(nxspi_rxd_notify_func_t notify_func, int type)
         NX_LOGE("task nxspi is not created\r\n");
         return -1;
     }
-    if (type >= NXSPI_TYPE_MAX) {
+    if ((type < 0) || (type >= NXSPI_TYPE_MAX)) {
         NX_LOGE("invalid nxspi type\r\n");
+        return -1;
     }
     if (NULL == notify_func) {
         NX_LOGE("notify function is not input\r\n");

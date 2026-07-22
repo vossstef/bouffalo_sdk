@@ -23,7 +23,7 @@
   filesystem_reader.c, CMakeLists.txt) keys off LCD_INTERFACE_TYPE (derived from
   this macro in bsp/common/lcd/lcd.h) so the same project builds for either panel.
 */
-#define LCD_DSI_AXS15231B_HS035
+#define LCD_DSI_ILI9806E_KD050FWFIA019
 
 /* --------- DSI panels: reset + backlight live here (board-specific timing) --------- */
 #if defined LCD_DSI_ST7102_YH494 || defined LCD_DSI_ILI9881C_KD050023W4 || defined LCD_DSI_ILI9881C_KD050020 || defined LCD_DSI_ILI9806E_KD050FWFIA019 || defined LCD_DSI_AXS15231B_HS035

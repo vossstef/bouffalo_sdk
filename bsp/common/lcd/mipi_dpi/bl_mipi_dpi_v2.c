@@ -81,6 +81,7 @@ int bl_mipi_dpi_v2_init(lcd_mipi_dpi_v2_init_t *init_config)
     }
     dpi_para = init_config;
 
+    board_dpi_gpio_init();
     /* Single OSD0-overlay path: the DPI base layer scans a YUV background
        (framebuffer_addr starts at 0 -> black; the video pipeline switches in real
        YUV frames at runtime via the base-layer swap), and OSD0 blends the LVGL

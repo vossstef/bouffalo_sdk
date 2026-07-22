@@ -10,6 +10,7 @@
 | BL702L/BL704L     |        |
 | BL616/BL618       |        |
 | BL618DG           |        |
+| BL616CL           |        |
 
 ## Compile
 
@@ -42,6 +43,12 @@ make CHIP=bl616 BOARD=bl616dk
 ```
 make CHIP=bl618dg BOARD=bl618dgdk CPU_ID=ap
 make CHIP=bl618dg BOARD=bl618dgdk CPU_ID=np
+```
+
+- BL616CL
+
+```
+make CHIP=bl616cl BOARD=bl616cldk
 ```
 
 ## Flash

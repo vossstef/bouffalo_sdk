@@ -66,6 +66,8 @@ void *malloc_aligned_with_padding_nocache(int size, int align_bytes)
 
 void free_aligned_with_padding_nocache(void *ptr)
 {
+    if (ptr == NULL) {
+        return;
+    }
     free_aligned_with_padding((void *)((uintptr_t)(ptr) | 0x60000000));
 }
-

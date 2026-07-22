@@ -3,14 +3,28 @@
 
 ## Support CHIP
 
-| CHIP          | Remark |
-|:-------------:|:------:|
-| BL702L/BL704L |        |
-| BL616/BL618   |        |
-| BL618DG       |        |
-| BL616CL       |        |
+| CHIP              | Remark |
+|:-----------------:|:------:|
+| BL602/BL604       |        |
+| BL702/BL704/BL706 |        |
+| BL702L/BL704L     |        |
+| BL616/BL618       |        |
+| BL618DG           |        |
+| BL616CL           |        |
 
 ## Compile
+
+- BL602/BL604
+
+```
+make CHIP=bl602 BOARD=bl602dk
+```
+
+- BL702/BL704/BL706
+
+```
+make CHIP=bl702 BOARD=bl702dk
+```
 
 - BL702L/BL704L
 

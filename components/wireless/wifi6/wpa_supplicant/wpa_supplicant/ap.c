@@ -479,12 +479,15 @@ static int wpa_supplicant_conf_ap(struct wpa_supplicant *wpa_s,
 	if (ieee80211_is_dfs(ssid->frequency, wpa_s->hw.modes,
 			     wpa_s->hw.num_modes) && wpa_s->conf->country[0]) {
 		conf->ieee80211h = 1;
+	}
+#endif
+
+	if (wpa_s->conf->country[0]) {
 		conf->ieee80211d = 1;
 		conf->country[0] = wpa_s->conf->country[0];
 		conf->country[1] = wpa_s->conf->country[1];
 		conf->country[2] = ' ';
 	}
-#endif
 
 #ifdef CONFIG_P2P
 	if (conf->hw_mode == HOSTAPD_MODE_IEEE80211G &&

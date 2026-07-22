@@ -6,7 +6,6 @@
 | CHIP    | Remark          |
 |:-------:|:---------------:|
 | BL616   | Only support rx |
-| BL616CL | Only support rx |
 | BL618DG |                 |
 
 ## Compile
@@ -15,12 +14,6 @@
 
 ```
 make CHIP=bl616 BOARD=bl616dk
-```
-
-- BL616CL
-
-```
-make CHIP=bl616cl BOARD=bl616cldk
 ```
 
 - BL618DG

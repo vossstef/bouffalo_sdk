@@ -231,6 +231,19 @@ static int wifiopt_ap_stop(int force)
 #ifdef CONFIG_ATMODULE_WIFI_AP
 int at_wifi_ap_set_dhcp_range(int start, int end)
 {
+    struct netif *netif;
+
+    if (!g_wifi_ap_is_start || !at_wifi_config->dhcp_state.bit.ap_dhcp) {
+        return 0;
+    }
+
+    netif = at_wifi_netif_get(AT_WIFI_VIF_AP);
+    if (!netif) {
+        return -1;
+    }
+
+    dhcpd_stop_with_netif(netif);
+    dhcpd_start(netif, start, end - start + 1);
     return 0;
 }
 
@@ -261,7 +274,7 @@ static int wifi_ap_start(void)
     config.channel = at_wifi_config->ap_info.channel;
     config.use_dhcpd = at_wifi_config->dhcp_state.bit.ap_dhcp;
     config.start = at_wifi_config->dhcp_server.start;
-    config.limit = at_wifi_config->dhcp_server.end - at_wifi_config->dhcp_server.start;
+    config.limit = at_wifi_config->dhcp_server.end - at_wifi_config->dhcp_server.start + 1;
     config.ap_ipaddr = at_wifi_config->ap_ip.ip;
     config.ap_mask = at_wifi_config->ap_ip.netmask;
     if (at_wifi_config->ap_info.ecn == AT_WIFI_ENC_OPEN) {
@@ -442,7 +455,6 @@ static void reconnect_event(void *arg)
             g_wifi_reconnect_disable = 0;
             break;
         }
-        AT_WIFI_MAIN_PRINTF("xxxxxxxxxxxxx %d %d\r\n", state, at_wifi_mgmr_sta_state_get());
         if (state == AT_WIFI_STATE_STA_DISCONNECTED) {
             repeat_count++;
             printf("reconnect_event interval:%d cfg.repeat_count:%d repeat_count:%d\r\n", interval, at_wifi_config->reconn_cfg.repeat_count, repeat_count);

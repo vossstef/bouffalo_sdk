@@ -52,7 +52,7 @@ struct flac_hdr {
  * @param  [in] hinfo
  * @return 0/-1
  */
-int flac_hdr_get(const uint8_t* buf, struct flac_hdr *hinfo);
+int flac_hdr_get(const uint8_t buf[FLAC_HDR_SIZE_MAX], struct flac_hdr *hinfo);
 
 /**
  * @brief  parse the stream info of flac

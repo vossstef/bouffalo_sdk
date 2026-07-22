@@ -278,7 +278,7 @@ int fhost_wpa_execute_cmd(int fhost_vif_idx, char *resp_buf, int *resp_buf_len,
  * @return 0 on success, <0 if error occurred.
  ****************************************************************************************
  */
-int fhost_wpa_create_network(int fhost_vif_idx, char *net_cfg, char *ssid_cfg, char *key_cfg, bool enable);
+int fhost_wpa_create_network(int fhost_vif_idx, char *net_cfg, char *ssid_cfg, char *key_cfg, bool enable, const char *country_code);
 
 /**
  ****************************************************************************************

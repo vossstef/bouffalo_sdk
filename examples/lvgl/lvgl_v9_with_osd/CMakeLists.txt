@@ -4,7 +4,17 @@ find_package(bouffalo_sdk REQUIRED HINTS $ENV{BL_SDK_BASE})
 
 # project sources (no dsi_common dependency; DSI bring-up lives in the LCD framework)
 sdk_add_include_directories(.)
-target_sources(app PRIVATE dpi_manager.c filesystem_reader.c)
+target_sources(app PRIVATE dpi_manager.c)
+
+if(CONFIG_LVGL_V9_WITH_OSD_USB_VIDEO)
+    # USB mode: the example owns the composite USB descriptor/enumeration, while
+    # NetHub provides ECM/CMD ACM service hooks and a generic stream for video.
+    target_sources(app PRIVATE usb_reader.c app_wifi.c app_usb_composite.c)
+    sdk_add_compile_definitions(-DCONFIG_LVGL_V9_WITH_OSD_USB_VIDEO=1)
+else()
+    # Default mode: keep the original SD-card JPEG producer.
+    target_sources(app PRIVATE filesystem_reader.c)
+endif()
 
 # LVGL demos (use the copy kept inside this project's demos/ directory)
 set(LVGL_DEMO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/demos)
@@ -31,7 +41,7 @@ file(READ ${CMAKE_CURRENT_SOURCE_DIR}/lcd_conf_user.h _lcd_conf)
 # DPI panels mux SDH DAT2/DAT3 (IO43/44) onto the panel's R7/R6, so the SD card
 # must run 1-line. Force it in the SD core (skip the ACMD6 4-bit negotiation);
 # filesystem_reader.c already drops IO43/44 from the SDH GPIO init to match.
-if(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DPI_")
+if(NOT CONFIG_LVGL_V9_WITH_OSD_USB_VIDEO AND _lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DPI_")
     sdk_add_compile_definitions(-DCONFIG_SDH_BUS_WIDTH_1LINE)
     message(STATUS "SDH bus width: 1-line (DPI panel shares IO43/44)")
 endif()

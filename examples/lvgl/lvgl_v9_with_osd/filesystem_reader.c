@@ -8,6 +8,7 @@
  */
 
 #include "filesystem_reader.h"
+#include "dpi_manager.h"
 #include "bflb_mtimer.h"
 #include "bflb_gpio.h"
 #include "board.h"
@@ -18,6 +19,10 @@
 #include "video_config.h" /* customer knobs: FRAME_DIR, FRAMES_PER_CHUNK */
 
 #include <stdio.h>
+
+#if defined(CONFIG_FREERTOS)
+#include "task.h"
+#endif
 
 /* On DPI, SDH DAT3/DAT2 (IO43/44) clash with the panel's R7/R6, so SD runs 1-line
  * (IO45-48) there and 4-line elsewhere; override via SDH_BUS_WIDTH_1LINE. NOTE: this
@@ -52,11 +57,6 @@ ATTR_NOINIT_PSRAM_SECTION __attribute__((aligned(32))) static uint8_t jpg_buffer
 static jpg_buffer_t buffer_desc[BUFFER_COUNT];
 
 static uint32_t frame_count; /* highest frame number present (frames play 1..frame_count) */
-
-#if defined(CONFIG_FREERTOS)
-static QueueHandle_t full_buffer_queue = NULL;
-static QueueHandle_t empty_buffer_queue = NULL;
-#endif
 
 static FATFS fs;
 
@@ -144,18 +144,9 @@ int filesystem_count_frames(void)
 int filesystem_reader_init(void)
 {
 #if defined(CONFIG_FREERTOS)
-    full_buffer_queue = xQueueCreate(BUFFER_COUNT, sizeof(jpg_buffer_t *));
-    empty_buffer_queue = xQueueCreate(BUFFER_COUNT, sizeof(jpg_buffer_t *));
-    if (full_buffer_queue == NULL || empty_buffer_queue == NULL) {
+    if (frame_buffer_pool_init(buffer_desc, jpg_buffers[0], BUFFER_COUNT, JPG_BUFFER_SIZE) != 0) {
         LOG_E("Failed to create buffer queues\r\n");
         return -1;
-    }
-    for (int i = 0; i < BUFFER_COUNT; i++) {
-        buffer_desc[i].data = jpg_buffers[i];
-        buffer_desc[i].size = 0;
-        buffer_desc[i].image_idx = 0;
-        jpg_buffer_t *buf_ptr = &buffer_desc[i];
-        xQueueSend(empty_buffer_queue, &buf_ptr, (TickType_t)0);
     }
     return 0;
 #else
@@ -164,16 +155,6 @@ int filesystem_reader_init(void)
 }
 
 #if defined(CONFIG_FREERTOS)
-QueueHandle_t filesystem_get_full_queue(void)
-{
-    return full_buffer_queue;
-}
-
-QueueHandle_t filesystem_get_empty_queue(void)
-{
-    return empty_buffer_queue;
-}
-
 void filesystem_reader_task(void *param)
 {
     FIL file;
@@ -202,7 +183,7 @@ void filesystem_reader_task(void *param)
     LOG_I("Reading " FRAME_DIR "/CCC/pNNNN.jpg ...\r\n");
 
     while (1) {
-        if (xQueueReceive(empty_buffer_queue, &buffer, (TickType_t)100) != pdTRUE) {
+        if (frame_buffer_get(&buffer, (TickType_t)100) != 0) {
             vTaskDelay(1);
             continue;
         }
@@ -214,7 +195,7 @@ void filesystem_reader_task(void *param)
         if (res != FR_OK) {
             /* missing frame: wrap to the start of the sequence */
             img_idx = 1;
-            xQueueSend(empty_buffer_queue, &buffer, (TickType_t)0);
+            frame_buffer_release(buffer);
             continue;
         }
 
@@ -223,13 +204,12 @@ void filesystem_reader_task(void *param)
 
         if (res == FR_OK && bytes_read > 0) {
             buffer->size = bytes_read;
-            buffer->image_idx = (uint16_t)img_idx;
-            if (xQueueSend(full_buffer_queue, &buffer, (TickType_t)10) != pdTRUE) {
-                xQueueSend(empty_buffer_queue, &buffer, (TickType_t)0);
+            if (frame_buffer_push(buffer, (TickType_t)10) != 0) {
+                frame_buffer_release(buffer);
             }
         } else {
             LOG_E("Failed to read frame %lu, error=%d\r\n", (unsigned long)img_idx, res);
-            xQueueSend(empty_buffer_queue, &buffer, (TickType_t)0);
+            frame_buffer_release(buffer);
         }
 
         if (++img_idx > frame_count) {

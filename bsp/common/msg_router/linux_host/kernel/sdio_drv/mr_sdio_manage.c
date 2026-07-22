@@ -155,6 +155,7 @@ static int mr_sdio_upld_polling(struct mr_sdio_manage *sdio_manage)
         if (ret == -EBUSY) {
             /* Device busy, wait for next interrupt */
             SDIO_DRV_DBG(sdio_manage->sdio_card, "upld work busy!");
+            return false;
         } else {
             SDIO_DRV_ERR(sdio_manage->sdio_card, "upld work error!");
         }

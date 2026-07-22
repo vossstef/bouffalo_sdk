@@ -29,6 +29,7 @@ make CHIP=bl616 BOARD=bl616dk
 
 ```bash
 make CHIP=bl618dg BOARD=bl618dgdk CPU_ID=ap
+make CHIP=bl618dg BOARD=bl618dgdk CPU_ID=np
 ```
 
 - BL616CL

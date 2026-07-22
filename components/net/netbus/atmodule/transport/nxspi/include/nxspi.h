@@ -6,7 +6,6 @@
 #include <stdint.h>
 
 #include "FreeRTOS.h"
-#include "timers.h"
 #include "task.h"
 #include "queue.h"
 #include "semphr.h"
@@ -23,9 +22,6 @@
 #define NXSPI_GPIO_SAFYBLIND        (70+5) // from soc hw + 5(for time)
 #define NXSPI_GPIO_SAFYEMPIRICAL    (5)  //According to the empirical values obtained from actual tests
 #define NXSPI_GPIO_SAFYDELAY        (NXSPI_GPIO_SAFYBLIND - NXSPI_GPIO_SAFYEMPIRICAL)
-
-/* start TimerOut */
-#define NXSPI_START_TIMEOUT     (1000)
 
 /* mem debug */
 #define NXSPI_DEBUG             (1)
@@ -52,7 +48,6 @@
 #define NTF_CS_LOW              (1<<4) // cs low
 #define NTF_LP_EXIT             (1<<5) // lp exit
 #define NTF_LP_ENTER            (1<<6) // lp enter
-#define NTF_START_TIMEOUT       (1<<7) // lp enter
 
 /* st  */
 #define NXSPI_ST_INIT           (0)
@@ -149,7 +144,6 @@ typedef struct _nxspi_desc {
     uint64_t cfg_endtime;
     uint32_t cfg_usetime;
     struct bflb_device_s *timer0;
-    TimerHandle_t timer; // for start->complete timeout
     TaskHandle_t task_hdl;
 
     trans_desc_t *upmsg;

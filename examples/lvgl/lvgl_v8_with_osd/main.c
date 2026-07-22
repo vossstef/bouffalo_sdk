@@ -117,7 +117,6 @@ void lvgl_main(void *param)
 int main(void)
 {
     board_init();
-    board_dpi_gpio_init();
 
     board_jtag_gpio_init();
     struct bflb_wdg_config_s wdg_cfg;

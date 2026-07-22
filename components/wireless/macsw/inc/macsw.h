@@ -4295,4 +4295,7 @@ void tx_desc_init_for_fhost(void *buf, void *desc, int seg_cnt,
 void txdesc_set_lmac_hwdesc(struct txdesc_public *txdesc, void *hw_desc);
 void txdesc_set_lmac_buffer(struct txdesc_public *txdesc, int idx, void *buffer);
 
+void macsw_ac1_timeout_rec_set(bool enable);
+bool macsw_ac1_timeout_rec_get(void);
+
 #endif

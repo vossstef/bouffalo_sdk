@@ -282,10 +282,6 @@ SECTIONS
         *(.sbss*)
         *(COMMON)
 
-        __lp_mon_start = .;
-        *(.lp_mon_ctx)
-        __lp_mon_end = .;
-
         . = ALIGN(4);
     } > ram
 

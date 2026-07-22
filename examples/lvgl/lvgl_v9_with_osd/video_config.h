@@ -31,9 +31,9 @@
 #else
 /*  dsi:(384x768 480x960) (384x768 480x854) (576x1024 720x1280)
  *      (96x528 src:176(video:172)x640) */
-#define FRAME_DIR        "/sd/176x640"
-#define VIDEO_WIDTH    172
-#define VIDEO_HEIGHT   640
+#define FRAME_DIR        "/sd/480x854"
+#define VIDEO_WIDTH    480
+#define VIDEO_HEIGHT   854
 
 #endif
 

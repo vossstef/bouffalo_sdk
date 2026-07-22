@@ -602,9 +602,6 @@ int cmd_nx(int argc, char *argv[])
 #ifdef NXSPI_NET
     {
     extern spinet_t g_spinet;
-    NX_LOGP("net upld vq:%d  total:%d\r\n",
-            uxQueueMessagesWaiting(g_spinet.upvq),
-            NXBD_UPLD_ITEMS);
     NX_LOGP("net dnld fq:%d  total:%d\r\n",
             uxQueueMessagesWaiting(g_spinet.dnfq),
             NXBD_DNLD_ITEMS);

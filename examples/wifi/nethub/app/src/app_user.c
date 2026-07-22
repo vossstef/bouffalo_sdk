@@ -9,6 +9,10 @@
 
 #include <app_user.h>
 
+#if defined(CONFIG_NETHUB_PROFILE_USB)
+#include <app_usb_composite.h>
+#endif
+
 #define DBG_TAG "appuser"
 #include <log.h>
 
@@ -32,11 +36,27 @@ int app_user_init(void)
         return -1;
     }
 
+#if defined(CONFIG_NETHUB_PROFILE_USB)
+    ret = app_usb_composite_configure();
+    if (ret != 0) {
+        LOG_E("USB composite configure failed: %d\r\n", ret);
+        return -1;
+    }
+#endif
+
     ret = nethub_bootstrap();
     if (ret != 0) {
         LOG_E("nethub bootstrap failed: %d\r\n", ret);
         return -1;
     }
+
+#if defined(CONFIG_NETHUB_PROFILE_USB)
+    ret = app_usb_composite_start();
+    if (ret != 0) {
+        LOG_E("USB composite start failed: %d\r\n", ret);
+        return -1;
+    }
+#endif
 
     if (app_wifi_init() != 0) {
         return -1;

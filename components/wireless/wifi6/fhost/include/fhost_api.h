@@ -609,6 +609,10 @@ struct fhost_vif_ap_cfg
      */
     int mfp;
     /**
+     * Country code for Country IE (e.g. "US"). Empty string = not set.
+     */
+    char country_code[3];
+    /**
      * This fhost_vif_ap_cfg structure is transformed into wpa_supplicant configuration.
      * For clarity, not all configuration options provided by wpa_supplicant are exposed
      * and this field allow to overcome this limitation by and directly passing

@@ -1189,6 +1189,9 @@ SHELL_CMD_EXPORT_ALIAS(cmd_wifi_mode_set, wifi_mode_set, set ap/sta mode);
 SHELL_CMD_EXPORT_ALIAS(cmd_wifi_get_tx_remaining, get_tx_remaining, get tx remaining);
 SHELL_CMD_EXPORT_ALIAS(cmd_wifi_power_get, wifi_power_get, get 20MHz tx power for mode/mcs);
 SHELL_CMD_EXPORT_ALIAS(cmd_wifi_channel_get, wifi_channel_get, get current country code channel information);
+#if defined(BL616CL)
+SHELL_CMD_EXPORT_ALIAS(cmd_wifi_cca, wifi_cca, get/set CCA threshold or set AC1 REC);
+#endif
 #if WIFI_STATISTIC_ENABLE
 SHELL_CMD_EXPORT_ALIAS(cmd_fw_dbg, fw_dbg, fw debug param);
 #endif

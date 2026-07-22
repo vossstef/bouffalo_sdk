@@ -1,5 +1,7 @@
 #include "usb_backend.h"
 
+#include "nethub_usb_device.h"
+
 #define DBG_TAG "NETHUB_USB"
 #include "log.h"
 
@@ -18,58 +20,29 @@
 
 #include "lwip/pbuf.h"
 #include "usbd_core.h"
-#include "usbd_cdc.h"
-#include "usbd_cdc_ecm.h"
 
 extern int wifi_mgmr_sta_mac_get(uint8_t mac[6]);
 
-#define NH_USB_BUSID                0U
-#define NH_USB_ECM_IN_EP            0x81U
-#define NH_USB_ECM_OUT_EP           0x02U
-#define NH_USB_ECM_INT_EP           0x85U
-#define NH_USB_ACM_IN_EP            0x83U
-#define NH_USB_ACM_OUT_EP           0x04U
-#define NH_USB_ACM_INT_EP           0x86U
-#define NH_USB_VID                  0xFFFFU
-#define NH_USB_PID                  0xFFFFU
-#define NH_USB_MAX_POWER            100U
-#define NH_USB_LANGID_STRING        1033U
-#define NH_USB_MAC_STRING_INDEX     4U
 #if defined(CONFIG_NETHUB_PROFILE_SDIO) && defined(CONFIG_NETHUB_PROFILE_USB)
-#define NH_USB_RX_SLOT_CNT          2U
+#define NH_USB_RX_SLOT_CNT 2U
 #else
-#define NH_USB_RX_SLOT_CNT          8U
+#define NH_USB_RX_SLOT_CNT 8U
 #endif
-#define NH_USB_TX_QUEUE_DEPTH       8U
-#define NH_USB_FRAME_MAX_LEN        (1536U)
-#define NH_USB_ACM_STREAM_SIZE      2048U
-#define NH_USB_ACM_IO_BUFFER_SIZE   512U
-#define NH_USB_ACM_DISPATCH_SIZE    256U
-#define NH_USB_LINK_SPEED_BPS       (100U * 1000U * 1000U)
-#define NH_USB_WAIT_TIMEOUT_MS      1000U
-#define NH_USB_IDLE_POLL_MS         20U
-#define NH_USB_TASK_STACK_SIZE      1024U
-#define NH_USB_TASK_PRIORITY        25U
-#define NH_USB_NOTIFY_ALL_BITS      0xFFFFFFFFUL
-#define NH_USB_EVENT_RX_DONE        (1UL << 0)
-#define NH_USB_EVENT_CONFIG_CHANGE  (1UL << 1)
-#define NH_USB_EVENT_TX_DONE        (1UL << 0)
-#define NH_USB_EVENT_ACTIVE         (1UL << 1)
-
-#define NH_USB_ACM_DESCRIPTOR_SZ CDC_ACM_DESCRIPTOR_LEN
-#define NH_USB_INTERFACE_COUNT   0x04U
-
-#define NH_USB_CONFIG_DESCRIPTOR_SZ (9U + CDC_ECM_DESCRIPTOR_LEN + NH_USB_ACM_DESCRIPTOR_SZ)
-
-#ifdef CONFIG_USB_HS
-#define NH_USB_CDC_MAX_MPS 512U
-#else
-#define NH_USB_CDC_MAX_MPS 64U
-#endif
-
-#ifndef USB_ALIGN_UP
-#define USB_ALIGN_UP(size, align) (((size) + ((align) - 1U)) & ~((align) - 1U))
-#endif
+#define NH_USB_TX_QUEUE_DEPTH            8U
+#define NH_USB_FRAME_MAX_LEN             (1536U)
+#define NH_USB_ACM_STREAM_SIZE           2048U
+#define NH_USB_ACM_IO_BUFFER_SIZE        512U
+#define NH_USB_ACM_DISPATCH_SIZE         256U
+#define NH_USB_LINK_SPEED_BPS            (100U * 1000U * 1000U)
+#define NH_USB_WAIT_TIMEOUT_MS           1000U
+#define NH_USB_IDLE_POLL_MS              20U
+#define NH_USB_TASK_STACK_SIZE           1024U
+#define NH_USB_TASK_PRIORITY             25U
+#define NH_USB_NOTIFY_ALL_BITS           0xFFFFFFFFUL
+#define NH_USB_EVENT_RX_DONE             (1UL << 0)
+#define NH_USB_EVENT_CONFIG_CHANGE       (1UL << 1)
+#define NH_USB_EVENT_TX_DONE             (1UL << 0)
+#define NH_USB_EVENT_ACTIVE              (1UL << 1)
 
 typedef struct {
     /*
@@ -101,70 +74,36 @@ typedef struct {
     nh_usb_rx_slot_t *rx_pending_slot;
     volatile uint32_t rx_pending_len;
     volatile bool tx_pending;
-    struct usbd_interface ecm_intf0;
-    struct usbd_interface ecm_intf1;
     StreamBufferHandle_t acm_rx_stream;
     SemaphoreHandle_t acm_tx_done_sem;
     SemaphoreHandle_t acm_tx_mutex;
     TaskHandle_t acm_rx_task;
-    volatile bool acm_read_started;
     nh_usb_backend_acm_rx_cb_t acm_rx_cb;
     void *acm_rx_arg;
-    struct usbd_interface acm_intf0;
-    struct usbd_interface acm_intf1;
 } nh_usb_ctx_t;
 
-#define FRAME_BUFFER_ATTR __ALIGNED(64) ATTR_WIFI_RAM_SECTION
+#define FRAME_BUFFER_ATTR  __ALIGNED(64) ATTR_WIFI_RAM_SECTION
 #define NH_USB_RX_HEADROOM USB_ALIGN_UP(PBUF_LINK_ENCAPSULATION_HLEN, CONFIG_USB_ALIGN_SIZE)
 
 static nh_usb_ctx_t g_transport_usb_ctx;
+static nethub_usb_device_ops_t g_transport_usb_device;
+static nethub_usb_device_cdc_ops_t g_transport_usb_ecm;
+static nethub_usb_device_cdc_ops_t g_transport_usb_cmd_acm;
 static nh_usb_rx_slot_t g_transport_usb_rx_slots[NH_USB_RX_SLOT_CNT];
-static FRAME_BUFFER_ATTR uint8_t g_transport_usb_rx_buffers[NH_USB_RX_SLOT_CNT][NH_USB_FRAME_MAX_LEN + NH_USB_RX_HEADROOM];
+static FRAME_BUFFER_ATTR uint8_t
+    g_transport_usb_rx_buffers[NH_USB_RX_SLOT_CNT][NH_USB_FRAME_MAX_LEN + NH_USB_RX_HEADROOM];
 static FRAME_BUFFER_ATTR uint8_t g_transport_usb_tx_buffer[USB_ALIGN_UP(NH_USB_FRAME_MAX_LEN, CONFIG_USB_ALIGN_SIZE)];
-static FRAME_BUFFER_ATTR uint8_t g_transport_usb_acm_read_buffer[USB_ALIGN_UP(NH_USB_ACM_IO_BUFFER_SIZE, CONFIG_USB_ALIGN_SIZE)];
-static FRAME_BUFFER_ATTR uint8_t g_transport_usb_acm_write_buffer[USB_ALIGN_UP(NH_USB_ACM_IO_BUFFER_SIZE, CONFIG_USB_ALIGN_SIZE)];
+static FRAME_BUFFER_ATTR uint8_t
+    g_transport_usb_acm_read_buffer[USB_ALIGN_UP(NH_USB_ACM_IO_BUFFER_SIZE, CONFIG_USB_ALIGN_SIZE)];
+static FRAME_BUFFER_ATTR uint8_t
+    g_transport_usb_acm_write_buffer[USB_ALIGN_UP(NH_USB_ACM_IO_BUFFER_SIZE, CONFIG_USB_ALIGN_SIZE)];
 static char g_transport_usb_mac_string[13] = "000000000000";
 static uint32_t g_transport_usb_link_speed[2] = {
     NH_USB_LINK_SPEED_BPS,
     NH_USB_LINK_SPEED_BPS,
 };
 
-#define NH_USB_MANUFACTURER_STR_LEN 24U
-#define NH_USB_PRODUCT_STR_LEN      40U
-#define NH_USB_SERIAL_STR_LEN       22U
-#define NH_USB_RAW_MAC_OFFSET       (18U + 9U + CDC_ECM_DESCRIPTOR_LEN + NH_USB_ACM_DESCRIPTOR_SZ + 4U + \
-                                     NH_USB_MANUFACTURER_STR_LEN + NH_USB_PRODUCT_STR_LEN + \
-                                     NH_USB_SERIAL_STR_LEN + 2U)
-
-static uint8_t g_transport_usb_descriptor[] = {
-    USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0xEF, 0x02, 0x01, NH_USB_VID, NH_USB_PID, 0x0100, 0x01),
-    USB_CONFIG_DESCRIPTOR_INIT(NH_USB_CONFIG_DESCRIPTOR_SZ, NH_USB_INTERFACE_COUNT, 0x01,
-                               USB_CONFIG_BUS_POWERED, NH_USB_MAX_POWER),
-    CDC_ECM_DESCRIPTOR_INIT(0x00, NH_USB_ECM_INT_EP, NH_USB_ECM_OUT_EP, NH_USB_ECM_IN_EP,
-                            NH_USB_CDC_MAX_MPS, NH_USB_MAC_STRING_INDEX),
-    CDC_ACM_DESCRIPTOR_INIT(0x02, NH_USB_ACM_INT_EP, NH_USB_ACM_OUT_EP, NH_USB_ACM_IN_EP,
-                            NH_USB_CDC_MAX_MPS, 0x02),
-    USB_LANGID_INIT(NH_USB_LANGID_STRING),
-    0x18, USB_DESCRIPTOR_TYPE_STRING,
-    'B', 0x00, 'o', 0x00, 'u', 0x00, 'f', 0x00, 'f', 0x00, 'a', 0x00,
-    'l', 0x00, 'o', 0x00, 'L', 0x00, 'a', 0x00, 'b', 0x00,
-    0x28, USB_DESCRIPTOR_TYPE_STRING,
-    'B', 0x00, 'o', 0x00, 'u', 0x00, 'f', 0x00, 'f', 0x00, 'a', 0x00,
-    'l', 0x00, 'o', 0x00, ' ', 0x00, 'N', 0x00, 'e', 0x00, 't', 0x00,
-    'h', 0x00, 'u', 0x00, 'b', 0x00, ' ', 0x00, 'E', 0x00, 'C', 0x00,
-    'M', 0x00,
-    0x16, USB_DESCRIPTOR_TYPE_STRING,
-    '0', 0x00, '0', 0x00, '0', 0x00, '0', 0x00, '0', 0x00,
-    '0', 0x00, '0', 0x00, '0', 0x00, '0', 0x00, '1', 0x00,
-    0x1A, USB_DESCRIPTOR_TYPE_STRING,
-    '0', 0x00, '0', 0x00, '0', 0x00, '0', 0x00, '0', 0x00, '0', 0x00,
-    '0', 0x00, '0', 0x00, '0', 0x00, '0', 0x00, '0', 0x00, '0', 0x00,
-#ifdef CONFIG_USB_HS
-    0x0a, USB_DESCRIPTOR_TYPE_DEVICE_QUALIFIER,
-    0x00, 0x02, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00,
-#endif
-    0x00,
-};
+static int transport_usb_cmd_acm_start_out_read(void);
 
 static void transport_usb_fill_mac_string(void)
 {
@@ -180,13 +119,9 @@ static void transport_usb_fill_mac_string(void)
         g_transport_usb_mac_string[i * 2U] = hex[(mac[i] >> 4) & 0x0F];
         g_transport_usb_mac_string[(i * 2U) + 1U] = hex[mac[i] & 0x0F];
     }
-
-    for (i = 0; i < 12U; i++) {
-        g_transport_usb_descriptor[NH_USB_RAW_MAC_OFFSET + (i * 2U)] = (uint8_t)g_transport_usb_mac_string[i];
-    }
 }
 
-static void transport_usb_rx_slot_release(void *arg)
+static void transport_usb_rx_slot_release_cb(void *arg)
 {
     nh_usb_rx_slot_t *slot = (nh_usb_rx_slot_t *)arg;
 
@@ -217,73 +152,101 @@ static void transport_usb_yield_from_isr(BaseType_t woken)
     }
 }
 
+static void transport_usb_give_acm_tx_done(BaseType_t *woken)
+{
+    if (g_transport_usb_ctx.acm_tx_done_sem == NULL) {
+        return;
+    }
+
+    if (xPortIsInsideInterrupt()) {
+        (void)xSemaphoreGiveFromISR(g_transport_usb_ctx.acm_tx_done_sem, woken);
+    } else {
+        (void)xSemaphoreGive(g_transport_usb_ctx.acm_tx_done_sem);
+    }
+}
+
 static void transport_usb_wake_io_tasks(BaseType_t *woken)
 {
-    transport_usb_notify_task(g_transport_usb_ctx.rx_task,
-                              NH_USB_EVENT_CONFIG_CHANGE,
-                              woken);
-    transport_usb_notify_task(g_transport_usb_ctx.tx_task,
-                              NH_USB_EVENT_ACTIVE,
-                              woken);
+    transport_usb_notify_task(g_transport_usb_ctx.rx_task, NH_USB_EVENT_CONFIG_CHANGE, woken);
+    transport_usb_notify_task(g_transport_usb_ctx.tx_task, NH_USB_EVENT_ACTIVE, woken);
 }
 
 static void transport_usb_drain_task_events(void)
 {
     uint32_t events;
 
-    while (xTaskNotifyWait(0, NH_USB_NOTIFY_ALL_BITS, &events, 0) == pdTRUE) {
-    }
+    while (xTaskNotifyWait(0, NH_USB_NOTIFY_ALL_BITS, &events, 0) == pdTRUE) {}
 }
 
-static void transport_usb_acm_bulk_out(uint8_t busid, uint8_t ep, uint32_t nbytes)
+/* Internal helpers: callers are all static and pass &g_transport_usb_* whose
+ * start_out_read/start_in_write are set by init, with static buffers and non-zero lengths.
+ * Parameter validation is done at the public entry points, not here. */
+static int transport_usb_cdc_start_out_read(const nethub_usb_device_cdc_ops_t *ops, uint8_t *data, uint32_t len)
+{
+    return ops->start_out_read(data, len);
+}
+
+static int transport_usb_cdc_start_in_write(const nethub_usb_device_cdc_ops_t *ops, uint8_t *data, uint32_t len)
+{
+    return ops->start_in_write(data, len);
+}
+
+static int transport_usb_ecm_set_connect(bool connect)
+{
+    uint8_t *data = connect ? (uint8_t *)g_transport_usb_link_speed : NULL;
+    uint32_t len = connect ? sizeof(g_transport_usb_link_speed) : 0U;
+
+    if (g_transport_usb_ecm.write_interrupt_in == NULL) {
+        return NETHUB_OK;
+    }
+
+    return g_transport_usb_ecm.write_interrupt_in(data, len);
+}
+
+static int transport_usb_cmd_acm_start_out_read(void)
+{
+    if (!g_transport_usb_ctx.configured) {
+        return NETHUB_ERR_INVALID_STATE;
+    }
+
+    return transport_usb_cdc_start_out_read(&g_transport_usb_cmd_acm, g_transport_usb_acm_read_buffer,
+                                            sizeof(g_transport_usb_acm_read_buffer));
+}
+
+static void transport_usb_cmd_acm_out_done_cb(uint32_t len)
 {
     BaseType_t higher_priority_task_woken = pdFALSE;
     size_t sent_len = 0;
 
-    NETHUB_UNUSED(ep);
-
-    if (g_transport_usb_ctx.acm_rx_stream != NULL && nbytes > 0U) {
-        sent_len = xStreamBufferSendFromISR(g_transport_usb_ctx.acm_rx_stream,
-                                            g_transport_usb_acm_read_buffer,
-                                            nbytes,
-                                            &higher_priority_task_woken);
-        if (sent_len != nbytes) {
-            LOG_W("usb acm rx overflow: %u -> %u\r\n", nbytes, (unsigned int)sent_len);
-        }
-    }
-
-    usbd_ep_start_read(busid, NH_USB_ACM_OUT_EP,
-                       g_transport_usb_acm_read_buffer,
-                       sizeof(g_transport_usb_acm_read_buffer));
-
-    portYIELD_FROM_ISR(higher_priority_task_woken);
-}
-
-static void transport_usb_acm_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
-{
-    BaseType_t higher_priority_task_woken = pdFALSE;
-
-    if ((nbytes % usbd_get_ep_mps(busid, ep)) == 0U && nbytes != 0U) {
-        usbd_ep_start_write(busid, ep, NULL, 0);
+    if (len > sizeof(g_transport_usb_acm_read_buffer)) {
+        LOG_W("usb acm rx length too large: %u > %u\r\n", (unsigned int)len,
+              (unsigned int)sizeof(g_transport_usb_acm_read_buffer));
+        (void)transport_usb_cmd_acm_start_out_read();
         return;
     }
 
-    if (g_transport_usb_ctx.acm_tx_done_sem != NULL) {
-        xSemaphoreGiveFromISR(g_transport_usb_ctx.acm_tx_done_sem, &higher_priority_task_woken);
+    if (g_transport_usb_ctx.acm_rx_stream != NULL && len > 0U) {
+        sent_len = xStreamBufferSendFromISR(g_transport_usb_ctx.acm_rx_stream, g_transport_usb_acm_read_buffer, len,
+                                            &higher_priority_task_woken);
+        if (sent_len != len) {
+            LOG_W("usb acm rx overflow: %u -> %u\r\n", (unsigned int)len, (unsigned int)sent_len);
+        }
     }
 
-    portYIELD_FROM_ISR(higher_priority_task_woken);
+    (void)transport_usb_cmd_acm_start_out_read();
+
+    transport_usb_yield_from_isr(higher_priority_task_woken);
 }
 
-static struct usbd_endpoint g_transport_usb_acm_out_ep = {
-    .ep_addr = NH_USB_ACM_OUT_EP,
-    .ep_cb = transport_usb_acm_bulk_out,
-};
+static void transport_usb_cmd_acm_in_done_cb(uint32_t len)
+{
+    BaseType_t higher_priority_task_woken = pdFALSE;
 
-static struct usbd_endpoint g_transport_usb_acm_in_ep = {
-    .ep_addr = NH_USB_ACM_IN_EP,
-    .ep_cb = transport_usb_acm_bulk_in,
-};
+    NETHUB_UNUSED(len);
+
+    transport_usb_give_acm_tx_done(&higher_priority_task_woken);
+    transport_usb_yield_from_isr(higher_priority_task_woken);
+}
 
 static int transport_usb_acm_send(const uint8_t *data, uint32_t len, TickType_t timeout)
 {
@@ -315,6 +278,7 @@ static int transport_usb_acm_send(const uint8_t *data, uint32_t len, TickType_t 
             xSemaphoreGive(g_transport_usb_ctx.acm_tx_mutex);
             return NETHUB_ERR_INVALID_STATE;
         }
+
         if (!g_transport_usb_ctx.active || !g_transport_usb_ctx.configured) {
             xSemaphoreGive(g_transport_usb_ctx.acm_tx_done_sem);
             xSemaphoreGive(g_transport_usb_ctx.acm_tx_mutex);
@@ -322,8 +286,9 @@ static int transport_usb_acm_send(const uint8_t *data, uint32_t len, TickType_t 
         }
 
         memcpy(g_transport_usb_acm_write_buffer, data + sent_len, chunk_len);
-        if (usbd_ep_start_write(NH_USB_BUSID, NH_USB_ACM_IN_EP,
-                                g_transport_usb_acm_write_buffer, chunk_len) != 0) {
+
+        if (transport_usb_cdc_start_in_write(&g_transport_usb_cmd_acm, g_transport_usb_acm_write_buffer, chunk_len) !=
+            0) {
             xSemaphoreGive(g_transport_usb_ctx.acm_tx_done_sem);
             xSemaphoreGive(g_transport_usb_ctx.acm_tx_mutex);
             return NETHUB_ERR_INTERNAL;
@@ -348,84 +313,48 @@ static int transport_usb_acm_send(const uint8_t *data, uint32_t len, TickType_t 
     return (int)sent_len;
 }
 
-static void transport_usb_acm_rx_task(void *arg)
-{
-    nh_usb_ctx_t *ctx = (nh_usb_ctx_t *)arg;
-    uint8_t rx_buf[NH_USB_ACM_DISPATCH_SIZE];
-
-    for (;;) {
-        size_t recv_len;
-
-        recv_len = xStreamBufferReceive(ctx->acm_rx_stream, rx_buf, sizeof(rx_buf), portMAX_DELAY);
-        if (recv_len == 0U) {
-            continue;
-        }
-
-        if (ctx->acm_rx_cb != NULL) {
-            ctx->acm_rx_cb(ctx->acm_rx_arg, rx_buf, (uint32_t)recv_len);
-        }
-    }
-}
-
-static void transport_usb_acm_init(void)
-{
-    usbd_add_interface(NH_USB_BUSID, usbd_cdc_acm_init_intf(NH_USB_BUSID, &g_transport_usb_ctx.acm_intf0));
-    usbd_add_interface(NH_USB_BUSID, usbd_cdc_acm_init_intf(NH_USB_BUSID, &g_transport_usb_ctx.acm_intf1));
-    usbd_add_endpoint(NH_USB_BUSID, &g_transport_usb_acm_out_ep);
-    usbd_add_endpoint(NH_USB_BUSID, &g_transport_usb_acm_in_ep);
-}
-
-void usbd_cdc_ecm_data_send_done(uint32_t len)
+static void transport_usb_ecm_in_done_cb(uint32_t len)
 {
     BaseType_t higher_priority_task_woken = pdFALSE;
 
     NETHUB_UNUSED(len);
 
     g_transport_usb_ctx.tx_pending = false;
-    transport_usb_notify_task(g_transport_usb_ctx.tx_task,
-                              NH_USB_EVENT_TX_DONE,
-                              &higher_priority_task_woken);
+    transport_usb_notify_task(g_transport_usb_ctx.tx_task, NH_USB_EVENT_TX_DONE, &higher_priority_task_woken);
 
     transport_usb_yield_from_isr(higher_priority_task_woken);
 }
 
-void usbd_cdc_ecm_data_recv_done(uint32_t len)
+static void transport_usb_ecm_out_done_cb(uint32_t len)
 {
     BaseType_t higher_priority_task_woken = pdFALSE;
+
+    if (len > NH_USB_FRAME_MAX_LEN) {
+        LOG_W("usb ecm rx length too large: %u > %u\r\n", (unsigned int)len, (unsigned int)NH_USB_FRAME_MAX_LEN);
+        len = 0U;
+    }
 
     if (g_transport_usb_ctx.rx_pending_slot != NULL) {
         g_transport_usb_ctx.rx_pending_len = len;
     }
 
-    transport_usb_notify_task(g_transport_usb_ctx.rx_task,
-                              NH_USB_EVENT_RX_DONE,
-                              &higher_priority_task_woken);
+    transport_usb_notify_task(g_transport_usb_ctx.rx_task, NH_USB_EVENT_RX_DONE, &higher_priority_task_woken);
 
     transport_usb_yield_from_isr(higher_priority_task_woken);
 }
 
-static void transport_usb_event_handler(uint8_t busid, uint8_t event)
+static void transport_usb_event_cb(uint8_t event)
 {
     BaseType_t higher_priority_task_woken = pdFALSE;
 
-    NETHUB_UNUSED(busid);
-
     switch (event) {
         case USBD_EVENT_RESET:
-            LOG_W("USBD_EVENT_RESET\r\n");
-            break;
         case USBD_EVENT_DISCONNECTED:
-            LOG_W("USBD_EVENT_DISCONNECTED\r\n");
-            g_transport_usb_ctx.configured = false;
-            g_transport_usb_ctx.acm_read_started = false;
-            usbd_cdc_ecm_set_connect(false, NULL);
-            transport_usb_wake_io_tasks(&higher_priority_task_woken);
-            break;
         case USBD_EVENT_SUSPEND:
-            LOG_W("USBD_EVENT_SUSPEND\r\n");
+            LOG_W("USBD_EVENT_UNCONFIGURED: %u\r\n", (unsigned int)event);
             g_transport_usb_ctx.configured = false;
-            g_transport_usb_ctx.acm_read_started = false;
-            usbd_cdc_ecm_set_connect(false, NULL);
+            (void)transport_usb_ecm_set_connect(false);
+            transport_usb_give_acm_tx_done(&higher_priority_task_woken);
             transport_usb_wake_io_tasks(&higher_priority_task_woken);
             break;
         case USBD_EVENT_RESUME:
@@ -434,14 +363,8 @@ static void transport_usb_event_handler(uint8_t busid, uint8_t event)
         case USBD_EVENT_CONFIGURED:
             LOG_W("USBD_EVENT_CONFIGURED\r\n");
             g_transport_usb_ctx.configured = true;
-            if (!g_transport_usb_ctx.acm_read_started) {
-                if (usbd_ep_start_read(NH_USB_BUSID, NH_USB_ACM_OUT_EP,
-                                       g_transport_usb_acm_read_buffer,
-                                       sizeof(g_transport_usb_acm_read_buffer)) == 0) {
-                    g_transport_usb_ctx.acm_read_started = true;
-                }
-            }
-            usbd_cdc_ecm_set_connect(true, g_transport_usb_link_speed);
+            (void)transport_usb_cmd_acm_start_out_read();
+            (void)transport_usb_ecm_set_connect(true);
             transport_usb_wake_io_tasks(&higher_priority_task_woken);
             break;
         default:
@@ -451,9 +374,72 @@ static void transport_usb_event_handler(uint8_t busid, uint8_t event)
     transport_usb_yield_from_isr(higher_priority_task_woken);
 }
 
-static void transport_usb_desc_register(void)
+static bool transport_usb_ops_ready(void)
 {
-    usbd_desc_register(NH_USB_BUSID, g_transport_usb_descriptor);
+    return g_transport_usb_ecm.start_out_read != NULL && g_transport_usb_ecm.start_in_write != NULL &&
+           g_transport_usb_cmd_acm.start_out_read != NULL && g_transport_usb_cmd_acm.start_in_write != NULL;
+}
+
+int nethub_usb_device_init(const nethub_usb_device_ops_t *ops)
+{
+    if (ops == NULL || ops->init == NULL || ops->deinit == NULL) {
+        return NETHUB_ERR_INVALID_PARAM;
+    }
+
+    if (g_transport_usb_ctx.initialized) {
+        return NETHUB_ERR_INVALID_STATE;
+    }
+
+    g_transport_usb_device = *ops;
+    return NETHUB_OK;
+}
+
+int nethub_usb_device_cdc_ecm_init(const nethub_usb_device_cdc_ops_t *ops, nethub_usb_device_cdc_cbs_t *cbs,
+                                   uint32_t link_speed_bps)
+{
+    uint32_t speed;
+
+    if (ops == NULL || cbs == NULL || ops->start_out_read == NULL || ops->start_in_write == NULL) {
+        return NETHUB_ERR_INVALID_PARAM;
+    }
+
+    if (g_transport_usb_ctx.initialized) {
+        return NETHUB_ERR_INVALID_STATE;
+    }
+
+    g_transport_usb_ecm = *ops;
+
+    speed = (link_speed_bps == 0U) ? NH_USB_LINK_SPEED_BPS : link_speed_bps;
+    g_transport_usb_link_speed[0] = speed;
+    g_transport_usb_link_speed[1] = speed;
+
+    cbs->in_done_cb = transport_usb_ecm_in_done_cb;
+    cbs->out_done_cb = transport_usb_ecm_out_done_cb;
+    cbs->event_cb = transport_usb_event_cb;
+    return NETHUB_OK;
+}
+
+int nethub_usb_device_cdc_acm_cmd_init(const nethub_usb_device_cdc_ops_t *ops, nethub_usb_device_cdc_cbs_t *cbs)
+{
+    if (ops == NULL || cbs == NULL || ops->start_out_read == NULL || ops->start_in_write == NULL) {
+        return NETHUB_ERR_INVALID_PARAM;
+    }
+
+    if (g_transport_usb_ctx.initialized) {
+        return NETHUB_ERR_INVALID_STATE;
+    }
+
+    g_transport_usb_cmd_acm = *ops;
+
+    cbs->in_done_cb = transport_usb_cmd_acm_in_done_cb;
+    cbs->out_done_cb = transport_usb_cmd_acm_out_done_cb;
+    cbs->event_cb = NULL;
+    return NETHUB_OK;
+}
+
+const char *nethub_usb_device_ecm_mac_string(void)
+{
+    return g_transport_usb_mac_string;
 }
 
 static void transport_usb_rx_task(void *arg)
@@ -480,9 +466,9 @@ static void transport_usb_rx_task(void *arg)
         ctx->rx_pending_slot = slot;
         ctx->rx_pending_len = 0;
 
-        if (usbd_cdc_ecm_start_read(slot->buffer, NH_USB_FRAME_MAX_LEN) != 0) {
+        if (transport_usb_cdc_start_out_read(&g_transport_usb_ecm, slot->buffer, NH_USB_FRAME_MAX_LEN) != 0) {
             ctx->rx_pending_slot = NULL;
-            transport_usb_rx_slot_release(slot);
+            transport_usb_rx_slot_release_cb(slot);
             if (ctx->configured) {
                 taskYIELD();
             }
@@ -493,7 +479,7 @@ static void transport_usb_rx_task(void *arg)
         xTaskNotifyWait(0, NH_USB_NOTIFY_ALL_BITS, &events, portMAX_DELAY);
         if ((events & NH_USB_EVENT_RX_DONE) == 0U) {
             ctx->rx_pending_slot = NULL;
-            transport_usb_rx_slot_release(slot);
+            transport_usb_rx_slot_release_cb(slot);
             slot = NULL;
         }
 
@@ -504,19 +490,19 @@ static void transport_usb_rx_task(void *arg)
         ctx->rx_pending_slot = NULL;
 
         if (!ctx->configured || ctx->rx_pending_len == 0U) {
-            transport_usb_rx_slot_release(slot);
+            transport_usb_rx_slot_release_cb(slot);
             continue;
         }
 
         frame.data = slot->buffer;
         frame.len = ctx->rx_pending_len;
-        frame.free_cb = transport_usb_rx_slot_release;
+        frame.free_cb = transport_usb_rx_slot_release_cb;
         frame.cb_arg = slot;
         frame.next = NULL;
 
         route_result = nethub_process_input(&frame, NETHUB_CHANNEL_USB);
         if (route_result == NETHUB_ROUTE_ERROR) {
-            transport_usb_rx_slot_release(slot);
+            transport_usb_rx_slot_release_cb(slot);
         }
     }
 }
@@ -549,7 +535,7 @@ static void transport_usb_tx_task(void *arg)
         transport_usb_drain_task_events();
 
         ctx->tx_pending = true;
-        if (usbd_cdc_ecm_start_write(g_transport_usb_tx_buffer, msg.len) != 0) {
+        if (transport_usb_cdc_start_in_write(&g_transport_usb_ecm, g_transport_usb_tx_buffer, msg.len) != 0) {
             ctx->tx_pending = false;
             if (msg.free_cb != NULL) {
                 msg.free_cb(msg.cb_arg);
@@ -566,6 +552,25 @@ static void transport_usb_tx_task(void *arg)
 
         if (msg.free_cb != NULL) {
             msg.free_cb(msg.cb_arg);
+        }
+    }
+}
+
+static void transport_usb_acm_rx_task(void *arg)
+{
+    nh_usb_ctx_t *ctx = (nh_usb_ctx_t *)arg;
+    uint8_t rx_buf[NH_USB_ACM_DISPATCH_SIZE];
+
+    for (;;) {
+        size_t recv_len;
+
+        recv_len = xStreamBufferReceive(ctx->acm_rx_stream, rx_buf, sizeof(rx_buf), portMAX_DELAY);
+        if (recv_len == 0U) {
+            continue;
+        }
+
+        if (ctx->acm_rx_cb != NULL) {
+            ctx->acm_rx_cb(ctx->acm_rx_arg, rx_buf, (uint32_t)recv_len);
         }
     }
 }
@@ -590,7 +595,6 @@ static int transport_usb_prepare_runtime(void)
     if (ctx->acm_tx_mutex == NULL) {
         ctx->acm_tx_mutex = xSemaphoreCreateMutex();
     }
-
     if (ctx->dnld_free_queue == NULL || ctx->upld_queue == NULL) {
         return NETHUB_ERR_NO_MEMORY;
     }
@@ -611,28 +615,27 @@ static int transport_usb_prepare_runtime(void)
     }
 
     if (ctx->rx_task == NULL) {
-        if (xTaskCreate(transport_usb_rx_task, "nhusb_rx", NH_USB_TASK_STACK_SIZE, ctx,
-                        NH_USB_TASK_PRIORITY, &ctx->rx_task) != pdPASS) {
+        if (xTaskCreate(transport_usb_rx_task, "nhusb_rx", NH_USB_TASK_STACK_SIZE, ctx, NH_USB_TASK_PRIORITY,
+                        &ctx->rx_task) != pdPASS) {
             return NETHUB_ERR_NO_MEMORY;
         }
     }
 
     if (ctx->tx_task == NULL) {
-        if (xTaskCreate(transport_usb_tx_task, "nhusb_tx", NH_USB_TASK_STACK_SIZE, ctx,
-                        NH_USB_TASK_PRIORITY, &ctx->tx_task) != pdPASS) {
+        if (xTaskCreate(transport_usb_tx_task, "nhusb_tx", NH_USB_TASK_STACK_SIZE, ctx, NH_USB_TASK_PRIORITY,
+                        &ctx->tx_task) != pdPASS) {
             return NETHUB_ERR_NO_MEMORY;
         }
     }
 
     if (ctx->acm_rx_task == NULL) {
-        if (xTaskCreate(transport_usb_acm_rx_task, "nhusb_acm", NH_USB_TASK_STACK_SIZE, ctx,
-                        NH_USB_TASK_PRIORITY, &ctx->acm_rx_task) != pdPASS) {
+        if (xTaskCreate(transport_usb_acm_rx_task, "nhusb_acm", NH_USB_TASK_STACK_SIZE, ctx, NH_USB_TASK_PRIORITY,
+                        &ctx->acm_rx_task) != pdPASS) {
             return NETHUB_ERR_NO_MEMORY;
         }
     }
 
-    xSemaphoreGive(ctx->acm_tx_done_sem);
-
+    (void)xSemaphoreGive(ctx->acm_tx_done_sem);
     return NETHUB_OK;
 }
 
@@ -645,6 +648,11 @@ int nh_usb_backend_init(void)
         return NETHUB_OK;
     }
 
+    if (!transport_usb_ops_ready()) {
+        LOG_E("NetHub USB device is not configured\r\n");
+        return NETHUB_ERR_INVALID_STATE;
+    }
+
     memset(&g_transport_usb_ctx, 0, sizeof(g_transport_usb_ctx));
 
     ret = transport_usb_prepare_runtime();
@@ -654,22 +662,6 @@ int nh_usb_backend_init(void)
     }
 
     transport_usb_fill_mac_string();
-    transport_usb_desc_register();
-    usbd_add_interface(NH_USB_BUSID, usbd_cdc_ecm_init_intf(&g_transport_usb_ctx.ecm_intf0,
-                                                            NH_USB_ECM_INT_EP,
-                                                            NH_USB_ECM_OUT_EP,
-                                                            NH_USB_ECM_IN_EP));
-    usbd_add_interface(NH_USB_BUSID, usbd_cdc_ecm_init_intf(&g_transport_usb_ctx.ecm_intf1,
-                                                            NH_USB_ECM_INT_EP,
-                                                            NH_USB_ECM_OUT_EP,
-                                                            NH_USB_ECM_IN_EP));
-    transport_usb_acm_init();
-    ret = usbd_initialize(NH_USB_BUSID, 0, transport_usb_event_handler);
-    if (ret != 0) {
-        LOG_E("usbd_initialize failed: %d\r\n", ret);
-        return NETHUB_ERR_INTERNAL;
-    }
-
     g_transport_usb_ctx.active = true;
     g_transport_usb_ctx.initialized = true;
     LOG_I("usb data path initialized\r\n");
@@ -727,16 +719,19 @@ bool nh_usb_backend_is_idle(void)
         return true;
     }
 
-    if (ctx->tx_pending ||
-        (ctx->upld_queue != NULL && uxQueueMessagesWaiting(ctx->upld_queue) != 0U)) {
+    if ((ctx->acm_tx_mutex != NULL && uxSemaphoreGetCount(ctx->acm_tx_mutex) == 0U) ||
+        (ctx->acm_tx_done_sem != NULL && uxSemaphoreGetCount(ctx->acm_tx_done_sem) == 0U)) {
+        return false;
+    }
+
+    if (ctx->tx_pending || (ctx->upld_queue != NULL && uxQueueMessagesWaiting(ctx->upld_queue) != 0U)) {
         return false;
     }
 
     if (ctx->dnld_free_queue != NULL) {
         free_slots = uxQueueMessagesWaiting(ctx->dnld_free_queue);
         if (ctx->rx_pending_slot != NULL) {
-            return (ctx->rx_pending_len == 0U) &&
-                   (free_slots == (NH_USB_RX_SLOT_CNT - 1U));
+            return (ctx->rx_pending_len == 0U) && (free_slots == (NH_USB_RX_SLOT_CNT - 1U));
         }
         return free_slots == NH_USB_RX_SLOT_CNT;
     }
@@ -758,14 +753,13 @@ int nh_usb_backend_lowpower_prepare(void)
 
     ctx->active = false;
     ctx->configured = false;
-    ctx->acm_read_started = false;
     ctx->rx_pending_len = 0U;
     ctx->tx_pending = false;
 
-    usbd_cdc_ecm_set_connect(false, NULL);
-    (void)usbd_deinitialize(NH_USB_BUSID);
+    (void)transport_usb_ecm_set_connect(false);
+    g_transport_usb_device.deinit();
     if (ctx->acm_tx_done_sem != NULL) {
-        xSemaphoreGive(ctx->acm_tx_done_sem);
+        (void)xSemaphoreGive(ctx->acm_tx_done_sem);
     }
 
     if (ctx->rx_task != NULL) {
@@ -782,29 +776,12 @@ int nh_usb_backend_lowpower_prepare(void)
 int nh_usb_backend_lowpower_resume(void)
 {
     nh_usb_ctx_t *ctx = &g_transport_usb_ctx;
-    int ret;
 
     if (!ctx->initialized) {
         return NETHUB_OK;
     }
 
-    transport_usb_fill_mac_string();
-    transport_usb_desc_register();
-    usbd_add_interface(NH_USB_BUSID, usbd_cdc_ecm_init_intf(&ctx->ecm_intf0,
-                                                            NH_USB_ECM_INT_EP,
-                                                            NH_USB_ECM_OUT_EP,
-                                                            NH_USB_ECM_IN_EP));
-    usbd_add_interface(NH_USB_BUSID, usbd_cdc_ecm_init_intf(&ctx->ecm_intf1,
-                                                            NH_USB_ECM_INT_EP,
-                                                            NH_USB_ECM_OUT_EP,
-                                                            NH_USB_ECM_IN_EP));
-    transport_usb_acm_init();
-
-    ret = usbd_initialize(NH_USB_BUSID, 0, transport_usb_event_handler);
-    if (ret != 0) {
-        LOG_E("usb lowpower resume failed: %d\r\n", ret);
-        return NETHUB_ERR_INTERNAL;
-    }
+    g_transport_usb_device.init();
 
     ctx->active = true;
     if (ctx->rx_task != NULL) {

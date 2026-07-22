@@ -362,10 +362,10 @@ err_t _wl80211_output(wl80211_vif_type vif, struct pbuf *buf)
     struct pbuf *buf_t = buf->next;
     int idx = 1;
     while (remain_len && buf_t && (idx < 5)) {
-        txseg[idx].iov_base = buf->payload;
-        txseg[idx].iov_len = buf->len;
+        txseg[idx].iov_base = buf_t->payload;
+        txseg[idx].iov_len = buf_t->len;
 
-        remain_len -= buf->len;
+        remain_len -= buf_t->len;
         idx++;
         buf_t = buf_t->next;
     }
@@ -417,6 +417,11 @@ int portwifi_eth_tx(trans_desc_t *msg, bool is_sta)
         net_if = (net_al_if_t *)fhost_env.vif[1].net_if;
     }
 #endif
+
+    if (!net_if) {
+        pbuf_free(p);
+        return -1;
+    }
 
 #if 0
     if ((!net_if) || (!netif_is_up((struct netif *)net_if))) {
@@ -474,9 +479,13 @@ void usb_dn_task(void *arg)
         // init pbuf
         g_usbecm.dbg_dntask_mode = 2;
         g_usbecm.dnmsg->pbuf.custom_free_function = custom_free;
-        pbuf_alloced_custom(PBUF_RAW_TX, TX_PBUF_FRAME_LEN,
+        if (!pbuf_alloced_custom(PBUF_RAW_TX, TX_PBUF_FRAME_LEN,
                 (PBUF_ALLOC_FLAG_DATA_CONTIGUOUS | PBUF_TYPE_ALLOC_SRC_MASK_STD_HEAP),
-                &g_usbecm.dnmsg->pbuf, g_usbecm.dnmsg->payload_buf, TX_PBUF_PAYLOAD_LEN);
+                &g_usbecm.dnmsg->pbuf, g_usbecm.dnmsg->payload_buf, TX_PBUF_PAYLOAD_LEN)) {
+            while (xQueueSend(g_usbecm.dnfq, &g_usbecm.dnmsg, portMAX_DELAY) != pdPASS);
+            g_usbecm.dnmsg = NULL;
+            continue;
+        }
 
         // recv buf
         g_usbecm.dbg_dntask_mode = 3;
@@ -516,6 +525,7 @@ void usb_dn_task(void *arg)
 void usb_up_task(void *arg)
 {
     BaseType_t result;
+    int ret;
 
     while (1) {
         g_usbecm.dbg_uptask_mode = 1;
@@ -526,11 +536,19 @@ void usb_up_task(void *arg)
         }
 
         g_usbecm.dbg_uptask_mode = 2;
-        usbd_cdc_ecm_start_write((uint8_t *)(uintptr_t)g_usbecm.upmsg->payload, g_usbecm.upmsg->len);
-        result = xSemaphoreTake(g_usbecm.upsem, pdMS_TO_TICKS(10000));
-        if (result != pdPASS) {
-            printf("usb ecm send timeout.\r\n");
+        ret = usbd_cdc_ecm_start_write((uint8_t *)(uintptr_t)g_usbecm.upmsg->payload,
+                                       g_usbecm.upmsg->len);
+        if (ret != 0) {
+            printf("usb ecm start send failed: %d.\r\n", ret);
+            pbuf_free(g_usbecm.upmsg);
+            continue;
         }
+        do {
+            result = xSemaphoreTake(g_usbecm.upsem, pdMS_TO_TICKS(10000));
+            if (result != pdPASS) {
+                printf("usb ecm send timeout.\r\n");
+            }
+        } while (result != pdPASS);
         g_usbecm.dbg_uptask_mode = 3;
         pbuf_free(g_usbecm.upmsg);
 
@@ -547,6 +565,9 @@ int dual_stack_peer_input(void *pkt, void *arg)
 #if 1
     s_cnt++;
     ecm_print("upld -------> %s, cnt:%d, p:%p\r\n", __func__, s_cnt, p);
+    if (!p) {
+        return -1;
+    }
     while (xQueueSend(g_usbecm.upvq, &p, portMAX_DELAY) != pdPASS);
 #else
     s_cnt++;
@@ -560,6 +581,9 @@ static void *eth_input_hook(bool is_sta, void *pkt, void *arg)
 {
     struct pbuf *p = (struct pbuf *)pkt;
 
+    if (!p) {
+        return NULL;
+    }
     if (npf_is_8021X(p)) {
         return pkt;
     }
@@ -642,6 +666,10 @@ void usb_input(void *prv, wl80211_vif_type vif, void *rxhdr, void *buf, uint32_t
 #else
     pc = rxhdr;
     p = pbuf_alloced_custom(PBUF_RAW, frm_len, PBUF_REF | PBUF_TYPE_FLAG_STRUCT_DATA_CONTIGUOUS, pc, buf, frm_len);
+    if (!p) {
+        wl80211_mac_rx_free(rxhdr);
+        return;
+    }
     pc->custom_free_function = (void *)wl80211_mac_rx_free;
 #endif
 
@@ -701,10 +729,12 @@ static int usbecm_dump(void)
                 g_usbecm.dnmsg,
                 NXBD_DNLD_ITEMS);
     }
-    printf("up vq:%d, upmsg:%p, items:%d\r\n",
-            uxQueueMessagesWaiting(g_usbecm.upvq),
-            g_usbecm.upmsg,
-            NXBD_DNLD_ITEMS);
+    if (g_usbecm.upvq) {
+        printf("up vq:%d, upmsg:%p, items:%d\r\n",
+                uxQueueMessagesWaiting(g_usbecm.upvq),
+                g_usbecm.upmsg,
+                NXBD_UPLD_ITEMS);
+    }
     printf("dntask mode:%d\r\n", g_usbecm.dbg_dntask_mode);
     printf("uptask mode:%d, loop cnt:%d\r\n", g_usbecm.dbg_uptask_mode, g_usbecm.dbg_uptask_loop_cnt);
     printf("send_over:%d, recv_cnt:%d\r\n", g_usbecm.send_cnt, g_usbecm.recv_cnt);

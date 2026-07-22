@@ -41,11 +41,11 @@ int at_port_read_data(uint8_t *data, int len)
 
 #ifdef CONFIG_AT_PORT_USB_DUMP
     if (nBytes>0) {
-        printf("---> dnld[%d] :", nBytes, data[0], data[0]);// fixme.
+        printf("---> dnld[%d] :", nBytes);
         for (int i = 0; i < nBytes; i++) {
             printf(" %02X", data[i]);
         }
-        printf(" == %s\r\n", data);
+        printf("\r\n");
     }
 #endif
     if (nBytes <= 0) {
@@ -62,11 +62,11 @@ int at_port_write_data(uint8_t *data, int len)
 
 #ifdef CONFIG_AT_PORT_USB_DUMP
     if (len) {
-        printf("<--- upld[%d] : ", len, data[0], data[0]);// fixme.
+        printf("<--- upld[%d] : ", len);
         for (int i = 0; i < len; i++) {
             printf(" %02X", data[i]);
         }
-        printf(" == %s\r\n", data);
+        printf("\r\n");
     }
 #endif
     msg_len = netbus_usb_cdcacm_send(g_usb_cdc, data, len, AT_PORT_WRITE_TIMEOUT);

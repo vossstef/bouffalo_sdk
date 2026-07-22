@@ -37,11 +37,11 @@ int at_port_read_data(uint8_t*data, int len)
     nBytes = netbus_tty_receive(&at_tty, data, len, portMAX_DELAY);
 #ifdef CONFIG_AT_PORT_TTY_DUMP
     if (nBytes) {
-        printf("---> dnld[%d] :", nBytes, data[0], data[0]);// fixme.
+        printf("---> dnld[%d] :", nBytes);
         for (int i = 0; i < nBytes; i++) {
             printf(" %02X", data[i]);
         }
-        printf(" == %s\r\n", data);
+        printf("\r\n");
     }
 #endif
     if (nBytes <= 0) {
@@ -58,11 +58,11 @@ int at_port_write_data(uint8_t *data, int len)
 
 #ifdef CONFIG_AT_PORT_TTY_DUMP
     if (len) {
-        printf("<--- upld[%d] : ", len, data[0], data[0]);// fixme.
+        printf("<--- upld[%d] : ", len);
         for (int i = 0; i < len; i++) {
             printf(" %02X", data[i]);
         }
-        printf(" == %s\r\n", data);
+        printf("\r\n");
     }
 #endif
     if (at->fakeoutput) {

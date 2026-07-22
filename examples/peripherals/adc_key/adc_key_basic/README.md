@@ -3,13 +3,34 @@
 
 ## Support CHIP
 
-| CHIP    | Driver |
-|:-------:|:------:|
-| BL616   | ADC    |
-| BL616CL | ADC_V2 |
-| BL618DG | ADC_V3 |
+| CHIP              | Driver |
+|:-----------------:|:------:|
+| BL602/BL604       |        |
+| BL702/BL704/BL706 |        |
+| BL702L/BL704L     |        |
+| BL616             | ADC    |
+| BL616CL           | ADC_V2 |
+| BL618DG           | ADC_V3 |
 
 ## Compile
+
+- BL602/BL604
+
+```
+make CHIP=bl602 BOARD=bl602dk
+```
+
+- BL702/BL704/BL706
+
+```
+make CHIP=bl702 BOARD=bl702dk
+```
+
+- BL702L/BL704L
+
+```
+make CHIP=bl702l BOARD=bl702ldk
+```
 
 - BL616
 
