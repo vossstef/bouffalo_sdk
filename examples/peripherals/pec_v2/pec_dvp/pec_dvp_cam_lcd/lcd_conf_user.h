@@ -1,0 +1,29 @@
+#ifndef _LCD_CONF_USER_H_
+#define _LCD_CONF_USER_H_
+
+/* Select screen Type, Optional:
+
+  mipi dsi video interface (panel drives its own PLL/clock/GPIO via lcd_init)
+    LCD_DSI_ILI9881C_KD050020      (ILI9881C 720x1280, RGB565, 4-lane, e.g. KD050HDFIA020, BL618DG)
+    LCD_DSI_ILI9881C_KD050023W4    (ILI9881C 720x1280, RGB565, 2-lane, e.g. KD050HDFIA023-W4, BL618DG)
+    LCD_DSI_ILI9806E_KD050FWFIA019 (ILI9806E 480x854, RGB565, 2-lane, e.g. KD050FWFIA019, BL618DG)
+    LCD_DSI_ST7102_YH494           (ST7102 480x960, RGB565, 2-lane, e.g. YH-494BSAC002N1, BL618DG)
+    LCD_DSI_AXS15231B_HS035        (AXS15231B 172x640, RGB565 link, ARGB8888 OSD, 1-lane, firmware-init, BL618DG)
+*/
+#define LCD_DSI_AXS15231B_HS035
+
+#if defined(LCD_DSI_ILI9806E_KD050FWFIA019)
+#define ILI9806E_KD050FWFIA019_ROTATE_180 0
+#endif
+
+#define LCD_RESET_EN            1
+#define LCD_RESET_PIN           GPIO_PIN_2
+#define LCD_RESET_ACTIVE_LEVEL  0
+#define LCD_RESET_HOLD_MS       10
+#define LCD_RESET_DELAY         120
+
+#define LCD_BACKLIGHT_EN            1
+#define LCD_BACKLIGHT_PIN           GPIO_PIN_40
+#define LCD_BACKLIGHT_ACTIVE_LEVEL  1
+
+#endif
