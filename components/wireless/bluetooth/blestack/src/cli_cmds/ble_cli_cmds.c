@@ -2536,19 +2536,17 @@ BLE_CLI(get_all_conn_info)
         char le_addr[BT_ADDR_LE_STR_LEN];
         int link_num;
 
-        link_num = bt_conn_get_remote_dev_info(info);
-
+        link_num = bt_conn_get_remote_dev_info(info, BT_CONN_TYPE_LE);
         if(link_num > 0)
         {
                 bt_addr_le_to_str(info[0].le.local, le_addr, sizeof(le_addr));
                 vOutputString("ble local device address: %s\r\n", le_addr);
         }
-
         vOutputString("ble connected devices count: %d\r\n", link_num);
-        for(int i = 0; i < link_num; i++)
+        for (int i = 0; i < link_num; i++)
         {
-	        bt_addr_le_to_str(info[i].le.remote, le_addr, sizeof(le_addr));
-	        vOutputString("[%d]: address %s\r\n", i, le_addr);
+                bt_addr_le_to_str(info[i].le.remote, le_addr, sizeof(le_addr));
+                vOutputString("[%d]: address %s\r\n", i, le_addr);
         }
 }
 #endif /* CONFIG_BT_CONN */
@@ -2913,7 +2911,7 @@ BLE_CLI(gatt_indicate)
 
 BLE_CLI(conn_count)
 {
-    int count = bt_conn_get_remote_dev_info(NULL);
+    int count = bt_conn_get_remote_dev_info(NULL, BT_CONN_TYPE_LE);
     vOutputString("Active links: %d / %d (CONFIG_BT_MAX_CONN)\r\n",
                   count, CONFIG_BT_MAX_CONN);
 }
@@ -2959,7 +2957,7 @@ BLE_CLI(directed_adv)
                   peer.a.val[5], peer.a.val[4], peer.a.val[3],
                   peer.a.val[2], peer.a.val[1], peer.a.val[0]);
 
-    cur_count = bt_conn_get_remote_dev_info(NULL);
+    cur_count = bt_conn_get_remote_dev_info(NULL, BT_CONN_TYPE_LE);
     vOutputString("Current links: %d / %d\r\n", cur_count, CONFIG_BT_MAX_CONN);
 
     if (cur_count >= CONFIG_BT_MAX_CONN) {

@@ -1,6 +1,6 @@
 ---
 name: sdk-changelog
-description: Use when generating a customer-facing CHANGELOG between two SDK release tags. Covers how to collect commits from the main repo and changed submodules, and how to format the result for external audiences (no commit IDs, no Jira tickets, no submodule details).
+description: Use when generating a customer-facing CHANGELOG between two SDK release tags. Covers how to collect commits from the main repo, changed submodules, and embedded repos (non-submodule git repos like components/wireless/wl80211/src), and how to format the result for external audiences (no commit IDs, no Jira tickets, no internal paths).
 ---
 
 # SDK CHANGELOG Generator
@@ -38,9 +38,36 @@ For each changed submodule (if checked out locally):
 git -C <submodule_path> log --format="%H|%ad|%an|%s" --date=short <OLD_HASH>..<NEW_HASH>
 ```
 
-### 4. Merge and categorize
+### 4. Collect embedded repo commits
 
-Combine all commits (main repo + submodules), deduplicate by subject, then group into:
+Some directories are standalone git repos but **not** tracked as git submodules (e.g., Google 
+repo-managed projects with symlinked `.git` worktrees). These won't appear in `git ls-tree` 
+and must be handled separately.
+
+**Known embedded repos in this SDK:**
+| Path | Description |
+|---|---|
+| `components/wireless/wl80211/src` | wl80211 WiFi driver core source |
+
+Since the parent repo doesn't record the embedded repo's commit, use the `<FROM_TAG>` date to
+find the corresponding old commit:
+
+```bash
+FROM_DATE=$(git log -1 --format=%ad --date=iso-strict <FROM_TAG>)
+
+# For each embedded repo:
+EMB_REPO=components/wireless/wl80211/src
+OLD_HASH=$(git -C "$EMB_REPO" log -1 --before="$FROM_DATE" --format=%H)
+NEW_HASH=$(git -C "$EMB_REPO" rev-parse HEAD)
+
+if [ -n "$OLD_HASH" ] && [ "$OLD_HASH" != "$NEW_HASH" ]; then
+  git -C "$EMB_REPO" log --format="%H|%ad|%an|%s" --date=short $OLD_HASH..$NEW_HASH
+fi
+```
+
+### 5. Merge and categorize
+
+Combine all commits (main repo + submodules + embedded repos), deduplicate by subject, then group into:
 
 | Category | Commit prefixes |
 |---|---|
@@ -85,7 +112,7 @@ Combine all commits (main repo + submodules), deduplicate by subject, then group
 |---|---|
 | Commit hashes | Chip/platform names (BL616, BL618DG…) |
 | Jira / internal ticket IDs | Feature names and affected peripherals |
-| Submodule paths | User-visible behavior changes |
+| Submodule/embedded repo paths | User-visible behavior changes |
 | Author names | Security hardening (summarized) |
 | `chore: record submodules` entries | Size/performance improvements |
 | Internal code symbols | |

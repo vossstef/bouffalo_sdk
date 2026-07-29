@@ -252,6 +252,9 @@ int bt_hfp_hf_register(struct bt_hfp_hf_cb *cb);
 * @brief Initialize HFP_HF layer
 */
 int bt_hfp_hf_init(void);
+#if defined(BFLB_BREDR_PATCH_DEINIT_CLEANUP)
+void bt_hfp_hf_deinit(void);
+#endif
 
 /** @brief Handsfree client Send AT
  *

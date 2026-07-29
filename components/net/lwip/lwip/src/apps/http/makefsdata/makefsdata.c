@@ -117,7 +117,7 @@ int process_file(FILE *data_file, FILE *struct_file, const char *filename);
 int file_write_http_header(FILE *data_file, const char *filename, int file_size, u16_t *http_hdr_len,
                            u16_t *http_hdr_chksum, u8_t provide_content_len, int is_compressed);
 int file_put_ascii(FILE *file, const char *ascii_string, int len, int *i);
-int s_put_ascii(char *buf, int buf_len, const char *ascii_string, int len, int *i)
+int s_put_ascii(char *buf, int buf_len, const char *ascii_string, int len, int *i);
 void concat_files(const char *file1, const char *file2, const char *targetfile);
 int check_path(char *path, size_t size);
 static int checkSsiByFilelist(const char* filename_listfile);

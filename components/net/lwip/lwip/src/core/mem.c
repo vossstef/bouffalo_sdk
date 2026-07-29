@@ -754,11 +754,11 @@ mem_trim(void *rmem, mem_size_t new_size)
   if (mem2->used == 0) {
     /* The next struct is unused, we can simply move it at little */
     mem_size_t next;
-    LWIP_ASSERT("invalid next ptr", mem->next != MEM_SIZE_ALIGNED);
     /* remember the old next pointer */
     next = mem2->next;
     /* create new struct mem which is moved directly after the shrinked mem */
     ptr2 = (mem_size_t)(ptr + SIZEOF_STRUCT_MEM + newsize);
+    LWIP_ASSERT("invalid next ptr", (ptr2 < mem->next) && (mem->next <= MEM_SIZE_ALIGNED));
     if (lfree == mem2) {
       lfree = ptr_to_mem(ptr2);
     }
@@ -787,7 +787,7 @@ mem_trim(void *rmem, mem_size_t new_size)
      *       region that couldn't hold data, but when mem->next gets freed,
      *       the 2 regions would be combined, resulting in more free memory */
     ptr2 = (mem_size_t)(ptr + SIZEOF_STRUCT_MEM + newsize);
-    LWIP_ASSERT("invalid next ptr", mem->next != MEM_SIZE_ALIGNED);
+    LWIP_ASSERT("invalid next ptr", (ptr2 < mem->next) && (mem->next <= MEM_SIZE_ALIGNED));
     mem2 = ptr_to_mem(ptr2);
     if (mem2 < lfree) {
       lfree = mem2;

@@ -63,6 +63,48 @@ uint8_t btble_controller_get_state(void);
 
 void btble_controller_reset(void);
 
+typedef struct {
+    /* BLE EM control structure byte offset. */
+    uint16_t cs_off;
+    /* First legacy advertising TX descriptor byte offset. */
+    uint16_t tx0_off;
+    /* Second TX descriptor byte offset, 0 if absent. */
+    uint16_t tx1_off;
+    /* Advertising PDU payload byte offset in BLE EM. */
+    uint16_t adv_data_off;
+    /* Full advertising PDU payload length, including AdvA. */
+    uint8_t adv_pdu_len;
+    /* Advertising activity ID. */
+    uint8_t act_id;
+    /* Current advertising interval. */
+    uint16_t adv_interval;
+    /* Next adv prog time in half-slots. */
+    uint32_t next_hs;
+    /* Next adv prog time in half-microseconds. */
+    uint16_t next_hus;
+} btble_controller_lp_fw_adv_info_t;
+
+typedef struct {
+    /* Current RX descriptor byte offset in BLE EM. */
+    uint16_t rx_desc_off;
+    /* RX data buffer byte offset in BLE EM. */
+    uint16_t rx_data_off;
+    /* RX data buffer length in bytes. */
+    uint16_t rx_data_len;
+    /* Saved BLE core register snapshot address. */
+    const uint32_t *saved_blecore;
+    /* Saved IP core register snapshot address. */
+    const uint32_t *saved_ipcore;
+    /* Number of valid uint32_t entries in saved_blecore. */
+    uint16_t saved_blecore_count;
+    /* Number of valid uint32_t entries in saved_ipcore. */
+    uint16_t saved_ipcore_count;
+    /* Legacy advertising information. */
+    btble_controller_lp_fw_adv_info_t adv;
+} btble_controller_lp_fw_info_t;
+
+btble_controller_lp_fw_info_t *btble_controller_get_lp_fw_info(void);
+
 /**
  * @brief BLE event priority configuration limits
  */

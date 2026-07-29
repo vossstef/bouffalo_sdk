@@ -69,12 +69,13 @@ from pathlib import Path
 # Important changes:
 #   - frame_size_words = 0 的函数（叶子函数）不再记录在表中
 #   - 每个 entry 增加 func_size 字段（2 字节），表示函数大小
+#   - 跨越 64KB 边界的函数在下一 segment 增加 continuation entry
 #   - Entry 大小从 4 字节增加到 6 字节
 #   - 无对齐要求（entries 紧跟在 segment table 后面）
 #
 # Backtrace behavior:
 #   - 如果 PC 在表中找到：正常 unwind
-#   - 如果 PC 在表中找不到（叶子函数）：PC = [SP], SP 不变，继续 unwind
+#   - 初始 PC 未命中时，可使用保存上下文中的 x1/ra 重试一次，SP 不变
 #
 # Lookup process for non-standard RA:
 #   1. Parse non-standard RA table into array
@@ -301,8 +302,12 @@ def generate_dwarf_unwind_table(output_file, elf_file, verbose=False):
     # Sort by function start address
     entries = sorted(unwind_info.values(), key=lambda x: x['func_start'])
 
-    # Build segment table (按高16位分段) and track entry ranges
+    # Build segment table (按高16位分段) and track entry ranges.
+    # A function is normally indexed by its start segment. If it crosses a
+    # 64 KiB boundary, add a continuation entry at offset 0 in the next segment
+    # so the runtime can keep doing a single-segment binary search.
     segment_entries = {}  # segment_id -> list of entries
+    continuation_count = 0
 
     for entry in entries:
         func_start = entry['func_start']
@@ -312,10 +317,29 @@ def generate_dwarf_unwind_table(output_file, elf_file, verbose=False):
             segment_entries[segment_id] = []
         segment_entries[segment_id].append(entry)
 
+        func_end = func_start + entry['func_size']
+        next_segment_start = (segment_id + 1) << 16
+        if func_end > next_segment_start:
+            continuation = entry.copy()
+            continuation['func_start'] = next_segment_start
+            continuation['func_size'] = func_end - next_segment_start
+            continuation['source_func_start'] = func_start
+            continuation['is_continuation'] = True
+
+            next_segment_id = segment_id + 1
+            if next_segment_id not in segment_entries:
+                segment_entries[next_segment_id] = []
+            segment_entries[next_segment_id].append(continuation)
+            continuation_count += 1
+
+    for seg_entries in segment_entries.values():
+        seg_entries.sort(key=lambda x: x['func_start'])
+
     # Sort segments by segment_id and build segment info
     sorted_segments = sorted(segment_entries.items())
     if verbose:
         print(f"Number of segments: {len(sorted_segments)}")
+        print(f"Cross-segment continuation entries: {continuation_count}")
 
     # Count leaf functions (not in table)
     leaf_count = len(all_functions) - len(entries)
@@ -340,6 +364,8 @@ def generate_dwarf_unwind_table(output_file, elf_file, verbose=False):
                 'func_size': entry['func_size'],
                 'ra_offset': entry['ra_offset'],
                 'func_start': func_start,
+                'source_func_start': entry.get('source_func_start', func_start),
+                'is_continuation': entry.get('is_continuation', False),
                 'segment_id': segment_id,
             })
             current_idx += 1
@@ -365,6 +391,7 @@ def generate_dwarf_unwind_table(output_file, elf_file, verbose=False):
         without_frame = leaf_count
         print(f"  With frame (in table): {with_frame} functions")
         print(f"  Without frame (leaf): {without_frame} functions")
+        print(f"  Cross-segment continuations: {continuation_count}")
         print(f"  Non-standard RA: {len(non_standard_ra_entries)} functions")
 
     # Sort non-standard RA entries by entry_idx for efficient lookup
@@ -423,7 +450,11 @@ def generate_dwarf_unwind_table(output_file, elf_file, verbose=False):
         if verbose:
             if i < 10 or i >= len(segmented_entries) - 5:
                 func_start = entry['func_start']
-                func_name = function_names.get(func_start, f"func_{func_start:x}")
+                source_func_start = entry['source_func_start']
+                func_name = function_names.get(
+                    source_func_start, f"func_{source_func_start:x}")
+                if entry['is_continuation']:
+                    func_name += " [continuation]"
                 segment_id = entry['segment_id']
                 full_addr = (segment_id << 16) | offset_in_segment
 
@@ -459,6 +490,7 @@ def generate_dwarf_unwind_table(output_file, elf_file, verbose=False):
         without_frame = leaf_count
         print(f"  With frame (in table): {with_frame}")
         print(f"  Without frame (leaf, not in table): {without_frame}")
+        print(f"  Cross-segment continuation entries: {continuation_count}")
         print(f"  Non-standard RA entries: {non_standard_count}")
 
     return True

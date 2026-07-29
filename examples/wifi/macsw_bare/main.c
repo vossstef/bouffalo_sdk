@@ -520,6 +520,78 @@ static void udp_send_cmd(int argc, char **argv)
 SHELL_CMD_EXPORT_ALIAS(udp_echo_server_cmd, udp_echo_server, start UDP echo server for AP forward test.);
 SHELL_CMD_EXPORT_ALIAS(udp_send_cmd, udp_send, send UDP msg and wait for echo reply.);
 
+/**
+ * tcpclient command: connect to a TCP server, send data, receive response, print it, then exit.
+ *
+ * Usage: tcpclient <ip> <port> [data]
+ * Example: tcpclient 192.168.1.100 8080 hello
+ *
+ * - Connects to <ip>:<port> via TCP
+ * - Sends [data] (default: "ping") followed by CRLF
+ * - Waits up to 5 seconds for a response
+ * - Prints the received data and closes the connection
+ */
+static void tcpclient_cmd(int argc, char **argv)
+{
+    if (argc < 3) {
+        printf("usage: tcpclient <ip> <port> [data]\n");
+        printf("example: tcpclient 192.168.1.100 8080 hello\n");
+        return;
+    }
+
+    const char *ip   = argv[1];
+    int         port = atoi(argv[2]);
+    const char *msg  = (argc >= 4) ? argv[3] : "ping";
+
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        printf("tcpclient: socket failed\n");
+        return;
+    }
+
+    struct sockaddr_in dest;
+    memset(&dest, 0, sizeof(dest));
+    dest.sin_family      = AF_INET;
+    dest.sin_port        = htons(port);
+    dest.sin_addr.s_addr = inet_addr(ip);
+
+    printf("tcpclient: connecting to %s:%d ...\n", ip, port);
+
+    if (connect(sock, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
+        printf("tcpclient: connect failed\n");
+        close(sock);
+        return;
+    }
+
+    printf("tcpclient: connected, sending \"%s\"\n", msg);
+
+    char sendbuf[512];
+    int  sendlen = snprintf(sendbuf, sizeof(sendbuf), "%s\r\n", msg);
+    if (write(sock, sendbuf, sendlen) < 0) {
+        printf("tcpclient: send failed\n");
+        close(sock);
+        return;
+    }
+
+    struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+    char buf[512];
+    int  n = read(sock, buf, sizeof(buf) - 1);
+    if (n > 0) {
+        buf[n] = '\0';
+        printf("tcpclient: recv %d bytes -> \"%s\"\n", n, buf);
+    } else if (n == 0) {
+        printf("tcpclient: connection closed by peer (no data)\n");
+    } else {
+        printf("tcpclient: recv timeout or error\n");
+    }
+
+    close(sock);
+}
+
+SHELL_CMD_EXPORT_ALIAS(tcpclient_cmd, tcpclient, tcp client connect send data print reply exit.);
+
 #if defined(CONFIG_BL_SUPPLICANT_P2P)
 #include "p2p_cli.c"
 #endif

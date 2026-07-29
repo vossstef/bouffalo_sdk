@@ -75,6 +75,7 @@ ifeq ($(CHIP),bl618dg)
     CONFIG_CLOCK_SOURCE_EF_PARAM =n
     CONFIG_ROMAPI            =y
     CONFIG_DUALCORE_DISABLE  =y
+    CONFIG_LPFW_CUSTOM_RX    =y
 endif
 
 ifeq ($(CHIP),bl616cl)

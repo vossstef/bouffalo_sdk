@@ -133,6 +133,12 @@ struct a2dp_callback {
 	void (*suspend_cfm)(void);
 };
 
+#if defined(BFLB_BREDR_PATCH_A2DP_DISCOVERY_CALLBACK)
+typedef void (*bt_a2dp_discovery_cb_t)(struct bt_conn *conn,
+				       uint16_t sep_count);
+void bt_a2dp_discovery_cb_register(bt_a2dp_discovery_cb_t callback);
+#endif
+
 typedef struct{
     int (*write)(uint8_t *data,uint32_t size);
     int (*read)(uint8_t *data,uint32_t size);
@@ -154,6 +160,9 @@ struct bt_a2dp;
 
 /* To be called when first SEP is being registered */
 int bt_a2dp_init(void);
+#if defined(BFLB_BREDR_PATCH_DEINIT_CLEANUP)
+void bt_a2dp_deinit(void);
+#endif
 
 void a2dp_cb_register(struct a2dp_callback *cb);
 
@@ -214,6 +223,11 @@ void audio_run(void);
 int bt_start_discovery(struct bt_conn *conn);
 int bt_stream_resume(struct bt_conn *conn);
 int bt_stream_suspend(struct bt_conn *conn);
+/* Return the negotiated L2CAP TX MTU of the A2DP Source media channel.
+ * Valid only when CONFIG_BT_A2DP_SOURCE is enabled and its media stream is
+ * established.
+ */
+int bt_a2dp_get_media_tx_mtu(struct bt_conn *conn, uint16_t *mtu);
 int bt_a2dp_send_media(const void *buf, uint32_t size);
 
 #ifdef __cplusplus

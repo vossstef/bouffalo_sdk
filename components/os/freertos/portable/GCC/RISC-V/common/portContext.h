@@ -289,8 +289,11 @@ addi sp, sp, ( portFPU_CONTEXT_SIZE )
 2:
     store_x  sp, 0( t0 )
 #else
-    load_x  t0, pxCurrentTCB    /* Load pxCurrentTCB. */
+    li t0, 1
+    bne t1, t0, 1f              /* Not first trap - skip, don't overwrite pxCurrentTCB. */
+    load_x  t0, pxCurrentTCB
     store_x  sp, 0( t0 )        /* Write sp to first TCB member. */
+1:
 #endif
 
     .endm

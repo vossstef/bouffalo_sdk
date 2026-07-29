@@ -32,7 +32,7 @@
     LCD_SPI_ST7789V
     LCD_SPI_ST7735
 */
-#define LCD_SPI_GC9307
+#define LCD_DBI_GC9307
 
 
 /* dbi gc9307 config */
@@ -73,7 +73,7 @@
         0: disable
         1: enable
     */
-   #define GC9307_DBI_DIR_MIRROR 0
+   #define GC9307_DBI_DIR_MIRROR 1
 
 
 /* dbi ili9488 config */

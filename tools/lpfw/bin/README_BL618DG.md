@@ -1,59 +1,56 @@
-Release Date: 2026-06-26
-Release Author: whuan
-Git Commit Version: d63e69466ea826d40d1396fb5c474cc1cd14ea78
+Release Date: 2026-07-20
+Release Author: mlwang
+Git Commit Version: 0183eb445e45c6da87ac2e21e6793a61d587da5e
 
 Submodule Information:
- 3bc6321603b0ab07c39ebdbe6ad1c65e0f4beb45 ../../../../components/crypto/mbedtls/mbedtls (v2.28.2-2-g3bc632160)
- 4c3acca7109deb4dca6956dd5f3ceaf0947dee58 ../../../../components/crypto/mbedtls/mbedtls_v3 (v3.6.5-1-g4c3acca71)
--457996474728cb8e968ed21953b72f74d2f536b2 ../../../../components/crypto/mbedtls/mbedtls_v3/framework
- 5e709d00c86de2ab064a16a848c87f941d72cab9 ../../../../components/fs (bouffalo_sdk/v2.3-8-g5e709d0)
- 34a853821e47bdae5f74aa1069c7367cf642372b ../../../../components/graphics (bouffalo_sdk/v2.3-5-g34a8538)
- 8431fe111a8d0f09a463a8d1f3eb42a7de753892 ../../../../components/ipc/libmetal/libmetal (remotes/m/master)
- 76a12961fceda27871eb9338ae802c2797babad9 ../../../../components/ipc/open-amp/open-amp (remotes/m/master)
- 0cd16839360a02463a3aacd8315d01a7d87a3f80 ../../../../components/multimedia (remotes/m/master)
- 37ddcdb81ba5d4987295b96975d23e308c1d74b6 ../../../../components/net/lwip/lwip (remotes/m/master)
- e9bca0190fcf8751417c1609283f4b3482cb7460 ../../../../components/net/netbus/atmodule (remotes/m/master)
- 41b066b0b68fe113c7a808546454bb3f1b9b1205 ../../../../components/net/netbus/host_router (remotes/m/master)
+-3bc6321603b0ab07c39ebdbe6ad1c65e0f4beb45 ../../../../components/crypto/mbedtls/mbedtls
+-4c3acca7109deb4dca6956dd5f3ceaf0947dee58 ../../../../components/crypto/mbedtls/mbedtls_v3
+-5e709d00c86de2ab064a16a848c87f941d72cab9 ../../../../components/fs
+-34a853821e47bdae5f74aa1069c7367cf642372b ../../../../components/graphics
+-8431fe111a8d0f09a463a8d1f3eb42a7de753892 ../../../../components/ipc/libmetal/libmetal
+-76a12961fceda27871eb9338ae802c2797babad9 ../../../../components/ipc/open-amp/open-amp
+-04f088698ad94bb2e88a90efacd8af58ab65fcab ../../../../components/multimedia
+-eebdb1e454248f49a61e279910a99fb304137d8a ../../../../components/net/lwip/lwip
+-7856a837f8fd955708148ba3920dae1036f22290 ../../../../components/net/netbus/atmodule
+-41b066b0b68fe113c7a808546454bb3f1b9b1205 ../../../../components/net/netbus/host_router
 -47765b8917a01ff6e2bfbab891f151291b63e028 ../../../../components/net/nethub/host_linux
- 621ccd5eedb262f1b7e01ab4bca7131bda3034a5 ../../../../components/usb/cherryusb (v1.5.0-4-g621ccd5)
- ab3e6d96e00da02beee1372f00d3f53811c8c48e ../../../../components/wireless/bl3141_drv (remotes/m/master)
- a3e59e52870955164c97c580f273af750cb12194 ../../../../components/wireless/bluetooth (remotes/m/master)
- d449add7c7384ccaaccb0687b3dcb76c6091c481 ../../../../components/wireless/lmac154 (remotes/m/master)
- 4f442b6f5f86592fd8e7f07e5e3a7ef4ad8c63e4 ../../../../components/wireless/macsw (remotes/m/master)
- bee0ff6ea0f97a20782e3485fecaff3798e1af53 ../../../../components/wireless/matter/mfd (remotes/m/master)
- a31c373320deb859543f5e3883437a7e72b91054 ../../../../components/wireless/thread (remotes/m/master)
- b6eb2298ceac2e5a90d68284501b895ed6e0352f ../../../../components/wireless/wifi4/firmware (remotes/m/master)
- 24fc0eb5f051e6ab10e6ed75ad830eea87869897 ../../../../components/wireless/wifi4/firmware/plf/refip/src/driver/phy/bl602_phy_rf (24fc0eb)
- f6ed2e981d6de92d25dfff092853f6cf50d94804 ../../../../components/wireless/wifi4/firmware/plf/refip/src/driver/phy/bl602_phy_rf/rf (heads/master)
- 0d5268129950681791c2e12ffa2a045ab68a822a ../../../../components/wireless/wifi4/manager (remotes/m/master)
- d6399d78aa01fdf799dee575d1b2297265ba6b99 ../../../../components/wireless/wifi6 (amazon_release_v0.1.1-315-gd6399d78)
--7a69ab4e560ec376d905a547f5a78bc377f1afc6 ../../../../components/wireless/wl80211
- 02ff4f3b18b8cb449519da54ecfd5db6f6795ebb ../../../../components/wireless/wlan/linux_driver (remotes/m/master)
- f1257288e8431e9c604ca5ac22060e01bc97ebbb ../../../../components/wireless/wlan/wlan_mac (remotes/m/master)
- 94e992a2a7f5132fe95b66f1c48c0b54caa7a5ea ../../../../components/wireless/zigbee (remotes/m/master)
- 2a7935c9c8d0fbe007e3aa3b3ddb151d0c426fad ../../../../drivers/lhal (lhal-v1.1.0-476-g2a7935c)
- 25ffb329a3b97c5d4fc79d66c60e0b988882d996 ../../../../drivers/soc/bl602/phyrf (remotes/m/master)
- 55ae10077d29d120ebff3ac085e4c46640fb87bb ../../../../drivers/soc/bl602/std (remotes/m/master)
- f910c86e6083dee8946203ca9d582c2c91ebd169 ../../../../drivers/soc/bl616/phyrf (remotes/m/master)
- b1a5b26594b1cabc79c1e11323be202c7beb00f8 ../../../../drivers/soc/bl616/std (remotes/m/master)
--4cf6fcc6ea5af16702c6b5f7789dad6a0fbefe66 ../../../../drivers/soc/bl616cl/phyrf
--70b42337134e6c3af2eb3301dedb2f1c745b9fb8 ../../../../drivers/soc/bl616cl/std
--9f972461ed62f95aca68fadf060c1f497e3411b7 ../../../../drivers/soc/bl618dg/phyrf
--768199175fa61fe975df9d795706f43cffcb6b0d ../../../../drivers/soc/bl618dg/std
- 712e35f8da9fc43c920cd0259a04ed9a78276d01 ../../../../drivers/soc/bl702/phyrf (remotes/m/master)
- afd26bef26c14a0f6de0f2b4d649b025fe118be4 ../../../../drivers/soc/bl702/std (remotes/m/master)
- 89a6a4072e1f48b1d245deced6c0cd44f65b77fb ../../../../drivers/soc/bl702l/phyrf (remotes/m/master)
- d8c7b04e9ff0a4f459eb5b8c30bbd2bb432c7518 ../../../../drivers/soc/bl702l/std (remotes/m/master)
- d65c311bcf3870d18cc3b36c85ccf769e5e7d11d ../../../../drivers/sys (remotes/m/master)
- 060fc2d67573a2acdedeb7fcc41cac38d6557b4c ../../../../tools/autotest (remotes/m/master)
- 11d409a9ff451ba3d8658d4ed4e6f3b9da587193 ../../../../tools/bflb_tools (remotes/m/master)
+-621ccd5eedb262f1b7e01ab4bca7131bda3034a5 ../../../../components/usb/cherryusb
+-ab3e6d96e00da02beee1372f00d3f53811c8c48e ../../../../components/wireless/bl3141_drv
+-9a6ec27de5eb3f9209be316e56c836aee869a777 ../../../../components/wireless/bluetooth
+-d449add7c7384ccaaccb0687b3dcb76c6091c481 ../../../../components/wireless/lmac154
+-dc0e651095854c2612d85ef61bd04a62a2bcf82e ../../../../components/wireless/macsw
+-f15f28f97477c5e60e685ca33d1711ac321e1d1c ../../../../components/wireless/matter/mfd
+-a31c373320deb859543f5e3883437a7e72b91054 ../../../../components/wireless/thread
+-b6eb2298ceac2e5a90d68284501b895ed6e0352f ../../../../components/wireless/wifi4/firmware
+-0d5268129950681791c2e12ffa2a045ab68a822a ../../../../components/wireless/wifi4/manager
+-0c837e421e1116272db4c1ae19f8de7b17a8bb50 ../../../../components/wireless/wifi6
+-82913cad570be7a344ec00c0e51a961c9e5e7167 ../../../../components/wireless/wl80211
+-3a8b7753d7ec4325ca1e0488361fcc1b63f132df ../../../../components/wireless/wlan/linux_driver
+-ae603b4bbec1819f5cf61996dd246a961a970b5d ../../../../components/wireless/wlan/wlan_mac
+-a82fe317de9045aed2d6857ebec5a1467049bfce ../../../../components/wireless/zigbee
+-2b89652a1ba29ccc1f672a5439035af0a89e2ba8 ../../../../drivers/lhal
+-25ffb329a3b97c5d4fc79d66c60e0b988882d996 ../../../../drivers/soc/bl602/phyrf
+-1d253d273aa044ec80c3b0a0f17a7a6f0a0531e1 ../../../../drivers/soc/bl602/std
+-f910c86e6083dee8946203ca9d582c2c91ebd169 ../../../../drivers/soc/bl616/phyrf
+-790d43579ade7f78e481e830b2c6f08346f808cc ../../../../drivers/soc/bl616/std
+-6d6bf83b664ae544e1323333981b8fa61a583eda ../../../../drivers/soc/bl616cl/phyrf
+-7fc4ee0456f36008410b66c1ae980352671adc96 ../../../../drivers/soc/bl616cl/std
+-0b5106db2b2d56bf696c520be617c7cfbdcedd22 ../../../../drivers/soc/bl618dg/phyrf
+-fb56b2000fafe6cddb70ea97c62ba845634f1e22 ../../../../drivers/soc/bl618dg/std
+-712e35f8da9fc43c920cd0259a04ed9a78276d01 ../../../../drivers/soc/bl702/phyrf
+-63ff630710365510a76d5884f9263d95434b3263 ../../../../drivers/soc/bl702/std
+-89a6a4072e1f48b1d245deced6c0cd44f65b77fb ../../../../drivers/soc/bl702l/phyrf
+-829debea7cc1af9cd07da9f1b3397d3c703533db ../../../../drivers/soc/bl702l/std
+-1eefd9cde1bfbf40587fb5c42536827ab96ce1ce ../../../../drivers/sys
+-060fc2d67573a2acdedeb7fcc41cac38d6557b4c ../../../../tools/autotest
+-11d409a9ff451ba3d8658d4ed4e6f3b9da587193 ../../../../tools/bflb_tools
 
 Validation Baseline:
 - Target: BL618DG B0
 - Build command: make CHIP=bl618dg BOARD=bl618dg_lpfw_board CPU_ID=ap CPU_MODEL=b0 MAKE_LPFW=y LOG_SEL=2 CONFIG_ROMAPI=y
 - LPFW binary: lpfw_bin/bl618dg_lp_fw.bin
-- Binary size: 35168 bytes
-- SHA256: 4ba7eca07178a0e7ecf3a0989aae96ba95a0082ac694491edf82a8cf62be9afe
+- Binary size: 37792 bytes
+- SHA256: 71089e6c13843672adccd2bc34e79c95956f1ded5640f402761984302eb2c83a
 - Link memory: check build output and build/build_out/lp_fw_bl618dg_ap.map
 - Sync target: tools/lpfw/bin/bl618dg_lp_fw.bin
 - Consumer app: examples/pmu/wl_lp

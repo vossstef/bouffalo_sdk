@@ -1483,7 +1483,7 @@ lwip_sendmsg(int s, const struct msghdr *msg, int flags)
       SOCKADDR_TO_IPADDR_PORT((const struct sockaddr *)msg->msg_name, &chain_buf.addr, remote_port);
       netbuf_fromport(&chain_buf) = remote_port;
     }
-#if LWIP_NETIF_TX_SINGLE_PBUF
+#if LWIP_NETIF_TX_SINGLE_PBUF || LWIP_TCPIP_FORCE_TX_COPY
     for (i = 0; i < msg->msg_iovlen; i++) {
       size += msg->msg_iov[i].iov_len;
       if ((msg->msg_iov[i].iov_len > INT_MAX) || (size < (int)msg->msg_iov[i].iov_len)) {
@@ -1641,7 +1641,7 @@ lwip_sendto(int s, const void *data, size_t size, int flags,
   LWIP_DEBUGF(SOCKETS_DEBUG, (" port=%"U16_F"\n", remote_port));
 
   /* make the buffer point to the data that should be sent */
-#if LWIP_NETIF_TX_SINGLE_PBUF
+#if LWIP_NETIF_TX_SINGLE_PBUF || LWIP_TCPIP_FORCE_TX_COPY
   /* Allocate a new netbuf and copy the data into it. */
   if (netbuf_alloc(&buf, short_size) == NULL) {
     err = ERR_MEM;
@@ -1657,9 +1657,9 @@ lwip_sendto(int s, const void *data, size_t size, int flags,
     }
     err = ERR_OK;
   }
-#else /* LWIP_NETIF_TX_SINGLE_PBUF */
+#else /* LWIP_NETIF_TX_SINGLE_PBUF || LWIP_TCPIP_FORCE_TX_COPY */
   err = netbuf_ref(&buf, data, short_size);
-#endif /* LWIP_NETIF_TX_SINGLE_PBUF */
+#endif /* LWIP_NETIF_TX_SINGLE_PBUF || LWIP_TCPIP_FORCE_TX_COPY */
   if (err == ERR_OK) {
 #if LWIP_IPV4 && LWIP_IPV6
     /* Dual-stack: Unmap IPv4 mapped IPv6 addresses */

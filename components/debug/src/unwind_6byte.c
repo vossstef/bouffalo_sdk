@@ -37,9 +37,9 @@
  *         frame_size_words = frame_size / 4  (max 65535 = 262KB)
  *         ra_offset = binary_search(non_standard_ra_table, entry_idx)
  *
- *   IMPORTANT: Leaf functions (frame_size=0) are NOT in the table
- *   - During backtrace, if PC is not found, it's a leaf function
- *   - For leaf function: PC = [SP], SP unchanged, continue unwind
+ *   IMPORTANT: Leaf functions (frame_size=0) are NOT in the table.
+ *   Unwinding one requires x1/RA from a saved register context; RA cannot be
+ *   inferred from the word at SP.
  *
  *   File layout:
  *     - Entries start immediately after segment table (no padding)
@@ -302,6 +302,14 @@ bool find_unwind_entry(uint32_t pc, unwind_entry_t *entry)
     uint16_t frame_size_words = *(uint16_t*)(entry_ptr + 2);
     uint16_t func_size = *(uint16_t*)(entry_ptr + 4);
 
+    /* The preceding entry may belong to a different function.  Leaf functions
+     * are omitted from the table, so validate the complete [start, end) range. */
+    uint32_t function_start = ((uint32_t)pc_segment_id << 16) | best_offset;
+    if (pc < function_start ||
+        pc - function_start >= (uint32_t)func_size) {
+        return false;
+    }
+
     entry->offset_in_segment = best_offset;
     entry->frame_size_words = frame_size_words;
     entry->func_size = func_size;
@@ -326,9 +334,9 @@ bool find_unwind_entry(uint32_t pc, unwind_entry_t *entry)
 /**
  * Unwind one stack frame
  *
- * IMPORTANT: Leaf functions (frame_size=0) are NOT in the CFI table
- * - If find_unwind_entry returns false, PC is in a leaf function
- * - For leaf function: RA is at [SP], SP unchanged, continue unwind
+ * IMPORTANT: Leaf functions (frame_size=0) are NOT in the CFI table.
+ * A missing entry cannot be unwound without an RA supplied by the saved
+ * register context; RA is not necessarily stored at SP.
  */
 bool unwind_frame(uint32_t pc, uint32_t sp,
                   uint32_t *new_pc, uint32_t *new_sp)
@@ -336,19 +344,10 @@ bool unwind_frame(uint32_t pc, uint32_t sp,
     unwind_entry_t entry;
 
     if (!find_unwind_entry(pc, &entry)) {
-        /* Entry not found - leaf function (not in table) */
-        /* For leaf function: RA is at [SP], SP unchanged */
-#ifdef STACK_READ
-        uint32_t ra = STACK_READ(sp);
-#else
-        uint32_t ra = *(uint32_t*)sp;
-#endif
-        *new_sp = sp;  /* SP unchanged */
-        *new_pc = ra;
 #if DEBUG
-        printf("  [LEAF] PC=0x%08x -> RA=0x%08x (not in table, RA at SP)\n", pc, ra);
+        printf("  [NO ENTRY] PC=0x%08x\n", pc);
 #endif
-        return true;
+        return false;
     }
 
     /* Normal function with stack frame */
@@ -371,12 +370,15 @@ bool unwind_frame(uint32_t pc, uint32_t sp,
     return true;
 }
 
-/**
- * Perform backtrace
- */
-int backtrace(uint32_t pc, uint32_t sp,
-              uint32_t *addrs, int max_frames,
-              const uint8_t *cfi_table_base)
+static bool is_valid_pc(uint32_t pc)
+{
+    return pc != 0 && pc != 0xFFFFFFFF && pc != 0xA5A5A5A5;
+}
+
+static int backtrace_internal(uint32_t pc, uint32_t sp,
+                              uint32_t initial_ra,
+                              uint32_t *addrs, int max_frames,
+                              const uint8_t *cfi_table_base)
 {
     int count = 0;
 
@@ -398,15 +400,22 @@ int backtrace(uint32_t pc, uint32_t sp,
     printf("Initial: PC=0x%08x, SP=0x%08x\n\n", pc, sp);
 #endif
 
-    while (count < max_frames && pc != 0 && pc != 0xFFFFFFFF && pc != 0xA5A5A5A5) {
+    while (count < max_frames && is_valid_pc(pc)) {
         addrs[count++] = pc;
 
         uint32_t new_pc, new_sp;
-        // In almost all cases, pc - 4 for get the current stack frame.
-        if (!unwind_frame(pc - 4, sp, &new_pc, &new_sp)) {
+        if (!unwind_frame(pc - 2, sp, &new_pc, &new_sp)) {
+            /* Only the first frame may use x1 saved with the task context.
+             * A frameless leaf keeps SP unchanged and returns through x1. */
+            if (initial_ra != 0) {
+                pc = initial_ra;
+                initial_ra = 0;
+                continue;
+            }
             break;
         }
 
+        initial_ra = 0;
         pc = new_pc;
         sp = new_sp;
     }
@@ -415,6 +424,28 @@ int backtrace(uint32_t pc, uint32_t sp,
     printf("\n=== Total: %d frames ===\n\n", count);
 #endif
     return count;
+}
+
+/**
+ * Perform backtrace using only stack-based unwind information.
+ */
+int backtrace(uint32_t pc, uint32_t sp,
+              uint32_t *addrs, int max_frames,
+              const uint8_t *cfi_table_base)
+{
+    return backtrace_internal(pc, sp, 0, addrs, max_frames,
+                              cfi_table_base);
+}
+
+/**
+ * Perform backtrace with x1/RA from a saved register context.
+ */
+int backtrace_with_ra(uint32_t pc, uint32_t sp, uint32_t initial_ra,
+                      uint32_t *addrs, int max_frames,
+                      const uint8_t *cfi_table_base)
+{
+    return backtrace_internal(pc, sp, initial_ra, addrs, max_frames,
+                              cfi_table_base);
 }
 
 /**

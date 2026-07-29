@@ -1,5 +1,98 @@
 # CHANGELOG
 
+## v2.3.30 — since v2.3.29 (2026-07-15 → 2026-07-27)
+
+### New Features
+
+- **WiFi**
+  - Added retry count limit support
+  - Added MAC TX and RX test support in MFG mode
+  - Added RX/TX flow control dump for debugging
+  - Added BL616CL CCA threshold and AC1 REC adaptive control
+
+- **Display / LVGL**
+  - Unified LVGL display layer and pin initialization across boards
+  - Added ACM as data source and ECM for BL618DG LVGL demo
+  - Added PEC DVP camera to MIPI DSI LCD example
+
+- **Camera**
+  - Merged PEC DVP CAM HSYNC sampling mode into hsync_dly
+
+- **Zigbee / 802.15.4**
+  - Updated Zigbee example for Zigbee component release
+  - Added 802.15.4 and MAC TRX to configuration
+
+- **BL618DG**
+  - Added BLE LP firmware info recording and query API
+  - Implemented hardware K 32K interface
+  - Added xtal 32K counter APIs
+
+- **Debug / Tools**
+  - Reduced backtrace cost stack size using binary search in unwind table
+
+- **Flash**
+  - Added XM25UH32D flash support for BL616CL
+
+- **RF OTA**
+  - Added RF OTA test firmware example
+
+### Bug Fixes
+
+- **WiFi**
+  - Fixed memory leak when WPA send fails
+  - Fixed Nethub SDIO low UDP TX throughput and zero data drops
+  - Fixed off-by-one when disabling LWIP TX single pbuf
+  - Fixed credits handling in TX flow control
+  - Fixed empty HT MCS map handling in rate control
+  - Fixed BL618DG errno TLS issue in coexistence CLI
+  - Fixed AP country IE advertisement and deferred stop event
+  - Fixed VHT beamforming capability
+  - Fixed join scan not finding BSSID in first round
+  - Fixed CCA offset for SRRC compliance
+  - Fixed hardware MAC overwriting register on reset
+  - Fixed TX policy preservation across A-MPDU transitions
+  - Fixed RTS protection rate selection per RC step
+  - Fixed internal frame fallback rates initialization
+  - Fixed NULL notification for 70ms duration
+
+- **Low Power**
+  - Fixed low power assert
+
+- **BL616CL**
+  - Fixed power compensation API error
+
+- **Audio**
+  - Fixed audio example issues for BL618DG and BL616CL
+
+- **Camera**
+  - Updated cam_lcd for multi-chip compatibility
+
+- **Bluetooth**
+  - Fixed crash in BLE PDS init for BL702L
+  - Fixed BLE/BT power minimum value for BL616L and BL618DG
+
+### Improvements
+
+- **Networking**
+  - Optimized TCP TX memory efficiency
+  - Added LWIP_TCPIP_FORCE_TX_COPY configuration option
+  - Fixed netstat TCP memory usage reporting
+
+- **WiFi**
+  - WPA hexdump now always prints for easier debugging
+  - Raised WiFi connect task priorities
+  - Optimized zero-copy RX path for pbuf handling
+
+- **BL618DG**
+  - MFG mode now supports negative BT/BLE TX power values
+  - Updated RF switch GPIO for EVT2 hardware
+  - Removed unused temporary RF code
+
+- **System**
+  - Cleaned up AT module code for improved robustness
+  - Removed LP monitor context sections from linker scripts
+  - Added DVP I2C configuration macros for board GPIO headers
+
 ## v2.3.29 — since v2.3.28 (2026-06-26 → 2026-07-15)
 
 ### New Features

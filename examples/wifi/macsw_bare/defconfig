@@ -18,6 +18,7 @@ CONFIG_IPERF             =y
 CONFIG_DHCPD             =y
 CONFIG_PING              =y
 #CONFIG_MQTT             =y
+CONFIG_BACKTRACE         =y
 
 CONFIG_WL80211_WRAM_MEM_SIZE_LIMIT = 0x10000 # 64KB
 

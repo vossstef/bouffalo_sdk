@@ -1716,8 +1716,9 @@ int net_iperf_udp_client_run(struct fhost_iperf_stream* stream)
         }
         else
         {
-            TRACE_APP(ERR, "NET_IPERF_AL : SEND ERR");
-            fhost_print(rtos_get_task_handle(), "NET_IPERF_AL : SEND ERR udp_sendto : %d", err_log);
+            fhost_print(rtos_get_task_handle(),
+                        "NET_IPERF_AL : SEND ERR udp_sendto : %d\r\n",
+                        err_log);
             goto cleanup;
         }
 
@@ -1822,6 +1823,7 @@ int net_iperf_udp_client_run(struct fhost_iperf_stream* stream)
     else
         ret = 0;
 
+cleanup:
     // Wait until all of pbuf are freed
     while (rtos_semaphore_get_count(stream->send_buf_semaphore) < FHOST_IPERF_SEND_BUF_CNT)
     {
@@ -1829,7 +1831,6 @@ int net_iperf_udp_client_run(struct fhost_iperf_stream* stream)
         rtos_semaphore_signal(stream->send_buf_semaphore, false);
     }
 
-cleanup:
     if (pcb) {
         LOCK_TCPIP_CORE();
         udp_remove(pcb);
@@ -2093,7 +2094,8 @@ static RTOS_TASK_FCT(fhost_iperf_main)
             // UDP Client
             if (net_iperf_udp_client_run(iperf_stream))
             {
-                TRACE_APP(ERR, "IPERF: Failed to start UDP client");
+                fhost_print(RTOS_TASK_NULL,
+                            "IPERF: UDP client exited with error\r\n");
                 goto end;
             }
         }

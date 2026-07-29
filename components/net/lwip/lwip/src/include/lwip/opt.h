@@ -1686,6 +1686,26 @@
 #endif /* LWIP_NETIF_TX_SINGLE_PBUF */
 
 /**
+ * LWIP_TCPIP_FORCE_TX_COPY: if this is set to 1, the TCP/IP stack forces
+ * a data copy at the socket layer and TCP write layer to ensure all outgoing
+ * pbuf payload resides in lwIP-managed memory. This is distinct from
+ * LWIP_NETIF_TX_SINGLE_PBUF (which controls single-pbuf output and oversize
+ * allocation strategy). Use this on platforms where:
+ *   - DMA-capable MACs have restricted memory access (e.g., cannot access
+ *     application OCRAM) but DO support scatter-gather
+ *   - The primary goal is memory region safety, not single-pbuf output
+ *
+ * When this is set to 1:
+ *   - Socket sendto/sendmsg uses netbuf_alloc+MEMCPY instead of netbuf_ref
+ *   - TCP write path forces TCP_WRITE_FLAG_COPY
+ * When set to 0:
+ *   - Zero-copy PBUF_REF is used where possible (original behavior)
+ */
+#if !defined LWIP_TCPIP_FORCE_TX_COPY || defined __DOXYGEN__
+#define LWIP_TCPIP_FORCE_TX_COPY        0
+#endif /* LWIP_TCPIP_FORCE_TX_COPY */
+
+/**
  * LWIP_NUM_NETIF_CLIENT_DATA: Number of clients that may store
  * data in client_data member array of struct netif (max. 256).
  */

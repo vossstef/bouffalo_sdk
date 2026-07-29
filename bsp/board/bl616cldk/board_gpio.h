@@ -25,6 +25,8 @@ void board_dvp_gpio_init(void);
 void board_i2s_gpio_init(void);
 void board_timer_gpio_init(void);
 
+#define BOARD_DVP_USE_I2C BFLB_NAME_I2C0
+
 #define BOARD_USB_VIA_GPIO
 void board_usb_gpio_init(void);
 

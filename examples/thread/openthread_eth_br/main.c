@@ -171,17 +171,7 @@ void lwip_status_update_task(void *pvParameters)
     /* Infinite loop */
     while (1) {
         vTaskDelay(200);
-
-        LOCK_TCPIP_CORE();
-        /* update link status */
         eth_link_state_update(&gnetif);
-        UNLOCK_TCPIP_CORE();
-
-#if LWIP_DHCP
-        /* update dhcp status */
-        dhcp_sta_update(&gnetif);
-#endif
-        
     }
 }
 
@@ -211,6 +201,14 @@ static void netif_config(void *arg)
     dhcp6_enable_stateless(&gnetif);
 
     netif_set_status_callback(&gnetif, netif_status_callback);
+
+#if LWIP_DHCP
+    if (dhcp_start(&gnetif) != ERR_OK) {
+        LOG_E("DHCP client start failed\r\n");
+    } else {
+        LOG_I("DHCP client started\r\n");
+    }
+#endif
 
 #if CONFIG_OTBR
     openthread_httpd_init(8081);

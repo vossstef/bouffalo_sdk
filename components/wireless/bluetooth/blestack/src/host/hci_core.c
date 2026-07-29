@@ -161,8 +161,8 @@ struct hast_cb *host_assist_cb;
 #endif
 
 #if defined(CONFIG_BT_CONN)
-/* command FIFO + conn_change signal + MAX_CONN */
-#define EV_COUNT (2 + CONFIG_BT_MAX_CONN)
+/* command FIFO + conn_change signal + LE and BR/EDR connections */
+#define EV_COUNT (2 + CONFIG_BT_MAX_CONN + CONFIG_BT_ACL_CONN)
 #else
 /* command FIFO */
 #define EV_COUNT 1
@@ -213,7 +213,7 @@ struct acl_data {
 	/** BT_BUF_ACL_IN */
 	u8_t  type;
 
-	/* Index into the bt_conn storage array */
+	/* ID unique across the LE and BR/EDR connection pools */
 	u8_t  id;
 
 	/** ACL connection handle */
@@ -353,7 +353,7 @@ static void report_completed_packet(struct net_buf *buf)
 		return;
 	}
 
-	conn = bt_conn_lookup_id(acl(buf)->id);
+	conn = bt_conn_lookup_acl_id(acl(buf)->id);
 	if (!conn) {
 		BT_WARN("Unable to look up conn with id 0x%02x", acl(buf)->id);
 		return;
@@ -906,7 +906,7 @@ static void hci_acl(struct net_buf *buf)
 		return;
 	}
 
-	acl(buf)->id = bt_conn_index(conn);
+	acl(buf)->id = bt_conn_get_acl_id(conn);
 
 	bt_conn_recv(conn, buf, flags);
 	bt_conn_unref(conn);
@@ -1695,7 +1695,7 @@ static void enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt)
 			BT_LE_STATES_SLAVE_CONN_ADV(bt_dev.le.states)
 			#if defined(BFLB_BLE_RESTRICT_CONN_ACTION_NOT_EXCEED_MAX_CONN)
 			 && atomic_test_bit(bt_dev.flags,BT_DEV_ADVERTISING_CONNECTABLE) &&
-			(bt_conn_get_remote_dev_info(NULL) < CONFIG_BT_MAX_CONN)
+			(bt_conn_get_remote_dev_info(NULL, BT_CONN_TYPE_LE) < CONFIG_BT_MAX_CONN)
 			#endif
 			) {
 			if (IS_ENABLED(CONFIG_BT_PRIVACY)) {
@@ -1756,7 +1756,7 @@ static void enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt)
 	if ((evt->role == BT_HCI_ROLE_MASTER) &&
 		atomic_test_bit(bt_dev.flags, BT_DEV_ADVERTISING) &&
 		atomic_test_bit(bt_dev.flags,BT_DEV_ADVERTISING_CONNECTABLE) &&
-		bt_conn_get_remote_dev_info(NULL) == CONFIG_BT_MAX_CONN){
+		bt_conn_get_remote_dev_info(NULL, BT_CONN_TYPE_LE) == CONFIG_BT_MAX_CONN){
 		err = bt_le_adv_stop();
 	}
 	#endif
@@ -6484,6 +6484,17 @@ int bt_disable_action(void)
     net_buf_deinit(&frag_pool);
     #endif
     #if defined(CONFIG_BT_BREDR)
+    #if defined(BFLB_BREDR_PATCH_DEINIT_CLEANUP) && \
+        !(CONFIG_BLE_USING_DYNAMIC_RAM)
+    /* Tear down BR/EDR profile SDP records (a2dp/avrcp/hfp/spp each registered
+     * one via bt_sdp_register_service during enable). When CONFIG_BLE_USING_DYNAMIC_RAM
+     * is on, this is already done through bt_conn_deinit()->bt_l2cap_deinit()->
+     * bt_l2cap_br_deinit(); guard below runs it for the non-dynamic-RAM build so
+     * num_services is decremented each disable cycle. Without this, num_services
+     * grows monotonically across enable cycles and exhausts BT_SDP_MAX_SERVICES
+     * ("Reached max allowed registrations, bt_sdp_register_service"). */
+    bt_l2cap_br_deinit();
+    #endif
     net_buf_deinit(&br_sig_pool);
     net_buf_deinit(&sdp_pool);
     net_buf_deinit(&dummy_pool);
@@ -7386,7 +7397,7 @@ int set_adv_enable(bool enable)
 	}
 
 	#if defined(BFLB_BLE_RESTRICT_CONN_ACTION_NOT_EXCEED_MAX_CONN)
-	if (enable && atomic_test_bit(bt_dev.flags,BT_DEV_ADVERTISING_CONNECTABLE) && bt_conn_get_remote_dev_info(NULL) == CONFIG_BT_MAX_CONN){
+	if (enable && atomic_test_bit(bt_dev.flags,BT_DEV_ADVERTISING_CONNECTABLE) && bt_conn_get_remote_dev_info(NULL, BT_CONN_TYPE_LE) == CONFIG_BT_MAX_CONN){
 		BT_ERR("Cannot do connectable adv because of conn resource limitation(max_conn:%u)",CONFIG_BT_MAX_CONN);
 		return -EACCES;
 	}
@@ -7758,7 +7769,7 @@ int bt_le_adv_start(const struct bt_le_adv_param *param,
 	#endif
 
 	#if defined(BFLB_BLE_RESTRICT_CONN_ACTION_NOT_EXCEED_MAX_CONN)
-	if(param->options & BT_LE_ADV_OPT_CONNECTABLE && bt_conn_get_remote_dev_info(NULL) == CONFIG_BT_MAX_CONN)
+	if(param->options & BT_LE_ADV_OPT_CONNECTABLE && bt_conn_get_remote_dev_info(NULL, BT_CONN_TYPE_LE) == CONFIG_BT_MAX_CONN)
 	{
 		BT_ERR("Cannot do connectable adv because of conn resource limitation(max_conn:%u)",CONFIG_BT_MAX_CONN);
 		return -EACCES;

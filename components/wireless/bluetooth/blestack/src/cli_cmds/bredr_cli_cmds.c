@@ -99,6 +99,16 @@ struct spp_callback_t spp_conn_callbacks={
 static bool stream_pause = false;
 static void a2dp_chain(struct bt_conn *conn, uint8_t state);
 static void a2dp_stream(uint8_t state);
+
+#if defined(BFLB_BREDR_PATCH_A2DP_DISCOVERY_CALLBACK)
+static void a2dp_discovery_probe_complete(struct bt_conn *conn,
+                                          uint16_t sep_count)
+{
+    (void)conn;
+    printf("A2DP_DISCOVERY_RSP count=%u\n", sep_count);
+}
+#endif
+
 #if defined(CONFIG_BT_A2DP_SOURCE)
 struct k_thread media_transport;
 static void a2dp_start_cfm(void);
@@ -184,6 +194,9 @@ static struct avrcp_callback avrcp_callbacks =
 static void pcm(char *p_write_buffer, int write_buffer_len, int argc, char **argv);
 #endif
 BT_CLI(init);
+#if defined(BFLB_BREDR_PATCH_DEINIT_CLEANUP)
+BT_CLI(deinit);
+#endif
 BT_CLI(write_local_name);
 BT_CLI(write_eir);
 BT_CLI(discoverable);
@@ -201,6 +214,7 @@ BT_CLI(auth_cancel);
 BT_CLI(auth_passkey_confirm);
 BT_CLI(auth_pairing_confirm);
 BT_CLI(auth_passkey);
+BT_CLI(get_all_conn_info);
 BT_CLI(get_bond_list);
 BT_CLI(start_inquiry);
 BT_CLI(stop_inquiry);
@@ -218,6 +232,9 @@ BT_AVDTP_CLI(set_conf_reject);
 
 #if defined(CONFIG_BT_A2DP)
 BT_A2DP_CLI(connect);
+#if defined(BFLB_BREDR_PATCH_A2DP_DISCOVERY_CALLBACK)
+BT_A2DP_CLI(discovery_probe);
+#endif
 #if defined(CONFIG_BT_A2DP_SOURCE)
 BT_A2DP_CLI(discovery);
 BT_A2DP_CLI(suspend);
@@ -329,6 +346,9 @@ BT_SPP_CLI(throughput_stop);
 
 #if defined(CONFIG_SHELL)
     SHELL_CMD_EXPORT_ALIAS(bredr_init,bredr_init,BREDR Initialize Parameter:[Null]);
+    #if defined(BFLB_BREDR_PATCH_DEINIT_CLEANUP)
+    SHELL_CMD_EXPORT_ALIAS(bredr_deinit,bredr_deinit,Reset bredr demo init state so next bredr_init re-registers callbacks);
+    #endif
     SHELL_CMD_EXPORT_ALIAS(bredr_write_local_name,bredr_name,bredr_name Parameter:[name]);
     SHELL_CMD_EXPORT_ALIAS(bredr_write_eir,bredr_eir,bredr_eir Parameter:[Null]);
     SHELL_CMD_EXPORT_ALIAS(bredr_connectable,bredr_connectable,
@@ -359,12 +379,16 @@ BT_SPP_CLI(throughput_stop);
     SHELL_CMD_EXPORT_ALIAS(bredr_auth_passkey_confirm, bredr_auth_passkey_confirm, Confirm passkey Parameter:[Null]]);
     SHELL_CMD_EXPORT_ALIAS(bredr_auth_pairing_confirm, bredr_auth_pairing_confirm, Confirm pairing in secure connection Parameter:[Null]);
     SHELL_CMD_EXPORT_ALIAS(bredr_auth_passkey, bredr_auth_passkey, Input passkey Parameter:[Passkey: 00000000-000F423F]);
+    SHELL_CMD_EXPORT_ALIAS(bredr_get_all_conn_info, bredr_conn_info, BR/EDR get all connection devices info Parameter:[Null]);
     SHELL_CMD_EXPORT_ALIAS(bredr_get_bond_list, bredr_get_bond_list, BT get Bond List);
     #if defined(BR_EDR_PTS_TEST)
     SHELL_CMD_EXPORT_ALIAS(bredr_sdp_client_connect,bredr_sdp_client_connect,"");
     #endif
     #if defined(CONFIG_BT_A2DP)
     SHELL_CMD_EXPORT_ALIAS(a2dp_connect,a2dp_connect,"");
+    #if defined(BFLB_BREDR_PATCH_A2DP_DISCOVERY_CALLBACK)
+    SHELL_CMD_EXPORT_ALIAS(a2dp_discovery_probe,a2dp_discovery_probe,"");
+    #endif
     #if defined(CONFIG_BT_A2DP_SOURCE)
     SHELL_CMD_EXPORT_ALIAS(a2dp_discovery,a2dp_start_disc, "");
     SHELL_CMD_EXPORT_ALIAS(a2dp_suspend,a2dp_source_suspend, "");
@@ -433,6 +457,9 @@ const struct cli_command bredr_cmd_set[] STATIC_CLI_CMD_ATTRIBUTE = {
     {"pcm", "", pcm},
     #endif
     {"bredr_init", "", bredr_init},
+    #if defined(BFLB_BREDR_PATCH_DEINIT_CLEANUP)
+    {"bredr_deinit", "", bredr_deinit},
+    #endif
     {"bredr_name", "", bredr_write_local_name},
     {"bredr_eir", "", bredr_write_eir},
     {"bredr_connectable", "", bredr_connectable},
@@ -452,6 +479,7 @@ const struct cli_command bredr_cmd_set[] STATIC_CLI_CMD_ATTRIBUTE = {
     {"bredr_auth_passkey_confirm", "", bredr_auth_passkey_confirm},
     {"bredr_auth_pairing_confirm", "", bredr_auth_pairing_confirm},
     {"bredr_auth_passkey", "", bredr_auth_passkey},
+    {"bredr_conn_info", "", bredr_get_all_conn_info},
     {"bredr_get_bond_list","",bredr_get_bond_list},
     {"bredr_set_tx_pwr","",bredr_set_tx_pwr},
     #if defined(BFLB_BREDR_PATCH_ENABLE_SNIFF_MODE)
@@ -464,6 +492,9 @@ const struct cli_command bredr_cmd_set[] STATIC_CLI_CMD_ATTRIBUTE = {
         
     #if defined(CONFIG_BT_A2DP)
     {"a2dp_connect", "", a2dp_connect},
+    #if defined(BFLB_BREDR_PATCH_A2DP_DISCOVERY_CALLBACK)
+    {"a2dp_discovery_probe", "", a2dp_discovery_probe},
+	#endif
 	#if defined(CONFIG_BT_A2DP_SOURCE)
     {"a2dp_start_disc", "", a2dp_discovery},
     {"a2dp_source_suspend", "", a2dp_suspend},
@@ -559,6 +590,9 @@ BT_CLI(init)
     bt_conn_cb_register(&conn_callbacks);
 #if defined(CONFIG_BT_A2DP)
     a2dp_cb_register(&a2dp_callbacks);
+#if defined(BFLB_BREDR_PATCH_A2DP_DISCOVERY_CALLBACK)
+    bt_a2dp_discovery_cb_register(a2dp_discovery_probe_complete);
+#endif
 #endif
 #if defined(CONFIG_BT_AVRCP)
     avrcp_cb_register(&avrcp_callbacks);
@@ -572,6 +606,31 @@ BT_CLI(init)
     init = true;
     printf("bredr init successfully\n");
 }
+
+#if defined(BFLB_BREDR_PATCH_DEINIT_CLEANUP)
+/* bredr_deinit — clear this file's local demo-CLI "init" guard and the
+ * default_conn handle so the next bredr_init actually re-registers the
+ * conn/profile callbacks instead of short-circuiting on the stale flag.
+ *
+ * Required after a ble_disable()/ble_enable() cycle: bt_disable_action() calls
+ * bt_conn_cb_clear(), unlinking conn_callbacks from the global callback_list,
+ * but the static `init` flag is CLI-local state that nothing in the disable
+ * path resets. Without this reset, a 2nd bredr_init prints "bredr has
+ * initialized" and returns early, so bredr_connected()/bredr_disconnected()
+ * (and the a2dp/avrcp/spp/hfp profile callbacks) are never re-registered even
+ * though the BR/EDR ACL link itself reconnects fine at the HCI layer.
+ *
+ * Test scripts call this explicitly between ble_enable and the 2nd bredr_init,
+ * which keeps ble_cli_cmds.c free of any CONFIG_BT_BREDR reference while
+ * letting bredr_init keep its "don't re-init when already initialized"
+ * short-circuit for interactive use. */
+BT_CLI(deinit)
+{
+    init = false;
+    default_conn = NULL;
+    printf("bredr deinit done\n");
+}
+#endif
 
 static void bredr_connected(struct bt_conn *conn, u8_t err)
 {
@@ -1176,6 +1235,25 @@ BT_A2DP_CLI(connect)
         printf("a2dp connect fail. \n");
     }
 }
+
+#if defined(BFLB_BREDR_PATCH_A2DP_DISCOVERY_CALLBACK)
+BT_A2DP_CLI(discovery_probe)
+{
+    int err;
+
+    if (!default_conn) {
+        printf("Not connected.\n");
+        return;
+    }
+
+    err = bt_start_discovery(default_conn);
+    if (err < 0) {
+        printf("A2DP_DISCOVERY_PROBE submit failed err=%d\n", err);
+    } else {
+        printf("A2DP_DISCOVERY_PROBE submitted\n");
+    }
+}
+#endif
 
 #if defined(CONFIG_BT_A2DP_SOURCE)
 BT_A2DP_CLI(discovery)
@@ -2312,6 +2390,20 @@ BT_CLI(auth_passkey)
     }
 
     bt_conn_auth_passkey_entry(default_conn, passkey);
+}
+
+BT_CLI(get_all_conn_info)
+{
+    struct bt_conn_info info[CONFIG_BT_ACL_CONN];
+    char br_addr[BT_ADDR_STR_LEN];
+    int link_num;
+
+    link_num = bt_conn_get_remote_dev_info(info, BT_CONN_TYPE_BR);
+    printf("br connected devices count: %d\r\n", link_num);
+    for (int i = 0; i < link_num; i++) {
+        bt_addr_to_str(info[i].br.dst, br_addr, sizeof(br_addr));
+        printf("[%d]: bredr address %s\r\n", i, br_addr);
+    }
 }
 
 BT_CLI(get_bond_list)

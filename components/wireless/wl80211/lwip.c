@@ -80,7 +80,7 @@ void wl80211_tcpip_input(uint8_t vif_type, void *rxhdr, void *buf, uint32_t frm_
         wl80211_mac_rx_free(rxhdr);
     } else {
         pc = rxhdr;
-        p = pbuf_alloced_custom(PBUF_RAW, frm_len, PBUF_REF | PBUF_TYPE_FLAG_STRUCT_DATA_CONTIGUOUS, pc, buf, frm_len);
+        p = pbuf_alloced_custom(PBUF_RAW, frm_len, PBUF_REF, pc, buf, frm_len);
         pc->custom_free_function = (void *)wl80211_mac_rx_free;
     }
 
@@ -114,22 +114,32 @@ err_t wl80211_output(struct netif *net_if, struct pbuf *buf)
 {
     struct wl80211_tx_header *txhdr;
     struct iovec txseg[5];
-    int seg_cnt;
-    int payload_len = buf->tot_len;
-    int remain_len = payload_len;
-
-    // first segment record payload
-    txseg[0].iov_base = buf->payload;
-    txseg[0].iov_len = buf->len;
-    remain_len -= buf->len;
+    int seg_cnt, payload_len, remain_len;
 
     if (!netif_is_link_up(net_if)) {
         return ERR_IF;
     }
 
-    // Increase the ref count so that the buffer is not freed by the networking
-    // stack until it is actually sent over the WiFi interface
-    pbuf_ref(buf);
+    if (buf->next != NULL && pbuf_clen(buf) > 5) {
+        struct pbuf *q = pbuf_clone(PBUF_RAW_TX, PBUF_RAM, buf);
+        if (!q) {
+            return ERR_MEM;
+        }
+        buf = q;
+        // dont call pbuf_free(buf) !!
+    } else {
+        // Increase the ref count so that the buffer is not freed by the networking
+        // stack until it is actually sent over the WiFi interface
+        pbuf_ref(buf);
+    }
+
+    payload_len = buf->tot_len;
+    remain_len = payload_len;
+
+    // first segment record payload
+    txseg[0].iov_base = buf->payload;
+    txseg[0].iov_len = buf->len;
+    remain_len -= buf->len;
 
     if (pbuf_header(buf, PBUF_LINK_ENCAPSULATION_HLEN)) {
         abort();
@@ -482,3 +492,10 @@ void set_ipv4_cmd(int argc, char **argv)
     return;
 }
 #endif
+
+void netstat_cmd(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    tcpip_callback(stats_netstat, NULL);
+}

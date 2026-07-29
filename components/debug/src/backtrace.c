@@ -90,32 +90,40 @@ int backtrace_unwind(uint32_t pc, uint32_t sp,
     return backtrace(pc, sp, addrs, max, cfi_table_base);
 }
 
+static int backtrace_unwind_with_ra(uint32_t pc, uint32_t sp, uint32_t ra,
+                                    uint32_t *addrs, int max)
+{
+    const uint8_t *cfi_table_base = get_cfi_table_base();
+    if (cfi_table_base == NULL) {
+        return 0;
+    }
+
+    return backtrace_with_ra(pc, sp, ra, addrs, max, cfi_table_base);
+}
+
 /*============================================================================
  * Get task context from TCB (for non-current tasks)
  *============================================================================*/
 
 /**
- * Get task SP and PC from TCB (for non-current tasks)
+ * Get task SP, PC, and x1/RA from TCB (for saved task contexts)
  *
  * For RISC-V FreeRTOS:
  * - TCB->pxTopOfStack points to the BOTTOM of saved context stack
  * - Stack layout at context switch (portContext.h):
  *   sp[0]: mepc (PC)
  *   sp[1]: mstatus
- *   sp[2]: x1 (ra)
- *   ...
- *   sp[29]: x31 (t6)
- *   sp[30]: xPS
- *   sp[31]: xCriticalNesting
- *   [+ FPU context: sp[32..64] if mstatus.FS=0x3 (dirty)]
+ *   sp[fpu_words + 2]: x1 (ra)
+ *   FPU state occupies 33 words between mstatus and x1 when FS is dirty.
  *
  * To get actual SP:
  *   - No FPU: pxTopOfStack + 31 words
  *   - With FPU: pxTopOfStack + 31 + 33 words
  */
-static bool get_task_context_from_tcb(TaskHandle_t handle, uint32_t *sp, uint32_t *pc)
+static bool get_task_context_from_tcb(TaskHandle_t handle, uint32_t *sp,
+                                      uint32_t *pc, uint32_t *ra)
 {
-    if (!handle || !sp || !pc) {
+    if (!handle || !sp || !pc || !ra) {
         return false;
     }
 
@@ -133,16 +141,19 @@ static bool get_task_context_from_tcb(TaskHandle_t handle, uint32_t *sp, uint32_
 
     /* Calculate SP based on FPU status */
     /* FS bits [14:13] in mstatus: 0x3 = dirty (FPU context saved) */
-    int stack_offset_words = 31;  /* Default: no FPU */
+    int fpu_context_words = 0;
     if ((mstatus & 0x6000) == 0x6000) {
-        stack_offset_words = 31 + 33;  /* FPU context: 33 words */
+        fpu_context_words = 33;
     }
 
     /* Actual SP points to top of general register area */
-    *sp = stack_top + stack_offset_words * 4;
+    *sp = stack_top + (31 + fpu_context_words) * 4;
 
     /* Get PC from stack: mepc is saved at stack_top[0] */
     *pc = *(uint32_t*)stack_top;
+
+    /* FPU context, when present, is between mepc/mstatus and x1. */
+    *ra = *(uint32_t*)(stack_top + (fpu_context_words + 2) * 4);
 
     return true;
 }
@@ -153,6 +164,7 @@ static void backtrace_task_from_isr_cb(TaskHandle_t handle, eTaskState state)
     uint32_t addrs[16];
     uint32_t sp = 0;
     uint32_t pc = 0;
+    uint32_t ra = 0;
     int count = 0;
     bool is_cur = (handle == xTaskGetCurrentTaskHandle());
     const char *name = pcTaskGetName(handle);
@@ -161,12 +173,12 @@ static void backtrace_task_from_isr_cb(TaskHandle_t handle, eTaskState state)
         name = "<noname>";
     }
 
-    if (!get_task_context_from_tcb(handle, &sp, &pc)) {
+    if (!get_task_context_from_tcb(handle, &sp, &pc, &ra)) {
         printf("%s%s: [failed to get context]\r\n", name, is_cur ? " *" : "");
         return;
     }
 
-    count = backtrace_unwind(pc, sp, addrs, 16);
+    count = backtrace_unwind_with_ra(pc, sp, ra, addrs, 16);
 
     printf("%s%s: ", name, is_cur ? " *" : "");
     for (int i = 0; i < count; i++) {
@@ -244,7 +256,7 @@ void backtrace_tasks_all(void)
 
     for (UBaseType_t i = 0; i < num; i++) {
         uint32_t addrs[16];  /* Limited depth for task list */
-        uint32_t sp, pc;
+        uint32_t sp, pc, ra = 0;
 
         bool is_cur = (tasks[i].xHandle == cur);
 
@@ -254,13 +266,14 @@ void backtrace_tasks_all(void)
             pc = cur_pc;
         } else {
             /* Non-current task: extract from TCB */
-            if (!get_task_context_from_tcb(tasks[i].xHandle, &sp, &pc)) {
+            if (!get_task_context_from_tcb(tasks[i].xHandle, &sp, &pc, &ra)) {
                 printf("%s: [failed to get context]\r\n", tasks[i].pcTaskName);
                 continue;
             }
         }
 
-        int count = backtrace_unwind(pc, sp, addrs, 16);
+        int count = is_cur ? backtrace_unwind(pc, sp, addrs, 16) :
+                             backtrace_unwind_with_ra(pc, sp, ra, addrs, 16);
         printf("%s%s: ", tasks[i].pcTaskName, is_cur ? " *" : "");
 
         for (int j = 0; j < count; j++) {
@@ -290,7 +303,7 @@ int backtrace_task(void *handle, uint32_t *addrs, int max)
         return 0;
     }
 
-    uint32_t sp, pc;
+    uint32_t sp, pc, ra = 0;
 
     /* Check if this is the current task */
     TaskHandle_t cur = xTaskGetCurrentTaskHandle();
@@ -302,13 +315,14 @@ int backtrace_task(void *handle, uint32_t *addrs, int max)
         pc = get_pc();
     } else {
         /* Non-current task: extract from TCB */
-        if (!get_task_context_from_tcb(handle, &sp, &pc)) {
+        if (!get_task_context_from_tcb(handle, &sp, &pc, &ra)) {
             return 0;
         }
     }
 
     taskENTER_CRITICAL();
-    int count = backtrace_unwind(pc, sp, addrs, max);
+    int count = is_cur ? backtrace_unwind(pc, sp, addrs, max) :
+                         backtrace_unwind_with_ra(pc, sp, ra, addrs, max);
     taskEXIT_CRITICAL();
 
     return count;

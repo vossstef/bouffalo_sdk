@@ -12,7 +12,11 @@
 #include <wifi_mgmr.h>
 
 #include <bflb_irq.h>
+#if defined(BL618DG)
+#include <bl618dg_glb.h>
+#else
 #include <bl616_glb.h>
+#endif
 // #include <bflb_mtd.h>
 
 #include <rfparam_adapter.h>

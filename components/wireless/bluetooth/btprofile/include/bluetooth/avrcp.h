@@ -184,6 +184,9 @@ struct avrcp_media_player {
 };
 
 int bt_avrcp_init(void);
+#if defined(BFLB_BREDR_PATCH_DEINIT_CLEANUP)
+void bt_avrcp_deinit(void);
+#endif
 void avrcp_cb_register(struct avrcp_callback *cb);
 int avrcp_recv(struct bt_l2cap_chan *chan, struct net_buf *buf);
 struct bt_avrcp *bt_avrcp_connect(struct bt_conn *conn);
@@ -205,5 +208,3 @@ int avrcp_reg_play_status_notification(struct bt_avctp *session);
 #endif
 
 #endif /* _INCLUDE_BLUETOOTH_AVRCP_H_ */
-
-

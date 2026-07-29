@@ -27,3 +27,12 @@ abort(void) {
     asm("ebreak");
     while(1);
 }
+
+#if defined(__PICOLIBC__)
+void __attribute__ ((noreturn))
+__assert_no_args(void)
+{
+    printf("Assertion Failed\r\n");
+    abort();
+}
+#endif

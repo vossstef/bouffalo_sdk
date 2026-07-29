@@ -180,6 +180,11 @@ struct net_buf *bt_rfcomm_create_pdu(struct net_buf_pool *pool);
 /* Initialize RFCOMM signal layer */
 void bt_rfcomm_init(void);
 
+#if defined(BFLB_BREDR_PATCH_DEINIT_CLEANUP)
+/* Deinitialize RFCOMM signal layer */
+void bt_rfcomm_deinit(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

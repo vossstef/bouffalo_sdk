@@ -459,6 +459,20 @@ struct bt_sdp_record {
  */
 int bt_sdp_register_service(struct bt_sdp_record *service);
 
+#if defined(BFLB_BREDR_PATCH_DEINIT_CLEANUP)
+/** @brief SDP Service Unregister
+ *
+ *  Unregister a Service Record previously registered with
+ *  bt_sdp_register_service(). Safe to call even if the record
+ *  was never registered (returns -ENOENT, no-op).
+ *
+ *  @param service Service record previously passed to bt_sdp_register_service.
+ *
+ * @return 0 in case of success or negative value in case of error.
+ */
+int bt_sdp_unregister_service(struct bt_sdp_record *service);
+#endif
+
 /* Client API */
 
 /** @brief Generic SDP Client Query Result data holder */

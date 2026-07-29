@@ -123,13 +123,14 @@ const bt_addr_le_t *bt_conn_get_dst(const struct bt_conn *conn);
 
 /** @brief Get array index of a connection
  *
- *  This function is used to map bt_conn to index of an array of
- *  connections. The array has CONFIG_BT_MAX_CONN elements.
+ *  This function maps a connection to its index in the corresponding LE or
+ *  BR/EDR connection pool.
  *
  *  @param conn Connection object.
  *
  *  @return Index of the connection object.
- *  The range of the returned value is 0..CONFIG_BT_MAX_CONN-1
+ *  LE connections return 0..CONFIG_BT_MAX_CONN-1. BR/EDR connections return
+ *  0..CONFIG_BT_ACL_CONN-1.
  */
 u8_t bt_conn_index(struct bt_conn *conn);
 
@@ -211,10 +212,13 @@ int bt_conn_get_info(const struct bt_conn *conn, struct bt_conn_info *info);
 /** @brief Get connected devices' info
  *
  *  @param info Connection info object.
+ *  @param type Exact connection type to query (BT_CONN_TYPE_LE or
+ *              BT_CONN_TYPE_BR). When info is non-NULL, its array capacity
+ *              must match the configured maximum for that type.
  *
- *  @return Connected device number.
+ *  @return Connected device number or (negative) error code on failure.
  */
- int bt_conn_get_remote_dev_info(struct bt_conn_info *info);
+int bt_conn_get_remote_dev_info(struct bt_conn_info *info, u8_t type);
 
 /** @brief Update the connection parameters.
  *

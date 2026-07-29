@@ -274,21 +274,22 @@ static int at_setup_cmd_cwjap(int argc, const char **argv)
         return AT_RESULT_WITH_SUB_CODE(AT_SUB_CMD_OP_ERROR);
     }
 
-    memset(&at_wifi_config->sta_info, 0, sizeof(at_wifi_config->sta_info));
-    strlcpy(at_wifi_config->sta_info.ssid, ssid, sizeof(at_wifi_config->sta_info.ssid));
     if (strlen(password) > 0) {
         int free_slot;
         if (find_credential_slot(ssid, &free_slot) == -1 && free_slot == -1) {
-            memset(password, 0, sizeof(password));
             return AT_RESULT_WITH_SUB_CODE(AT_SUB_NO_MEMORY);
         }
+    }
+
+    memset(&at_wifi_config->sta_info, 0, sizeof(at_wifi_config->sta_info));
+    strlcpy(at_wifi_config->sta_info.ssid, ssid, sizeof(at_wifi_config->sta_info.ssid));
+    if (strlen(password) > 0) {
         at_utils_crypto_get_random_iv(at_wifi_config->sta_info.iv);
         at_utils_crypto_aes_cbc_encrypt(at_wifi_config->sta_info.iv,
                                         64,
                                         (const uint8_t *)password,
                                         at_wifi_config->sta_info.pwd_encrypted);
     }
-    memset(password, 0, sizeof(password));
     if (bssid_valid) {
         memcpy(at_wifi_config->sta_info.bssid, bssid, sizeof(at_wifi_config->sta_info.bssid));
     } else {

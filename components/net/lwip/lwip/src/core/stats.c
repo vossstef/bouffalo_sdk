@@ -219,11 +219,56 @@ netstat_tcp_listen_pcbs_dump(union tcp_listen_pcbs_t *pcb_head)
     ipaddr_ntoa_r(&lpcb->local_ip, ip_str, sizeof(ip_str));
     snprintf(str_laddr, sizeof(str_laddr) - 1,
              "%s:%"U16_F, ip_str, lpcb->local_port);
-    LWIP_PLATFORM_DIAG(("%-10s%-16"U32_F"%-8"U32_F"%-25s%-25s%-15s\r\n",
+    LWIP_PLATFORM_DIAG(("%-10s%-16"U32_F"%-8"U32_F"%-8u%-25s%-25s%-15s\r\n",
                 IP_IS_V4(&lpcb->local_ip) ? "tcp" : "tcp6",
-                rxq_size, txq_size, str_laddr, str_raddr,
+                rxq_size, txq_size,
+                (unsigned)sizeof(struct tcp_pcb_listen),
+                str_laddr, str_raddr,
                 tcp_debug_state_str(lpcb->state)));
   }
+}
+
+static u32_t
+tcp_segs_total_len(struct tcp_seg *seg)
+{
+  u32_t total = 0;
+  while (seg != NULL) {
+    total += seg->len;
+    seg = seg->next;
+  }
+  return total;
+}
+
+static u32_t
+pbuf_ram(const struct pbuf *p)
+{
+  u32_t ram = 0;
+  while (p != NULL) {
+    u8_t alloc_src = p->type_internal & PBUF_TYPE_ALLOC_SRC_MASK;
+    if (alloc_src == PBUF_TYPE_ALLOC_SRC_MASK_STD_MEMP_PBUF) {
+      ram += sizeof(struct pbuf);
+    } else if (alloc_src == PBUF_TYPE_ALLOC_SRC_MASK_STD_MEMP_PBUF_POOL) {
+      ram += PBUF_POOL_BUFSIZE;
+    } else {
+      ram += (u32_t)((u8_t *)p->payload + p->len - (u8_t *)p);
+    }
+    p = p->next;
+  }
+  return ram;
+}
+
+static u32_t
+tcp_segs_pbuf_ram(struct tcp_seg *seg)
+{
+  u32_t ram = 0;
+  while (seg != NULL) {
+    ram += sizeof(struct tcp_seg);
+    if (seg->p != NULL) {
+      ram += pbuf_ram(seg->p);
+    }
+    seg = seg->next;
+  }
+  return ram;
 }
 
 static void
@@ -233,7 +278,8 @@ netstat_tcp_pcbs_dump(struct tcp_pcb *pcb_head)
   char str_rxq[32];
   uint32_t txq_size;
   struct tcp_pcb *pcb;
-  uint32_t rxq_size, rxmem_size;
+  uint32_t rxq_size, rxmem_size, total_ram;
+  uint32_t unsent_ram, unacked_ram, ooseq_ram, refused_ram;
   char str_laddr[64], str_raddr[64];
 
   for (pcb = pcb_head; pcb != NULL; pcb = pcb->next) {
@@ -248,13 +294,20 @@ netstat_tcp_pcbs_dump(struct tcp_pcb *pcb_head)
     }
 #endif /* LWIP_NETCONN */
 #if TCP_QUEUE_OOSEQ
-    rxmem_size = rxq_size + (pcb->ooseq ? pcb->ooseq->len : 0);
+    rxmem_size = rxq_size + tcp_segs_total_len(pcb->ooseq);
 #else
     rxmem_size = rxq_size;
 #endif
 
-    txq_size = (pcb->unsent ? pcb->unsent->len : 0) +
-        (pcb->unacked ? pcb->unacked->len : 0);
+    txq_size = tcp_segs_total_len(pcb->unsent) +
+        tcp_segs_total_len(pcb->unacked);
+
+    total_ram = sizeof(struct tcp_pcb);
+    unsent_ram = tcp_segs_pbuf_ram(pcb->unsent);
+    unacked_ram = tcp_segs_pbuf_ram(pcb->unacked);
+    ooseq_ram = tcp_segs_pbuf_ram(pcb->ooseq);
+    refused_ram = pcb->refused_data ? pbuf_ram(pcb->refused_data) : 0;
+    total_ram += unsent_ram + unacked_ram + ooseq_ram + refused_ram;
 
     snprintf(str_rxq, sizeof(str_rxq) - 1, "%"U32_F"(%"U32_F")",
              rxmem_size, rxq_size);
@@ -264,10 +317,15 @@ netstat_tcp_pcbs_dump(struct tcp_pcb *pcb_head)
     ipaddr_ntoa_r(&pcb->remote_ip, ip_str, sizeof(ip_str));
     snprintf(str_raddr, sizeof(str_raddr) - 1,
              "%s:%"U16_F, ip_str, pcb->remote_port);
-    LWIP_PLATFORM_DIAG(("%-10s%-16s%-8"U32_F"%-25s%-25s%-15s\r\n",
+    LWIP_PLATFORM_DIAG(("%-10s%-16s%-8"U32_F"%-8"U32_F"%-25s%-25s%-15s\r\n",
                 IP_IS_V4(&pcb->local_ip) ? "tcp" : "tcp6",
-                str_rxq, txq_size, str_laddr, str_raddr,
+                str_rxq, txq_size, total_ram,
+                str_laddr, str_raddr,
                 tcp_debug_state_str(pcb->state)));
+    LWIP_PLATFORM_DIAG(("%-10s unsent:%-6"U32_F" unacked:%-6"U32_F
+                " ooseq:%-6"U32_F" refused:%-6"U32_F"\r\n",
+                "", unsent_ram, unacked_ram,
+                ooseq_ram, refused_ram));
   }
 }
 #endif /* LWIP_TCP */
@@ -338,19 +396,22 @@ stats_netstat(void *ctx)
   const char *ts_proto = "Proto";
   const char *ts_rxq = "Recv-Q";
   const char *ts_txq = "Send-Q";
+  const char *ts_mem = "Mem";
   const char *ts_laddr = "Local Address";
   const char *ts_raddr = "Foreign Address";
   const char *ts_state = "State";
 
 #if LWIP_TCP
-  LWIP_PLATFORM_DIAG(("%-10s%-16s%-8s%-25s%-25s%-15s\r\n",
-              ts_proto, ts_rxq, ts_txq, ts_laddr, ts_raddr, ts_state));
+  LWIP_PLATFORM_DIAG(("%-10s%-16s%-8s%-8s%-25s%-25s%-15s\r\n",
+              ts_proto, ts_rxq, ts_txq, ts_mem, ts_laddr, ts_raddr, ts_state));
   netstat_tcp_listen_pcbs_dump(&tcp_listen_pcbs);
   netstat_tcp_pcbs_dump(tcp_bound_pcbs);
   netstat_tcp_pcbs_dump(tcp_active_pcbs);
   netstat_tcp_pcbs_dump(tcp_tw_pcbs);
   LWIP_PLATFORM_DIAG(("\r\nNote: tcp Recv-Q A(B), A - recv buffer size, "
                       "B - recv queue size\r\n"));
+  LWIP_PLATFORM_DIAG(("Note: Mem = estimated total RAM; queue detail line "
+                      "below each PCB shows per-queue RAM\r\n"));
   LWIP_PLATFORM_DIAG(("\r\n\r\n"));
 #endif /* LWIP_TCP */
 

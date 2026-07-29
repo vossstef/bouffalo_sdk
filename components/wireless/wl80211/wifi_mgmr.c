@@ -44,8 +44,7 @@ static bool wifi_mgmr_should_suppress_scan_dump(void)
     }
 #endif
 
-    if (wl80211_glb.p2p.role != WL80211_P2P_ROLE_IDLE ||
-        wl80211_glb.p2p.group_forming || wl80211_glb.p2p.roc_active) {
+    if (wl80211_glb.p2p.role != WL80211_P2P_ROLE_IDLE || wl80211_glb.p2p.group_forming || wl80211_glb.p2p.roc_active) {
         return true;
     }
 
@@ -98,8 +97,8 @@ static void wifi_mgmr_ap_netif_cfg_clear(void)
 }
 
 #if defined(CONFIG_WL80211_P2P)
-void wifi_mgmr_ap_netif_cfg_override(bool use_ipcfg, bool use_dhcpd, int start, int limit,
-                                     uint32_t ap_ipaddr, uint32_t ap_mask)
+void wifi_mgmr_ap_netif_cfg_override(bool use_ipcfg, bool use_dhcpd, int start, int limit, uint32_t ap_ipaddr,
+                                     uint32_t ap_mask)
 {
     wifi_mgmr_ap_netif_cfg.pending = true;
     wifi_mgmr_ap_netif_cfg.use_ipcfg = use_ipcfg;
@@ -387,6 +386,9 @@ static void wifi_mgmr_event_handler(async_input_event_t ev, void *priv)
                 break;
             }
 #endif
+            if (wifi_mgmr_sta_scanlist_nums_get() == 0) {
+                wl80211_mac_rx_flow_dump();
+            }
 
             wifi_mgmr_sta_scanlist();
         } break;
@@ -654,29 +656,30 @@ int wifi_mgmr_sta_scan(const wifi_mgmr_scan_params_t *config)
     memset(&scan_params, 0, sizeof(struct wl80211_scan_params));
 
 #if defined(CONFIG_WL80211_P2P)
-    if (config != NULL) {
+    if (config != NULL)
 #endif
-    scan_params.ssid_len = config->ssid_length;
-    if (config->ssid_length) {
-        scan_params.ssid = config->ssid_array;
-    }
-    if (config->bssid_set_flag) {
-        scan_params.bssid = config->bssid;
+    {
+        scan_params.ssid_len = config->ssid_length;
+        if (config->ssid_length) {
+            scan_params.ssid = config->ssid_array;
+        }
+        if (config->bssid_set_flag) {
+            scan_params.bssid = config->bssid;
+        }
+
+        if (config->channels_cnt) {
+            scan_params.channels_cnt = config->channels_cnt;
+            scan_params.channels = config->channels;
+        }
+
+        scan_params.probe_cnt = config->probe_cnt;
+        scan_params.probe_interval = config->duration;
+        if (config->passive) {
+            scan_params.flags |= WL80211_SCAN_FLAGS_PASSIVE;
+        }
     }
 
-    if (config->channels_cnt) {
-        scan_params.channels_cnt = config->channels_cnt;
-        scan_params.channels = config->channels;
-    }
-
-    scan_params.probe_cnt = config->probe_cnt;
-    scan_params.probe_interval = config->duration;
-    if (config->passive) {
-        scan_params.flags |= WL80211_SCAN_FLAGS_PASSIVE;
-    }
 #if defined(CONFIG_WL80211_P2P)
-    }
-
     {
         uint16_t ie_len = 0;
         const uint8_t *ie = wifi_mgmr_get_optional_appie(WIFI_APPIE_WPS_PR, &ie_len);
@@ -931,7 +934,6 @@ uint16_t wifi_mgmr_sta_get_listen_itv(void)
 {
     return wifi_mgmr_listen_itv;
 }
-
 
 #if defined(CONFIG_WL80211_P2P)
 wifi_interface_t wifi_mgmr_sta_enable(void)

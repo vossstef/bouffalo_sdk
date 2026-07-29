@@ -30,9 +30,9 @@
  *          uint16_t func_size;                 // 函数大小（字节）
  *      }
  *
- *   IMPORTANT: Leaf functions (frame_size=0) are NOT in the table
- *   - During backtrace, if PC is not found, it's a leaf function
- *   - For leaf function: PC = [SP], SP unchanged, continue unwind
+ *   IMPORTANT: Leaf functions (frame_size=0) are NOT in the table.
+ *   Unwinding such a function requires x1/RA from a saved register context;
+ *   RA cannot be inferred from the word at SP.
  */
 
 #ifndef __UNWIND_6BYTE_H__
@@ -106,9 +106,9 @@ bool find_unwind_entry(uint32_t pc, unwind_entry_t *entry);
  *
  * Given current PC and SP, computes the previous frame's PC and SP.
  *
- * IMPORTANT: Leaf functions (frame_size=0) are NOT in the CFI table
- * - If find_unwind_entry returns false, PC is in a leaf function
- * - For leaf function: RA is at [SP], SP unchanged, continue unwind
+ * IMPORTANT: Leaf functions (frame_size=0) are NOT in the CFI table.
+ * A missing entry returns false; callers with a saved x1/RA may use it while
+ * leaving SP unchanged.
  *
  * @param pc            Current program counter
  * @param sp            Current stack pointer
@@ -135,6 +135,25 @@ bool unwind_frame(uint32_t pc, uint32_t sp,
 int backtrace(uint32_t pc, uint32_t sp,
               uint32_t *addrs, int max_frames,
               const uint8_t *cfi_table_base);
+
+/**
+ * @brief Perform backtrace with x1/RA from a saved register context
+ *
+ * If the initial PC has no unwind entry, the unwinder retries once at
+ * initial_ra without changing SP.  The supplied RA is never reused for a
+ * later frame.
+ *
+ * @param pc              Current program counter
+ * @param sp              Current stack pointer
+ * @param initial_ra      x1/RA saved with the current context, or 0 if absent
+ * @param addrs           [out] Array to store backtrace addresses
+ * @param max_frames      Maximum number of frames to capture
+ * @param cfi_table_base  Pointer to CFI table data (for initialization)
+ * @return Number of frames captured
+ */
+int backtrace_with_ra(uint32_t pc, uint32_t sp, uint32_t initial_ra,
+                      uint32_t *addrs, int max_frames,
+                      const uint8_t *cfi_table_base);
 
 /**
  * @brief Print backtrace results

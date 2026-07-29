@@ -831,20 +831,12 @@ dhcp_handle_ack(struct netif *netif, struct dhcp_msg *msg_in)
     dns_setserver(n, &dns_addr);
   }
 #endif /* LWIP_DHCP_PROVIDE_DNS_SERVERS */
-            printf( " IP:%u.%u.%u.%u\r\n MASK: %u.%u.%u.%u\r\n Gateway: %u.%u.%u.%u\r\n",
-                    (unsigned int)((dhcp->offered_ip_addr.addr & 0x000000FF) >> 0),
-                    (unsigned int)((dhcp->offered_ip_addr.addr & 0x0000FF00) >> 8),
-                    (unsigned int)((dhcp->offered_ip_addr.addr & 0x00FF0000) >> 16),
-                    (unsigned int)((dhcp->offered_ip_addr.addr & 0xFF000000) >> 24),
-                    (unsigned int)((dhcp->offered_sn_mask.addr & 0x000000FF) >> 0),
-                    (unsigned int)((dhcp->offered_sn_mask.addr & 0x0000FF00) >> 8),
-                    (unsigned int)((dhcp->offered_sn_mask.addr & 0x00FF0000) >> 16),
-                    (unsigned int)((dhcp->offered_sn_mask.addr & 0xFF000000) >> 24),
-                    (unsigned int)((dhcp->offered_gw_addr.addr & 0x000000FF) >> 0),
-                    (unsigned int)((dhcp->offered_gw_addr.addr & 0x0000FF00) >> 8),
-                    (unsigned int)((dhcp->offered_gw_addr.addr & 0x00FF0000) >> 16),
-                    (unsigned int)((dhcp->offered_gw_addr.addr & 0xFF000000) >> 24)
-                  );
+
+  char ip_str[IP4ADDR_STRLEN_MAX];
+  printf("\033[32mLwIP DHCP ack (%c%c %d): \033[0m\r\n", netif->name[0], netif->name[1], netif->num);
+  printf("  IP:%s\r\n", ip4addr_ntoa_r(&dhcp->offered_ip_addr, ip_str, sizeof(ip_str)));
+  printf("  MASK: %s\r\n", ip4addr_ntoa_r(&dhcp->offered_sn_mask, ip_str, sizeof(ip_str)));
+  printf("  Gateway: %s\r\n", ip4addr_ntoa_r(&dhcp->offered_gw_addr, ip_str, sizeof(ip_str)));
 }
 
 /**

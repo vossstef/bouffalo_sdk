@@ -18,8 +18,13 @@
 #include "bflb_uart.h"
 #include "bflb_sec_trng.h"
 
+#if defined(BL618DG)
+#include "bl618dg_glb.h"
+#include "bl618dg_mfg_media.h"
+#else
 #include "bl616_glb.h"
 #include "bl616_mfg_media.h"
+#endif
 #include "rfparam_adapter.h"
 
 #include "board.h"

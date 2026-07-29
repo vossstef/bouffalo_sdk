@@ -112,8 +112,8 @@ static inline void *_lwip_calloc(size_t count, size_t size)
 
 #define MEMP_NUM_REASSDATA            LWIP_MIN((IP_REASS_MAX_PBUFS), 5)
 #define TCP_MSS                       (1500 - 40)
-#define TCP_WND                       (32 * 1024)
-#define TCP_SND_BUF                   (16 * TCP_MSS)
+#define TCP_WND                       (((32 * 1024 + TCP_MSS) / TCP_MSS) * TCP_MSS)
+#define TCP_SND_BUF                   (((16 * 1024 + TCP_MSS) / TCP_MSS) * TCP_MSS)
 
 #define TCP_QUEUE_OOSEQ               1
 #define MEMP_NUM_TCP_SEG              ((4 * TCP_SND_BUF + TCP_MSS - 1) / TCP_MSS)
@@ -146,8 +146,10 @@ static inline void *_lwip_calloc(size_t count, size_t size)
 
 #define ETHARP_SUPPORT_STATIC_ENTRIES 1
 
+#define TCP_OVERSIZE                  128
 #define LWIP_SUPPORT_CUSTOM_PBUF      1
-#define LWIP_NETIF_TX_SINGLE_PBUF 1
 #define LWIP_RAND()                                      ((u32_t)random())
+//#define LWIP_NETIF_TX_SINGLE_PBUF     1
+#define LWIP_TCPIP_FORCE_TX_COPY      1
 
 #endif /* LWIP_HDR_LWIPOPTS_H__ */

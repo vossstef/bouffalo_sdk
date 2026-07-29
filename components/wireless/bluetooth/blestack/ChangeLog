@@ -1,4 +1,15 @@
 # Changes
+## 2026-07-28
+1. [BR/EDR] Size the HCI RX buffer for SPP's 1007-byte L2CAP RX MTU, including HCI ACL and L2CAP headers.
+
+## 2026-07-24
+1. [host/conn] Split LE and BR/EDR ACL connections into independent pools sized by CONFIG_BT_MAX_CONN and CONFIG_BT_ACL_CONN, with pool-local connection indexes and a private unique ID only for HCI ACL RX buffers.
+2. [blestack] Size BR/EDR L2CAP, SMP, profiles, and connection-info CLI resources with CONFIG_BT_ACL_CONN, derived from the selected controller library's ACL capacity.
+
+## 2026-07-23
+1. [bredr_cli_cmds] Add bt profile deinit and cleanup related CLI support under BFLB_BREDR_PATCH_DEINIT_CLEANUP.
+2. [blestack] Complete BR/EDR profile deinitialization support in host-side paths under BFLB_BREDR_PATCH_DEINIT_CLEANUP.
+
 ## 2026-07-10
 1. [bredr_cli_cmds] Reduce code size by replacing embedded A2DP source audio data with a generated test tone.
 

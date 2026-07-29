@@ -923,6 +923,46 @@ if(("${CHIP}" STREQUAL "bl616") OR ("${CHIP}" STREQUAL "bl618dg"))
 		_check_conflict(CONFIG_CTE n)
 		_check_conflict(CONFIG_LE_PWR_CTRL n)
 	endif()
+# 
+# ifeq ($(PRIV_CONFIG_GEN_BLE),ble1m6s1bredr1)
+# CONFIG_BT_BREDR := 1
+# CONFIG_BLE_PDS := 1
+# CONFIG_EM_SIZE := 32
+# CONFIG_BT_ALLROLES := 1
+# CONFIG_BT_CENTRAL := 1
+# CONFIG_BT_PERIPHERAL := 1
+# CONFIG_BT_BROADCASTER := 1
+# CONFIG_BT_OBSERVER := 1
+# CONFIG_DISABLE_BLE_CONTROLLER_TEST_MODE := 1
+# CONFIG_BT_CONN := 6
+# CONFIG_BLE_TX_BUFF_DATA := 8
+# #Update le adv data and scan rsp data when LE adertising is active, sw need 4 adv buffer at least. 
+# CONFIG_BLE_ACT_MAX := 10
+# CONFIG_ADV_EXTENSION := 0
+# CONFIG_CIS := 0
+# CONFIG_BIS := 0
+# CONFIG_CTE := 0
+# CONFIG_LE_PWR_CTRL := 0
+# endif
+	if("${PRIV_CONFIG_GEN_BLE}" STREQUAL "ble1m4s1bredr1")
+		_check_conflict(CONFIG_BT_BREDR y)
+		_check_conflict(CONFIG_BLE_PDS y)
+		_check_conflict(CONFIG_EM_SIZE 32)
+		_check_conflict(CONFIG_BT_ALLROLES y)
+		_check_conflict(CONFIG_BT_CENTRAL y)
+		_check_conflict(CONFIG_BT_PERIPHERAL y)
+		_check_conflict(CONFIG_BT_BROADCASTER y)
+		_check_conflict(CONFIG_BT_OBSERVER y)
+		_check_conflict(CONFIG_DISABLE_BLE_CONTROLLER_TEST_MODE y)
+		_check_conflict(CONFIG_BT_CONN 4)
+		_check_conflict(CONFIG_BLE_TX_BUFF_DATA 8)
+		_check_conflict(CONFIG_BLE_ACT_MAX 10)
+		_check_conflict(CONFIG_ADV_EXTENSION n)
+		_check_conflict(CONFIG_CIS n)
+		_check_conflict(CONFIG_BIS n)
+		_check_conflict(CONFIG_CTE n)
+		_check_conflict(CONFIG_LE_PWR_CTRL n)
+	endif()
 #
 #ifeq ($(PRIV_CONFIG_GEN_BLE),uarthci)
 #CONFIG_BT_BREDR := 1

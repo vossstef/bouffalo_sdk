@@ -8,13 +8,14 @@
 
 #include "wl80211_mac.h"
 #include "wl80211_platform.h"
+#include "lwip/tcpip.h"
 
 /* MACSW_MAX_BA_RX is not defined by macsw.h (no hard-coded value there);
  * derive it from the config value that was pulled in above. */
 #ifdef CFG_BARX
 #define MACSW_MAX_BA_RX CFG_BARX
 #else
-#define MACSW_MAX_BA_RX 2  /* safe fallback */
+#define MACSW_MAX_BA_RX 2 /* safe fallback */
 #endif
 
 #include "FreeRTOS.h"
@@ -249,8 +250,7 @@ int platform_get_mac(uint8_t vif_type, uint8_t mac[6])
  ****************************************************************************************
  */
 
-/* The total memory size limit used by WL80211 */
-#if CONFIG_WL80211_WRAM_MEM_SIZE_LIMIT
+/* The total memory size tracking (always active for diagnostics) */
 static size_t g_wl80211_wram_mem_size_malloced;
 static size_t g_wl80211_wram_mem_size_freed;
 
@@ -274,10 +274,8 @@ static void wl80211_wram_mem_size_add_freed(size_t size)
     g_wl80211_wram_mem_size_freed += size;
     bflb_irq_restore(flags);
 }
-#endif
 
-/* The total memory count limit used by WL80211 */
-#if CONFIG_WL80211_WRAM_MEM_CNT_LIMIT
+/* The total memory count tracking (always active for diagnostics) */
 static size_t g_wl80211_wram_mem_cnt_malloced;
 static size_t g_wl80211_wram_mem_cnt_freed;
 
@@ -301,7 +299,6 @@ static void wl80211_wram_mem_cnt_add_freed(void)
     g_wl80211_wram_mem_cnt_freed += 1;
     bflb_irq_restore(flags);
 }
-#endif
 
 /**
  * @brief Allocate memory in WRAM region (WiFi RAM)
@@ -335,13 +332,9 @@ void *wl80211_platform_malloc_wram(size_t size)
     }
 
     /* Update memory usage size */
-#if CONFIG_WL80211_WRAM_MEM_SIZE_LIMIT
     wl80211_wram_mem_size_add_malloced(kmalloc_size(ptr));
-#endif
     /* Update memory usage count */
-#if CONFIG_WL80211_WRAM_MEM_CNT_LIMIT
     wl80211_wram_mem_cnt_add_malloced();
-#endif
 
     return ptr;
 }
@@ -360,18 +353,13 @@ void wl80211_platform_free_wram(void *ptr)
     }
 
     /* Update memory freed size */
-#if CONFIG_WL80211_WRAM_MEM_SIZE_LIMIT
     wl80211_wram_mem_size_add_freed(kmalloc_size(ptr));
-#endif
     /* Update memory freed count */
-#if CONFIG_WL80211_WRAM_MEM_CNT_LIMIT
     wl80211_wram_mem_cnt_add_freed();
-#endif
 
     kfree(ptr);
 }
 
-#if CONFIG_WL80211_WRAM_MEM_SIZE_LIMIT
 /** Get current WRAM memory size usage
  *
  * @return Current allocated memory size in bytes
@@ -380,9 +368,7 @@ size_t wl80211_platform_get_wram_mem_size_usage(void)
 {
     return wl80211_wram_mem_size_usage_snapshot();
 }
-#endif
 
-#if CONFIG_WL80211_WRAM_MEM_CNT_LIMIT
 /** Get current WRAM memory count usage
  *
  * @return Current allocated memory count
@@ -391,7 +377,6 @@ size_t wl80211_platform_get_wram_mem_cnt_usage(void)
 {
     return wl80211_wram_mem_cnt_usage_snapshot();
 }
-#endif
 
 /** * @brief Allocate memory in WRAM region without limit
  *
@@ -406,7 +391,14 @@ size_t wl80211_platform_get_wram_mem_cnt_usage(void)
  */
 void *wl80211_platform_malloc_wram_nolimit(size_t size)
 {
-    return kmalloc(size, MM_FLAG_HEAP_WRAM_0);
+    void *ptr = NULL;
+    ptr = kmalloc(size, MM_FLAG_HEAP_WRAM_0);
+    if (!ptr) {
+        return NULL;
+    }
+    wl80211_wram_mem_size_add_malloced(kmalloc_size(ptr));
+    wl80211_wram_mem_cnt_add_malloced();
+    return ptr;
 }
 
 /** * @brief Free memory allocated from WRAM region without limit
@@ -417,6 +409,11 @@ void *wl80211_platform_malloc_wram_nolimit(size_t size)
  */
 void wl80211_platform_free_wram_nolimit(void *ptr)
 {
+    if (!ptr) {
+        return;
+    }
+    wl80211_wram_mem_size_add_freed(kmalloc_size(ptr));
+    wl80211_wram_mem_cnt_add_freed();
     kfree(ptr);
 }
 
@@ -466,6 +463,7 @@ extern void wifi_sta_info_cmd(int argc, char **argv);
 extern void set_ipv4_cmd(int argc, char **argv);
 extern void wifi_keyram_cmd(int argc, char **argv);
 extern void wifi_ap_set_max_idle_time_cmd(int argc, char **argv);
+extern void netstat_cmd(int argc, char **argv);
 
 /* CLI command exports - automatically registered when shell component is enabled */
 SHELL_CMD_EXPORT_ALIAS(wifi_connect_cmd, wifi_sta_connect, wifi station connect);
@@ -487,5 +485,6 @@ SHELL_CMD_EXPORT_ALIAS(wifi_sta_info_cmd, wifi_sta_info, show wifi sta info);
 SHELL_CMD_EXPORT_ALIAS(set_ipv4_cmd, set_ipv4, set sta netif static ipv4);
 SHELL_CMD_EXPORT_ALIAS(wifi_keyram_cmd, wifi_keyram, show keyram);
 SHELL_CMD_EXPORT_ALIAS(wifi_ap_set_max_idle_time_cmd, wifi_ap_set_max_idle_time, wifi ap set max idle time);
+SHELL_CMD_EXPORT_ALIAS(netstat_cmd, netstat, dump TCP / UDP PCB table with states and RX / TX queue sizes.);
 
 #endif /* CONFIG_SHELL */

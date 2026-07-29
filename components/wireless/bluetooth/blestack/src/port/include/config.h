@@ -153,9 +153,12 @@
 */
 #ifndef CONFIG_BT_RX_BUF_LEN
 #if defined(CONFIG_BT_BREDR)
-#define CONFIG_BT_RX_BUF_LEN 680 //CONFIG_BT_L2CAP_RX_MTU + 4 + 4
-#elif defined(CONFIG_BT_SPP)
+#if defined(CONFIG_BT_SPP)
+/* HCI ACL header + L2CAP header + the SPP L2CAP RX MTU. */
 #define CONFIG_BT_RX_BUF_LEN 1015
+#else
+#define CONFIG_BT_RX_BUF_LEN 680 //CONFIG_BT_L2CAP_RX_MTU + 4 + 4
+#endif
 #else
 #define CONFIG_BT_RX_BUF_LEN 255 //108 //76
 #endif
@@ -395,6 +398,10 @@
 */
 #ifndef CONFIG_BT_MAX_CONN
 #define CONFIG_BT_MAX_CONN CONFIG_CON
+#endif
+
+#ifndef CONFIG_BT_ACL_CONN
+#define CONFIG_BT_ACL_CONN CONFIG_ACL_CON
 #endif
 
 /*If the application layer sends a att reqeust packet simultaneously for each ble connection, 
@@ -866,6 +873,15 @@ then it does disconnected flow once more. This will cause hardfault issue becaus
 /* Fix stale L2CAP BR CID on reconnection: clear channel CIDs when destroyed
  * so reused channel structs get fresh allocation on next connection. */
 #define BFLB_BREDR_PATCH_CLEAR_L2CAP_BR_STALE_CID
+
+/* Release BR/EDR profile and FreeRTOS resources during disconnect/deinit so
+ * repeated disable/enable and connect/disconnect cycles do not leak memory. */
+#define BFLB_BREDR_PATCH_DEINIT_CLEANUP
+
+/* Expose A2DP discovery completion through a public callback registration API
+ * so diagnostic CLI code does not depend on private AVDTP structures. */
+#define BFLB_BREDR_PATCH_A2DP_DISCOVERY_CALLBACK
+
 
 /* Add BR/EDR sniff mode support: host APIs to enter/exit sniff and a Mode
  * Change event handler, so an idle/low-rate link can release radio time to

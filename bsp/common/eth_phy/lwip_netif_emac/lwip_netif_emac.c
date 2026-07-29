@@ -1,6 +1,5 @@
 /* Includes ------------------------------------------------------------------*/
 /* emac and phy */
-#include "bflb_mtimer.h"
 #include "bflb_emac.h"
 
 #include "eth_phy.h"
@@ -38,9 +37,9 @@ static void ethernetif_input(void *argument);
 static err_t emac_low_level_output(struct netif *netif, struct pbuf *p);
 
 /* tx buff def */
-static uint8_t ATTR_NOCACHE_NOINIT_RAM_SECTION __ALIGNED(32) emac_tx_buff[LWIP_EMAC_TX_BUFF_CNT][LWIP_EMAC_TX_BUFF_SIZE];
+static uint8_t ATTR_NOCACHE_NOINIT_RAM_SECTION __ALIGNED(32) emac_tx_buff[CONFIG_BSP_LWIP_EMAC_TX_BUFF_CNT][CONFIG_BSP_LWIP_EMAC_TX_BUFF_SIZE];
 /* rx buff def */
-static uint8_t ATTR_NOCACHE_NOINIT_RAM_SECTION __ALIGNED(32) emac_rx_buff[LWIP_EMAC_RX_BUFF_CNT][LWIP_EMAC_RX_BUFF_SIZE];
+static uint8_t ATTR_NOCACHE_NOINIT_RAM_SECTION __ALIGNED(32) emac_rx_buff[CONFIG_BSP_LWIP_EMAC_RX_BUFF_CNT][CONFIG_BSP_LWIP_EMAC_RX_BUFF_SIZE];
 
 /* tx pool queue */
 static QueueHandle_t tx_pool_queue;
@@ -54,17 +53,24 @@ static struct bflb_device_s *emacx;
 /* eth phy */
 static eth_phy_ctrl_t phy_ctrl;
 
-/* tx debug info */
-static volatile uint32_t tx_push_cnt = 0;
-static volatile uint32_t tx_success_cnt = 0;
-static volatile uint32_t tx_error_cnt = 0;
-static volatile uint64_t tx_total_size = 0;
-/* rx debug info */
-static volatile uint32_t rx_push_cnt = 0;
-static volatile uint32_t rx_success_cnt = 0;
-static volatile uint32_t rx_error_cnt = 0;
-static volatile uint32_t rx_busy_cnt = 0;
-static volatile uint64_t rx_total_size = 0;
+/* emac debug info */
+struct lwip_emac_debug_info_s {
+    struct {
+        uint32_t push_cnt;
+        uint32_t success_cnt;
+        uint32_t error_cnt;
+        uint64_t total_size;
+    } tx;
+    struct {
+        uint32_t push_cnt;
+        uint32_t success_cnt;
+        uint32_t error_cnt;
+        uint32_t busy_cnt;
+        uint64_t total_size;
+    } rx;
+};
+
+static volatile struct lwip_emac_debug_info_s emac_debug_info;
 
 /* phy cfg */
 static eth_phy_init_cfg_t phy_cfg = {
@@ -85,8 +91,8 @@ static struct bflb_emac_config_s emac_cfg = {
 #else
     .md_clk_div = 39,
 #endif
-    .min_frame_len = LWIP_EMAC_FRAME_SIZE_MIN,
-    .max_frame_len = LWIP_EMAC_FRAME_SIZE_MAX,
+    .min_frame_len = CONFIG_BSP_LWIP_EMAC_FRAME_SIZE_MIN,
+    .max_frame_len = CONFIG_BSP_LWIP_EMAC_FRAME_SIZE_MAX,
 };
 
 void lwip_emac_if_cfg(eth_phy_init_cfg_t *phy_cfg_new, struct bflb_emac_config_s *emac_cfg_new)
@@ -104,7 +110,7 @@ static int emac_low_level_init(struct netif *netif)
     int ret;
 
     /* maximum transfer unit */
-    netif->mtu = LWIP_EMAC_NETIF_MTU;
+    netif->mtu = CONFIG_BSP_LWIP_EMAC_NETIF_MTU;
 
     /* set MAC hardware address length */
     netif->hwaddr_len = ETH_HWADDR_LEN;
@@ -150,25 +156,37 @@ static int emac_low_level_init(struct netif *netif)
         bflb_emac_feature_control(emacx, EMAC_CMD_SET_MAC_RX_CLK_INVERT, true);
     }
 
-    /* device capabilities */
-    /* don't set NETIF_FLAG_ETHARP if this device is not an ethernet one */
-    netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP;
-#if LWIP_IPV6
-    netif->flags |= (NETIF_FLAG_ETHERNET | NETIF_FLAG_IGMP | NETIF_FLAG_MLD6);
-    netif->output_ip6 = ethip6_output;
-#endif
-
     /* tx pool queue init */
-    tx_pool_queue = xQueueCreate(LWIP_EMAC_TX_BUFF_CNT, sizeof(struct bflb_emac_trans_desc_s));
+    tx_pool_queue = xQueueCreate(CONFIG_BSP_LWIP_EMAC_TX_BUFF_CNT, sizeof(struct bflb_emac_trans_desc_s));
 
     /* rx process queue init */
-    rx_process_queue = xQueueCreate(LWIP_EMAC_RX_BUFF_CNT, sizeof(struct bflb_emac_trans_desc_s));
+    rx_process_queue = xQueueCreate(CONFIG_BSP_LWIP_EMAC_RX_BUFF_CNT, sizeof(struct bflb_emac_trans_desc_s));
+
+    /* initialize tx buffer pool */
+    for (int i = 0; i < CONFIG_BSP_LWIP_EMAC_TX_BUFF_CNT; i++) {
+        struct bflb_emac_trans_desc_s tx_desc = {
+            .buff_addr = emac_tx_buff[i],
+        };
+        xQueueSend(tx_pool_queue, &tx_desc, portMAX_DELAY);
+    }
+
+    /* initialize hardware rx descriptor queue */
+    for (int i = 0; i < CONFIG_BSP_LWIP_EMAC_RX_BUFF_CNT; i++) {
+        struct bflb_emac_trans_desc_s rx_desc = {
+            .buff_addr = emac_rx_buff[i],
+        };
+        bflb_emac_queue_rx_push(emacx, &rx_desc);
+        emac_debug_info.rx.push_cnt += 1;
+    }
 
     /* create the task that handles the ETH_MAC */
     LOG_I("[OS] Starting emac rx task...\r\n");
-    xTaskCreate(ethernetif_input, (char *)"emac_rx_task", LWIP_EMAC_RX_STACK_SIZE, netif, osPriorityHigh, &emac_rx_handle);
+    xTaskCreate(ethernetif_input, (char *)"emac_rx_task", CONFIG_BSP_LWIP_EMAC_RX_STACK_SIZE, netif, osPriorityHigh, &emac_rx_handle);
 
-    netif_set_up(netif);
+    /* Keep EMAC running across PHY link changes. Stopping the controller resets
+     * its BD traversal position and requires a complete descriptor rebuild. */
+    bflb_emac_feature_control(emacx, EMAC_CMD_SET_TX_EN, true);
+    bflb_emac_feature_control(emacx, EMAC_CMD_SET_RX_EN, true);
 
     return ERR_OK;
 }
@@ -182,7 +200,7 @@ static void lwip_emac_irq_cb(void *arg, uint32_t irq_event, struct bflb_emac_tra
         case EMAC_IRQ_EVENT_RX_BUSY:
             LOG_W("rx busy\r\n");
             /* debug */
-            rx_busy_cnt++;
+            emac_debug_info.rx.busy_cnt++;
             break;
 
         case EMAC_IRQ_EVENT_RX_CTRL_FRAME:
@@ -191,9 +209,9 @@ static void lwip_emac_irq_cb(void *arg, uint32_t irq_event, struct bflb_emac_tra
             trans_desc->err_status = 0;
             bflb_emac_queue_rx_push(emacx, trans_desc);
             /* debug */
-            rx_push_cnt++;
-            rx_success_cnt++;
-            rx_total_size += trans_desc->data_len;
+            emac_debug_info.rx.push_cnt++;
+            emac_debug_info.rx.success_cnt++;
+            emac_debug_info.rx.total_size += trans_desc->data_len;
             break;
 
         case EMAC_IRQ_EVENT_RX_ERR_FRAME:
@@ -202,24 +220,24 @@ static void lwip_emac_irq_cb(void *arg, uint32_t irq_event, struct bflb_emac_tra
             trans_desc->err_status = 0;
             bflb_emac_queue_rx_push(emacx, trans_desc);
             /* debug */
-            rx_push_cnt++;
-            rx_error_cnt++;
+            emac_debug_info.rx.push_cnt++;
+            emac_debug_info.rx.error_cnt++;
             break;
 
         case EMAC_IRQ_EVENT_RX_FRAME:
             xQueueSendFromISR(rx_process_queue, trans_desc, &pxHigherPriorityTaskWoken);
             portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
             /* debug */
-            rx_success_cnt++;
-            rx_total_size += trans_desc->data_len;
+            emac_debug_info.rx.success_cnt++;
+            emac_debug_info.rx.total_size += trans_desc->data_len;
             break;
 
         case EMAC_IRQ_EVENT_TX_FRAME:
             xQueueSendFromISR(tx_pool_queue, trans_desc, &pxHigherPriorityTaskWoken);
             portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
             /* debug */
-            tx_success_cnt++;
-            tx_total_size += trans_desc->data_len;
+            emac_debug_info.tx.success_cnt++;
+            emac_debug_info.tx.total_size += trans_desc->data_len;
             break;
 
         case EMAC_IRQ_EVENT_TX_ERR_FRAME:
@@ -228,10 +246,10 @@ static void lwip_emac_irq_cb(void *arg, uint32_t irq_event, struct bflb_emac_tra
             /* debug */
             if (trans_desc->err_status & (~EMAC_TX_STA_ERR_CS)) {
                 LOG_W("tx err sta:%d\r\n", trans_desc->err_status);
-                tx_error_cnt++;
+                emac_debug_info.tx.error_cnt++;
             } else {
-                tx_success_cnt++;
-                tx_total_size += trans_desc->data_len;
+                emac_debug_info.tx.success_cnt++;
+                emac_debug_info.tx.total_size += trans_desc->data_len;
             }
             break;
 
@@ -257,37 +275,31 @@ static void lwip_emac_irq_cb(void *arg, uint32_t irq_event, struct bflb_emac_tra
   */
 static err_t emac_low_level_output(struct netif *netif, struct pbuf *p)
 {
-    struct pbuf *q;
     struct bflb_emac_trans_desc_s trans_desc;
-    uint16_t byte_copy = 0;
+    uint16_t byte_copy;
 
-    if (p->tot_len > LWIP_EMAC_TX_BUFF_SIZE) {
+    if (p->tot_len > CONFIG_BSP_LWIP_EMAC_TX_BUFF_SIZE) {
         LOG_E("tx tot_len size over\r\n");
         return ERR_BUF;
     }
 
-    if (xQueueReceive(tx_pool_queue, &trans_desc, LWIP_EMAC_GET_TXBUF_TIMEOUT) == pdFALSE) {
+    if (xQueueReceive(tx_pool_queue, &trans_desc, CONFIG_BSP_LWIP_EMAC_GET_TXBUF_TIMEOUT) == pdFALSE) {
         LOG_W("no tx buff\r\n");
         return ERR_MEM;
     }
 
-    for (q = p; q != NULL; q = q->next) {
-        /* size check */
-        if (byte_copy + q->len > LWIP_EMAC_TX_BUFF_SIZE) {
-            xQueueSend(tx_pool_queue, &trans_desc, 0);
-            LOG_E("tx size over\r\n");
-            return ERR_BUF;
-        }
-        /* data copy */
-        memcpy((char *)trans_desc.buff_addr + byte_copy, q->payload, q->len);
-        byte_copy += q->len;
+    byte_copy = pbuf_copy_partial(p, trans_desc.buff_addr, p->tot_len, 0);
+    if (byte_copy != p->tot_len) {
+        LOG_E("tx copy failed\r\n");
+        xQueueSend(tx_pool_queue, &trans_desc, 0);
+        return ERR_BUF;
     }
 
     trans_desc.data_len = byte_copy;
     trans_desc.attr_flag = 0;
     trans_desc.err_status = 0;
 
-    tx_push_cnt += 1;
+    emac_debug_info.tx.push_cnt += 1;
     bflb_emac_queue_tx_push(emacx, &trans_desc);
 
     return ERR_OK;
@@ -305,32 +317,26 @@ static err_t emac_low_level_output(struct netif *netif, struct pbuf *p)
 static void ethernetif_input(void *argument)
 {
     struct netif *netif = (struct netif *)argument;
-    struct pbuf *p, *q;
+    struct pbuf *p;
     struct bflb_emac_trans_desc_s trans_desc;
-    uint32_t byte_copy;
-    uint32_t remaining_len;
 
     while (1) {
         xQueueReceive(rx_process_queue, &trans_desc, portMAX_DELAY);
 
+#if PBUF_POOL_SIZE > 0
         p = pbuf_alloc(PBUF_RAW, trans_desc.data_len, PBUF_POOL);
+#else
+        p = pbuf_alloc(PBUF_RAW, trans_desc.data_len, PBUF_RAM);
+#endif
 
         if (p != NULL) {
-            byte_copy = 0;
-            remaining_len = trans_desc.data_len;
-            for (q = p; q != NULL && remaining_len > 0; q = q->next) {
-                uint32_t copy_len = (q->len < remaining_len) ? q->len : remaining_len;
-                memcpy(q->payload, (char *)trans_desc.buff_addr + byte_copy, copy_len);
-                byte_copy += copy_len;
-                remaining_len -= copy_len;
-            }
-
-            if (netif->input(p, netif) != ERR_OK) {
+            if (pbuf_take(p, trans_desc.buff_addr, trans_desc.data_len) != ERR_OK ||
+                netif->input(p, netif) != ERR_OK) {
                 pbuf_free(p);
             }
         }
 
-        rx_push_cnt += 1;
+        emac_debug_info.rx.push_cnt += 1;
         bflb_emac_queue_rx_push(emacx, &trans_desc);
     }
 }
@@ -357,6 +363,8 @@ static void ethernetif_input(void *argument)
   */
 err_t eth_emac_if_init(struct netif *netif)
 {
+    int ret;
+
     LWIP_ASSERT("netif != NULL", (netif != NULL));
 
 #if LWIP_NETIF_HOSTNAME
@@ -366,21 +374,77 @@ err_t eth_emac_if_init(struct netif *netif)
 
     netif->name[0] = IFNAME0;
     netif->name[1] = IFNAME1;
+
     /* We directly use etharp_output() here to save a function call.
      * You can instead declare your own function an call etharp_output()
      * from it if you have to do some checks before sending (e.g. if link
      * is available...) */
     netif->output = etharp_output;
     netif->linkoutput = emac_low_level_output;
+    /* device capabilities */
+    netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP;
+
+#if LWIP_IPV6
+    netif->output_ip6 = ethip6_output;
+    netif->flags |= (NETIF_FLAG_ETHERNET | NETIF_FLAG_IGMP | NETIF_FLAG_MLD6);
+#endif
 
     /* initialize the hardware */
-    return emac_low_level_init(netif);
+    ret = emac_low_level_init(netif);
+    if (ret < 0) {
+        return ret;
+    }
+
+    /* set netif up */
+    netif_set_up(netif);
+    return ERR_OK;
 }
 
 /**
-  * @brief
-  * @retval None
-  */
+ * @brief Configure the EMAC speed and duplex mode for the negotiated PHY mode.
+ *
+ * @param[in] speed Negotiated PHY speed and duplex mode.
+ */
+static void emac_link_mode_config(int speed)
+{
+    /* 10M/100M speed mode */
+    if (speed == EPHY_SPEED_MODE_10M_HALF_DUPLEX || speed == EPHY_SPEED_MODE_10M_FULL_DUPLEX) {
+#if (defined(EMAC_SPEED_10M_SUPPORT) && EMAC_SPEED_10M_SUPPORT)
+        bflb_emac_feature_control(emacx, EMAC_CMD_SET_SPEED_10M, 0);
+#else
+        LOG_E("10M speed mode not support, please check EMAC_SPEED_10M_SUPPORT config !!!\r\n");
+#endif
+    } else {
+        bflb_emac_feature_control(emacx, EMAC_CMD_SET_SPEED_100M, 0);
+    }
+
+    /* full/half duplex mode */
+    if (speed == EPHY_SPEED_MODE_10M_FULL_DUPLEX || speed == EPHY_SPEED_MODE_100M_FULL_DUPLEX) {
+        bflb_emac_feature_control(emacx, EMAC_CMD_SET_FULL_DUPLEX, true);
+    } else {
+        bflb_emac_feature_control(emacx, EMAC_CMD_SET_FULL_DUPLEX, false);
+    }
+
+    if (speed == EPHY_SPEED_MODE_10M_HALF_DUPLEX) {
+        LOG_I("eth_phy speed: 10M_HALF_DUPLEX\r\n");
+    } else if (speed == EPHY_SPEED_MODE_10M_FULL_DUPLEX) {
+        LOG_I("eth_phy speed: 10M_FULL_DUPLEX\r\n");
+    } else if (speed == EPHY_SPEED_MODE_100M_HALF_DUPLEX) {
+        LOG_I("eth_phy speed: 100M_HALF_DUPLEX\r\n");
+    } else if (speed == EPHY_SPEED_MODE_100M_FULL_DUPLEX) {
+        LOG_I("eth_phy speed: 100M_FULL_DUPLEX\r\n");
+    }
+}
+
+/**
+ * @brief Synchronize the lwIP link state with the Ethernet PHY.
+ *
+ * The EMAC controller remains enabled across link changes because stopping it
+ * resets the hardware BD traversal position. TX/RX queues and descriptors are
+ * initialized once in emac_low_level_init() and are not rebuilt here.
+ *
+ * @param[in] netif lwIP network interface associated with the EMAC device.
+ */
 void eth_link_state_update(struct netif *netif)
 {
     static int speed_mode = 0;
@@ -389,180 +453,34 @@ void eth_link_state_update(struct netif *netif)
     int sta = eth_phy_ctrl(&phy_ctrl, EPHY_CMD_GET_LINK_STA, 0);
     int speed = eth_phy_ctrl(&phy_ctrl, EPHY_CMD_GET_SPEED_MODE, 0);
 
-    /* link up check */
-    if (sta == EPHY_LINK_STA_UP && link_sta != EPHY_LINK_STA_UP) {
+    if (sta != EPHY_LINK_STA_UP) {
+        if (link_sta == EPHY_LINK_STA_UP) {
+            LOG_W("Lwip Eth Emac LinkDown !!!\r\n");
+            netifapi_netif_set_link_down(netif);
+        }
+
+        link_sta = 0;
+        speed_mode = 0;
+        return;
+    }
+
+    if (link_sta != EPHY_LINK_STA_UP) {
         LOG_W("Lwip Eth Emac LinkUp !!!\r\n");
-        /* tx queue reinit */
-        xQueueReset(tx_pool_queue);
-        for (int i = 0; i < LWIP_EMAC_TX_BUFF_CNT; i++) {
-            struct bflb_emac_trans_desc_s tx_desc = {
-                .buff_addr = emac_tx_buff[i],
-            };
-            xQueueSend(tx_pool_queue, &tx_desc, portMAX_DELAY);
-        }
-        /* rx queue reinit */
-        xQueueReset(rx_process_queue);
-        for (int i = 0; i < LWIP_EMAC_RX_BUFF_CNT; i++) {
-            struct bflb_emac_trans_desc_s rx_desc = {
-                .buff_addr = emac_rx_buff[i],
-            };
-            bflb_emac_queue_rx_push(emacx, &rx_desc);
-            rx_push_cnt += 1;
-        }
-
-#if (defined(EMAC_SPEED_10M_SUPPORT) && EMAC_SPEED_10M_SUPPORT)
-        /* 10M/100M speed mode */
-        if (speed == EPHY_SPEED_MODE_10M_HALF_DUPLEX || speed == EPHY_SPEED_MODE_10M_FULL_DUPLEX) {
-            bflb_emac_feature_control(emacx, EMAC_CMD_SET_SPEED_10M, true);
-        } else {
-            bflb_emac_feature_control(emacx, EMAC_CMD_SET_SPEED_100M, true);
-        }
-#endif
-        /* enable full duplex mode */
-        if (speed == EPHY_SPEED_MODE_10M_FULL_DUPLEX || speed == EPHY_SPEED_MODE_100M_FULL_DUPLEX) {
-            bflb_emac_feature_control(emacx, EMAC_CMD_SET_FULL_DUPLEX, true);
-        } else {
-            bflb_emac_feature_control(emacx, EMAC_CMD_SET_FULL_DUPLEX, false);
-        }
-        /* enable tx and rx */
-        bflb_emac_feature_control(emacx, EMAC_CMD_SET_TX_EN, true);
-        bflb_emac_feature_control(emacx, EMAC_CMD_SET_RX_EN, true);
-
-        netif_set_link_up(netif);
-
-        if (speed == EPHY_SPEED_MODE_10M_HALF_DUPLEX) {
-            LOG_I("eth_phy speed: 10M_HALF_DUPLEX\r\n");
-        } else if (speed == EPHY_SPEED_MODE_10M_FULL_DUPLEX) {
-            LOG_I("eth_phy speed: 10M_FULL_DUPLEX\r\n");
-        } else if (speed == EPHY_SPEED_MODE_100M_HALF_DUPLEX) {
-            LOG_I("eth_phy speed: 100M_HALF_DUPLEX\r\n");
-        } else if (speed == EPHY_SPEED_MODE_100M_FULL_DUPLEX) {
-            LOG_I("eth_phy speed: 100M_FULL_DUPLEX\r\n");
-        }
+        emac_link_mode_config(speed);
         speed_mode = speed;
         link_sta = sta;
-
+        netifapi_netif_set_link_up(netif);
         return;
     }
 
-    /* link down check */
-    if ((sta != EPHY_LINK_STA_UP && link_sta == EPHY_LINK_STA_UP) || (sta == EPHY_LINK_STA_UP && speed_mode != speed)) {
-        /* */
-        if (sta == EPHY_LINK_STA_UP && speed_mode != speed) {
-            LOG_W("Lwip Eth Emac Speed Mode Has Changed !!!\r\n");
-        }
-        LOG_W("Lwip Eth Emac LinkDown !!!\r\n");
-
-        netif_set_link_down(netif);
-
-        /* disable tx and rx, and clean tx/rx bd */
-        bflb_emac_feature_control(emacx, EMAC_CMD_SET_TX_EN, false);
-        bflb_emac_feature_control(emacx, EMAC_CMD_SET_RX_EN, false);
-        bflb_emac_bd_ctrl_clean(emacx);
-        bflb_mtimer_delay_us(200);
-
-        link_sta = speed;
-        speed_mode = 0;
-
-        return;
+    if (speed_mode != speed) {
+        LOG_W("Lwip Eth Emac Speed Mode Has Changed !!!\r\n");
+        netifapi_netif_set_link_down(netif);
+        emac_link_mode_config(speed);
+        speed_mode = speed;
+        netifapi_netif_set_link_up(netif);
     }
 }
-
-#if LWIP_DHCP
-
-#define DHCP_OFF              (uint8_t)0
-#define DHCP_START            (uint8_t)1
-#define DHCP_WAIT_ADDRESS     (uint8_t)2
-#define DHCP_ADDRESS_ASSIGNED (uint8_t)3
-#define DHCP_TIMEOUT          (uint8_t)4
-#define DHCP_LINK_DOWN        (uint8_t)5
-
-#define DHCP_MAX_DHCP_TRIES   (3)
-#define DHCP_RETRY_DELAY_MS   (10000)
-
-void dhcp_sta_update(struct netif *netif)
-{
-    static int dhcp_sta = DHCP_LINK_DOWN;
-    static int link_sta = 0;
-    static uint32_t time_ms;
-
-    struct dhcp *dhcp;
-    ip4_addr_t ip_zero;
-
-    uint8_t iptxt[20];
-
-    switch (dhcp_sta) {
-        case DHCP_OFF:
-            /* dhcp disable */
-            break;
-
-        case DHCP_START:
-            /* dhcp start */
-            ip4_addr_set_zero(&ip_zero);
-            netifapi_netif_set_addr(netif, &ip_zero, &ip_zero, &ip_zero);
-            netifapi_dhcp_start(netif);
-            dhcp_sta = DHCP_WAIT_ADDRESS;
-            LOG_I("State: Looking for DHCP server ...\r\n");
-            break;
-
-        case DHCP_WAIT_ADDRESS:
-            /* check link sta */
-            link_sta = netif_is_link_up(netif);
-            if (!link_sta) {
-                netifapi_dhcp_stop(netif);
-                dhcp_sta = DHCP_LINK_DOWN;
-                LOG_W("DHCP aborted due to link down!\r\n");
-                break;
-            }
-            /* wait and retry */
-            if (dhcp_supplied_address(netif)) {
-                dhcp_sta = DHCP_ADDRESS_ASSIGNED;
-                snprintf((char *)iptxt, sizeof(iptxt), "%s", ip4addr_ntoa(netif_ip4_addr(netif)));
-                LOG_I("IP address assigned by a DHCP server: %s\r\n", iptxt);
-            } else {
-                dhcp = (struct dhcp *)netif_get_client_data(netif, LWIP_NETIF_CLIENT_DATA_INDEX_DHCP);
-                if (dhcp->tries > DHCP_MAX_DHCP_TRIES) {
-                    netifapi_dhcp_stop(netif);
-                    time_ms = bflb_mtimer_get_time_ms();
-                    dhcp_sta = DHCP_TIMEOUT;
-                    LOG_E("DHCP Timeout !! \r\n");
-                }
-            }
-            break;
-
-        case DHCP_TIMEOUT:
-            /* dhcp timeout */
-            link_sta = netif_is_link_up(netif);
-            if (!link_sta) {
-                dhcp_sta = DHCP_LINK_DOWN;
-            }
-            /* retry */
-            if (bflb_mtimer_get_time_ms() - time_ms > DHCP_RETRY_DELAY_MS) {
-                dhcp_sta = DHCP_START;
-            }
-            break;
-
-        case DHCP_ADDRESS_ASSIGNED:
-            link_sta = netif_is_link_up(netif);
-            if (!link_sta) {
-                netifapi_dhcp_stop(netif);
-                dhcp_sta = DHCP_LINK_DOWN;
-            }
-            break;
-
-        case DHCP_LINK_DOWN:
-            if (netif_is_link_up(netif) && !link_sta) {
-                dhcp_sta = DHCP_START;
-            }
-            break;
-
-        default:
-            LOG_E("dhcp sta err:%d\r\n", dhcp_sta);
-            break;
-    }
-}
-
-#endif
 
 #ifdef CONFIG_SHELL
 #include <shell.h>
@@ -572,11 +490,15 @@ int lwip_emac_info_cmd(int argc, char **argv)
     uint32_t tx_db_avail = bflb_emac_feature_control(emacx, EMAC_CMD_GET_TX_DB_AVAILABLE, 0);
     uint32_t rx_db_avail = bflb_emac_feature_control(emacx, EMAC_CMD_GET_RX_DB_AVAILABLE, 0);
 
-    LOG_I("TX: success cnt:%d, error cnt:%d, total size:%lldByte\r\n", tx_success_cnt, tx_error_cnt, tx_total_size);
-    LOG_I("    push_cnt:%d, tx_db available:%d, tx_bd_ptr:%d\r\n", tx_push_cnt, tx_db_avail, bflb_emac_feature_control(emacx, EMAC_CMD_GET_TX_BD_PTR, 0));
+    LOG_I("TX: success cnt:%d, error cnt:%d, total size:%lldByte\r\n",
+          emac_debug_info.tx.success_cnt, emac_debug_info.tx.error_cnt, emac_debug_info.tx.total_size);
+    LOG_I("    push_cnt:%d, tx_db available:%d, tx_bd_ptr:%d\r\n",
+          emac_debug_info.tx.push_cnt, tx_db_avail, bflb_emac_feature_control(emacx, EMAC_CMD_GET_TX_BD_PTR, 0));
 
-    LOG_I("RX: success cnt:%d, error cnt:%d, total size:%lldByte\r\n", rx_success_cnt, rx_error_cnt, rx_total_size);
-    LOG_I("    push_cnt:%d, rx_db available:%d, rx_bd_ptr:%d, busy cnt:%d\r\n", rx_push_cnt, rx_db_avail, bflb_emac_feature_control(emacx, EMAC_CMD_GET_RX_BD_PTR, 0), rx_busy_cnt);
+    LOG_I("RX: success cnt:%d, error cnt:%d, total size:%lldByte\r\n",
+          emac_debug_info.rx.success_cnt, emac_debug_info.rx.error_cnt, emac_debug_info.rx.total_size);
+    LOG_I("    push_cnt:%d, rx_db available:%d, rx_bd_ptr:%d, busy cnt:%d\r\n",
+          emac_debug_info.rx.push_cnt, rx_db_avail, bflb_emac_feature_control(emacx, EMAC_CMD_GET_RX_BD_PTR, 0), emac_debug_info.rx.busy_cnt);
     LOG_RI("\r\n");
 
     return 0;

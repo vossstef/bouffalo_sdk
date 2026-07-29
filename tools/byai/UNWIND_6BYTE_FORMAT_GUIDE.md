@@ -75,13 +75,21 @@ func_size = 函数的字节大小
 
 ### 1. 叶子函数优化
 - **frame_size_words = 0** 的函数（叶子函数）**不记录在表中**
-- Backtrace 行为：如果 PC 在表中找不到，视为叶子函数，`PC = [SP]`, `SP` 不变
+- Backtrace 行为：初始 PC 未命中时，可使用保存上下文中的 `x1/ra` 重试一次，
+  `SP` 保持不变
 
 ### 2. 函数大小信息
 - 每个 entry 包含 `func_size` 字段（2 字节）
 - 用于更精确的地址范围检查
 
-### 3. Non-standard RA 查找
+### 3. 跨 64KB 分段函数
+- 函数仍在起始地址所属 segment 中保留原始 entry
+- 如果函数跨越 64KB 边界，则在下一 segment 的 offset 0 处增加 continuation entry
+- continuation entry 继承原函数的 frame size 和 RA offset
+- continuation entry 的 `func_size` 是函数跨入新 segment 后的剩余长度
+- 运行时无需跨 segment 查找，仍然只查询 `PC >> 16` 对应的 segment
+
+### 4. Non-standard RA 查找
 ```c
 // 1. 解析 non-standard RA 表为数组
 // 2. 计算当前条目的全局索引
@@ -208,9 +216,15 @@ bool find_unwind_entry(uint32_t pc, unwind_entry_t *entry) {
             left = mid + 1;
     }
 
-    return false;  // 叶子函数
+    return false;  // 叶子函数或没有覆盖该 PC 的表项
 }
 ```
+
+叶子函数不会建立栈帧，也不会把 `ra` 固定保存到 `[sp]`。对于从 TCB
+读取的上下文，运行时应使用上下文中保存的 `x1/ra`：若初始 PC 查表失败，
+保持 SP 不变，将 PC 设置为该 RA 后重试一次。这个 RA 只能用于初始帧，不能在
+后续查表失败时重复使用。返回地址查表时回退 2 字节，以兼容 16-bit RISC-V
+压缩指令。
 
 ## 使用方法
 

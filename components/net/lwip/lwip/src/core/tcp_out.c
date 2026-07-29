@@ -419,10 +419,10 @@ tcp_write(struct tcp_pcb *pcb, const void *arg, u16_t len, u8_t apiflags)
 
   LWIP_ASSERT_CORE_LOCKED();
 
-#if LWIP_NETIF_TX_SINGLE_PBUF
+#if LWIP_NETIF_TX_SINGLE_PBUF || LWIP_TCPIP_FORCE_TX_COPY
   /* Always copy to try to create single pbufs for TX */
   apiflags |= TCP_WRITE_FLAG_COPY;
-#endif /* LWIP_NETIF_TX_SINGLE_PBUF */
+#endif /* LWIP_NETIF_TX_SINGLE_PBUF || LWIP_TCPIP_FORCE_TX_COPY */
 
   LWIP_DEBUGF(TCP_OUTPUT_DEBUG, ("tcp_write(pcb=%p, data=%p, len=%"U16_F", apiflags=%"U16_F")\n",
                                  (void *)pcb, arg, len, (u16_t)apiflags));
