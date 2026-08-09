@@ -29,7 +29,7 @@ It does not do the following:
 
 - implement the Wi-Fi protocol stack itself
 - require `ATModule` as a hard dependency
-- run multiple host interfaces at the same time in one build
+- bridge multiple host interfaces at the same time
 
 The important architectural boundary is:
 
@@ -40,17 +40,19 @@ The important architectural boundary is:
 
 ## 2. Current Support Matrix
 
-Only one `CONFIG_NETHUB_PROFILE_*` interface may be selected in one build.
+Use one single-host `CONFIG_NETHUB_PROFILE_*` interface, or use the
+BL616/BL618DG dual profile to compile SDIO and USB together and lock one active
+host at boot.
 
 | Interface | Device-side data path | Device-side control facade | USER virtual channel | Current status |
 | --- | --- | --- | --- | --- |
-| `SDIO` | implemented | implemented through AT virtual channel | implemented end-to-end in-tree | current default interface |
+| `SDIO` | implemented | implemented through AT virtual channel | implemented end-to-end in-tree | primary in-tree Host bring-up path |
 | `USB` | implemented through `USB ECM` | implemented through AT virtual channel over `USB ACM` | device-side ACM vchan path exists, but in-tree host `nethub_vchan` is not yet aligned with USB | device-side backend available |
 | `SPI` | not implemented | not implemented | not implemented | interface stub only |
 
 Notes:
 
-- `SDIO` is still the default bring-up interface today.
+- `SDIO` is the default end-to-end in-tree Host bring-up interface. Dual profile is optional on BL616/BL618DG and must be enabled explicitly.
 - `USB` is no longer just a skeleton on the device side.
 - `SPI` currently returns `NETHUB_ERR_NOT_SUPPORTED` in the transport
   backend and should be documented as unsupported.
@@ -131,10 +133,12 @@ Important options:
 
 - `CONFIG_NETHUB=y`
   - enable NetHub
+- `CONFIG_NETHUB_PROFILE_DUAL=y`
+  - BL616/BL618DG boot-only dual profile; compiles SDIO and USB, waits until the first effective host candidate is ready, locks that active host, then follows the selected backend's single-profile reconnect behavior
 - `CONFIG_NETHUB_PROFILE_SDIO=y`
 - `CONFIG_NETHUB_PROFILE_USB=y`
 - `CONFIG_NETHUB_PROFILE_SPI=y`
-  - config symbol names use `PROFILE`, but choose exactly one host interface per build
+  - config symbol names use `PROFILE`; choose a single host profile, or use the BL616/BL618DG dual profile above
 - `CONFIG_WL80211=y`
   - use the `wl80211` Wi-Fi backend
 - `CONFIG_WL80211` unset

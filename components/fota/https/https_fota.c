@@ -194,7 +194,7 @@ static void fota_service_start(void *arg)
     }
 
     if (fota->auto_finish && fota->status == HTTPS_FOTA_TRANSFER_FINISH) {
-        https_fota_finish(fota, 0);
+        https_fota_finish(fota, fota->config.reboot);
         vTaskDelete(NULL);
         return;
     }

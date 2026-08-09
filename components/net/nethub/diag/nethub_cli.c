@@ -1,6 +1,9 @@
 #ifdef CONFIG_NETHUB_DEBUG
 
 #include "shell.h"
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+#include "nh_host_select.h"
+#endif
 #include "nethub.h"
 
 #include <stdio.h>
@@ -26,6 +29,8 @@ static const char *nethub_cli_channel_name(nethub_channel_t channel)
             return "usb";
         case NETHUB_CHANNEL_SPI:
             return "spi";
+        case NETHUB_CHANNEL_MAX:
+            return "none";
         default:
             return "unknown";
     }
@@ -44,6 +49,22 @@ static void nethub_print_stats(void)
     printf("upld total=%u producer=%u free=%u\n", status.statistics.upld_total_packets,
            status.statistics.upld_producer_count, status.statistics.upld_free_count);
 }
+
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+static void nethub_print_host_select(void)
+{
+    nethub_host_select_status_t select_status;
+
+    nethub_host_select_get_status(&select_status);
+    if (!select_status.dual_profile) {
+        return;
+    }
+
+    printf("host select  : %s selected=%s\n",
+           nethub_host_select_state_name(select_status.state),
+           nethub_cli_channel_name(select_status.selected_host));
+}
+#endif
 
 static int cmd_nethub(int argc, char **argv)
 {
@@ -70,6 +91,10 @@ static int cmd_nethub(int argc, char **argv)
                 return -1;
             }
 
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+            printf("dual profile host is selected at boot; reboot to change host\n");
+            return -1;
+#endif
             ret = nethub_set_active_host_link(host_link);
             if (ret != NETHUB_OK) {
                 printf("set host link failed: %d\n", ret);
@@ -91,6 +116,9 @@ static int cmd_nethub(int argc, char **argv)
     printf("wifi filter  : %s\n", status.custom_wifi_rx_filter_active ? "custom" : "builtin");
     printf("host link    : %s\n", nethub_cli_channel_name(status.host_channel));
     printf("wifi channel : %s\n", nethub_cli_channel_name(status.active_wifi_channel));
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+    nethub_print_host_select();
+#endif
     nethub_print_stats();
     return 0;
 }

@@ -47,6 +47,46 @@
 
 static ATTR_NOCACHE_NOINIT_RAM_SECTION struct bflb_sha1_link_ctx_s link_ctx_temp;
 
+#if defined(BL602)
+#define BL602_DTCM_END 0x02020000UL
+
+/* BL602 SHA link mode cannot reliably update its descriptor in DTCM. */
+static struct bflb_sha_link_s working_link_cfg
+    __attribute__((section(".wifi_ram"), aligned(4)));
+
+static int sha1_link_cfg_is_in_tcm(const struct bflb_sha_link_s *link_cfg)
+{
+    uintptr_t addr = (uintptr_t)link_cfg & 0x0FFFFFFFUL;
+
+    return addr < BL602_DTCM_END;
+}
+
+static void sha1_link_cfg_load(struct bflb_sha1_link_ctx_s *ctx)
+{
+    if (sha1_link_cfg_is_in_tcm(&ctx->link_cfg)) {
+        memcpy(&working_link_cfg, &ctx->link_cfg, sizeof(working_link_cfg));
+        ctx->link_addr = (uint32_t)(uintptr_t)&working_link_cfg;
+    }
+}
+
+static void sha1_link_cfg_store(struct bflb_sha1_link_ctx_s *ctx)
+{
+    if (ctx->link_addr == (uint32_t)(uintptr_t)&working_link_cfg) {
+        memcpy(&ctx->link_cfg, &working_link_cfg, sizeof(working_link_cfg));
+    }
+}
+#else
+static void sha1_link_cfg_load(struct bflb_sha1_link_ctx_s *ctx)
+{
+    (void)ctx;
+}
+
+static void sha1_link_cfg_store(struct bflb_sha1_link_ctx_s *ctx)
+{
+    (void)ctx;
+}
+#endif
+
 void mbedtls_sha1_init( mbedtls_sha1_context *ctx )
 {
     SHA1_VALIDATE( ctx != NULL );
@@ -58,8 +98,10 @@ void mbedtls_sha1_init( mbedtls_sha1_context *ctx )
     mbedtls_platform_zeroize( ctx, sizeof( mbedtls_sha1_context ) );
     ctx->sha = sha;
 
+    bflb_sec_sha_mutex_take();
     bflb_group0_request_sha_access(sha);
     bflb_sha_link_init(sha);
+    bflb_sec_sha_mutex_give();
 }
 
 void mbedtls_sha1_free( mbedtls_sha1_context *ctx )
@@ -92,8 +134,10 @@ int mbedtls_sha1_starts_ret( mbedtls_sha1_context *ctx )
     }
 
     bflb_sec_sha_mutex_take();
+    bflb_sha_link_init(ctx->sha);
     memcpy(&link_ctx_temp, &ctx->link_ctx, sizeof(struct bflb_sha1_link_ctx_s));
     bflb_sha1_link_start(ctx->sha, &link_ctx_temp);
+    sha1_link_cfg_load(&link_ctx_temp);
     memcpy(&ctx->link_ctx, &link_ctx_temp, sizeof(struct bflb_sha1_link_ctx_s));
     bflb_sec_sha_mutex_give();
     return( 0 );
@@ -120,7 +164,7 @@ int mbedtls_sha1_update_ret( mbedtls_sha1_context *ctx,
                              const unsigned char *input,
                              size_t ilen )
 {
-    //int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret;
     SHA1_VALIDATE_RET( ctx != NULL );
     SHA1_VALIDATE_RET( ilen == 0 || input != NULL );
 
@@ -129,10 +173,17 @@ int mbedtls_sha1_update_ret( mbedtls_sha1_context *ctx,
 
     bflb_l1c_dcache_clean_range((void *)input, ilen);
     bflb_sec_sha_mutex_take();
+    bflb_sha_link_init(ctx->sha);
     memcpy(&link_ctx_temp, &ctx->link_ctx, sizeof(struct bflb_sha1_link_ctx_s));
-    bflb_sha1_link_update(ctx->sha, &link_ctx_temp, input, ilen);
+    sha1_link_cfg_load(&link_ctx_temp);
+    ret = bflb_sha1_link_update(ctx->sha, &link_ctx_temp, input, ilen);
+    sha1_link_cfg_store(&link_ctx_temp);
     memcpy(&ctx->link_ctx, &link_ctx_temp, sizeof(struct bflb_sha1_link_ctx_s));
     bflb_sec_sha_mutex_give();
+
+    if( ret != 0 )
+        return( MBEDTLS_ERR_PLATFORM_HW_ACCEL_FAILED );
+
     return( 0 );
 }
 
@@ -166,8 +217,11 @@ int mbedtls_sha1_finish_ret( mbedtls_sha1_context *ctx,
     SHA1_VALIDATE_RET( (unsigned char *)output != NULL );
 
     bflb_sec_sha_mutex_take();
+    bflb_sha_link_init(ctx->sha);
     memcpy(&link_ctx_temp, &ctx->link_ctx, sizeof(struct bflb_sha1_link_ctx_s));
+    sha1_link_cfg_load(&link_ctx_temp);
     bflb_sha1_link_finish(ctx->sha, &link_ctx_temp, output);
+    sha1_link_cfg_store(&link_ctx_temp);
     bflb_sec_sha_mutex_give();
     return( 0 );
 }
@@ -194,14 +248,14 @@ void mbedtls_sha1_once_padded_init( void )
 
     sha = bflb_device_get_by_name(BFLB_NAME_SEC_SHA);
 
+    bflb_sec_sha_mutex_take();
     bflb_group0_request_sha_access(sha);
-
-    bflb_sha_link_deinit(sha);
-    bflb_sha_init(sha, SHA_MODE_SHA1);
+    bflb_sec_sha_mutex_give();
 }
 
 int mbedtls_sha1_once_padded(const unsigned char *input, unsigned char *output, unsigned char nblock)
 {
+    int ret;
     struct bflb_device_s *sha;
     const uint8_t *input_nc;
 
@@ -222,10 +276,12 @@ int mbedtls_sha1_once_padded(const unsigned char *input, unsigned char *output, 
     bflb_l1c_dcache_clean_range((void *)input, nblock * 64);
     input_nc = (const uint8_t *)bflb_get_no_cache_addr(input);
     bflb_sec_sha_mutex_take();
-    bflb_sha1_once_padded(sha, (uint8_t *)input_nc, output, nblock);
+    bflb_sha_link_deinit(sha);
+    bflb_sha_init(sha, SHA_MODE_SHA1);
+    ret = bflb_sha1_once_padded(sha, (uint8_t *)input_nc, output, nblock);
     bflb_sec_sha_mutex_give();
 
-    return( 0 );
+    return( ret );
 }
 
 #endif /* MBEDTLS_SHA1_C */

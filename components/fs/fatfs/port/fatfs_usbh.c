@@ -9,20 +9,28 @@ struct usbh_msc *active_msc_class;
 
 int USB_disk_status(void)
 {
+    if (active_msc_class == NULL || active_msc_class->hport == NULL ||
+        active_msc_class->hport->connected == false) {
+        return STA_NOINIT | STA_NODISK;
+    }
     return 0;
 }
 
 int USB_disk_initialize(void)
 {
-    if (active_msc_class == NULL) {
+    if (USB_disk_status() != 0) {
         printf("Fatfs USBH MSC class is NULL!\r\n");
-        return RES_NOTRDY;
+        return STA_NOINIT | STA_NODISK;
     }
-    return RES_OK;
+    return 0;
 }
 
 int USB_disk_read(BYTE *buff, LBA_t sector, UINT count)
 {
+    if (USB_disk_status() != 0 || buff == NULL || count == 0) {
+        return RES_NOTRDY;
+    }
+
     bflb_l1c_dcache_clean_range((uint8_t *)buff, 1);
     bflb_l1c_dcache_clean_range((uint8_t *)buff + active_msc_class->blocksize * count - 1, 1);
     bflb_l1c_dcache_invalidate_range((uint8_t *)buff, active_msc_class->blocksize * count);
@@ -38,6 +46,10 @@ int USB_disk_read(BYTE *buff, LBA_t sector, UINT count)
 
 int USB_disk_write(const BYTE *buff, LBA_t sector, UINT count)
 {
+    if (USB_disk_status() != 0 || buff == NULL || count == 0) {
+        return RES_NOTRDY;
+    }
+
     bflb_l1c_dcache_clean_range((uint8_t *)buff, active_msc_class->blocksize * count);
 
     if (usbh_msc_scsi_write10(active_msc_class, sector, buff, count) < 0) {
@@ -50,6 +62,10 @@ int USB_disk_write(const BYTE *buff, LBA_t sector, UINT count)
 int USB_disk_ioctl(BYTE cmd, void *buff)
 {
     int result = 0;
+
+    if (USB_disk_status() != 0) {
+        return RES_NOTRDY;
+    }
 
     switch (cmd) {
         case CTRL_SYNC:
@@ -97,4 +113,14 @@ void fatfs_usbh_driver_register(struct usbh_msc *msc_class)
 
     active_msc_class = msc_class;
     disk_driver_callback_init(DEV_USB, &USBH_DiskioDriver);
+}
+
+void fatfs_usbh_driver_unregister(struct usbh_msc *msc_class)
+{
+    FATFS_DiskioDriverTypeDef USBH_DiskioDriver = { NULL };
+
+    if (active_msc_class == msc_class) {
+        active_msc_class = NULL;
+        disk_driver_callback_init(DEV_USB, &USBH_DiskioDriver);
+    }
 }

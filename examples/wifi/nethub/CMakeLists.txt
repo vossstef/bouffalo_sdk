@@ -4,6 +4,8 @@ cmake_minimum_required(VERSION 3.15)
 
 find_package(bouffalo_sdk REQUIRED HINTS $ENV{BL_SDK_BASE})
 
+sdk_add_link_options(-L${CMAKE_CURRENT_SOURCE_DIR})
+
 sdk_add_compile_definitions(-DTICKLESS_DEBUG=4)
 sdk_add_compile_definitions(-DPM_PDS_LDO18IO_POWER_DOWN)
 sdk_add_compile_definitions(-DCONFIG_CLI_CMD_ENABLE)

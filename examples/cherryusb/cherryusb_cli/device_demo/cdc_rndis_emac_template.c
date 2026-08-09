@@ -1,3 +1,8 @@
+/**
+ * @file cdc_rndis_emac_template.c
+ * @brief CherryUSB RNDIS device bridged to the hardware EMAC.
+ */
+
 #include "bflb_mtimer.h"
 #include "bflb_emac.h"
 
@@ -22,7 +27,8 @@
 #define DBG_TAG "RNDIS"
 #include "log.h"
 
-/*!< endpoint address */
+/** @name RNDIS USB configuration
+ * @{ */
 #define CDC_RNDIS_IN_EP  0x81
 #define CDC_RNDIS_OUT_EP 0x02
 #define CDC_RNDIS_INT_EP 0x83
@@ -39,16 +45,20 @@
 #else
 #define CDC_MAX_MPS 64
 #endif
+/** @} */
 
+/** @brief USB device descriptor for the RNDIS device. */
 static const uint8_t device_descriptor[] = {
     USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0xEF, 0x02, 0x01, USBD_VID, USBD_PID, 0x0100, 0x01)
 };
 
+/** @brief USB configuration descriptor for the RNDIS device. */
 static const uint8_t config_descriptor[] = {
     USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x02, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
     CDC_RNDIS_DESCRIPTOR_INIT(0x00, CDC_RNDIS_INT_EP, CDC_RNDIS_OUT_EP, CDC_RNDIS_IN_EP, CDC_MAX_MPS, 0x02)
 };
 
+/** @brief USB device-qualifier descriptor. */
 static const uint8_t device_quality_descriptor[] = {
     ///////////////////////////////////////
     /// device qualifier descriptor
@@ -65,6 +75,7 @@ static const uint8_t device_quality_descriptor[] = {
     0x00,
 };
 
+/** @brief USB string descriptors. */
 static const char *string_descriptors[] = {
     (const char[]){ 0x09, 0x04 }, /* Langid */
     "CherryUSB",                  /* Manufacturer */
@@ -72,21 +83,38 @@ static const char *string_descriptors[] = {
     "2022123456",                 /* Serial Number */
 };
 
+/** @brief Return the device descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Device descriptor address.
+ */
 static const uint8_t *device_descriptor_callback(uint8_t speed)
 {
     return device_descriptor;
 }
 
+/** @brief Return the configuration descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Configuration descriptor address.
+ */
 static const uint8_t *config_descriptor_callback(uint8_t speed)
 {
     return config_descriptor;
 }
 
+/** @brief Return the device-qualifier descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Device-qualifier descriptor address.
+ */
 static const uint8_t *device_quality_descriptor_callback(uint8_t speed)
 {
     return device_quality_descriptor;
 }
 
+/** @brief Return a USB string descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @param[in] index String descriptor index.
+ * @return Descriptor string, or NULL when unsupported.
+ */
 static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
 {
     if (index > 3) {
@@ -95,6 +123,7 @@ static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
     return string_descriptors[index];
 }
 
+/** @brief Descriptor callback table for the RNDIS device. */
 const struct usb_descriptor cdc_rndis_descriptor = {
     .device_descriptor_callback = device_descriptor_callback,
     .config_descriptor_callback = config_descriptor_callback,
@@ -108,6 +137,10 @@ static void usbd_rndis_emac_event_wait(uint32_t timeout);
 static volatile bool usb_rndis_ready_flag = false;
 
 /* usb event handler */
+/** @brief Update RNDIS readiness and wake the bridge task for USB events.
+ * @param[in] busid USB device-controller index.
+ * @param[in] event CherryUSB device event identifier.
+ */
 static void usbd_event_handler(uint8_t busid, uint8_t event)
 {
     switch (event) {
@@ -151,6 +184,10 @@ static void usbd_event_handler(uint8_t busid, uint8_t event)
 static struct usbd_interface intf0;
 static struct usbd_interface intf1;
 
+/** @brief Register and initialize the RNDIS device.
+ * @param[in] busid USB device-controller index.
+ * @param[in] reg_base USB controller register base.
+ */
 void cdc_rndis_init(uint8_t busid, uintptr_t reg_base)
 {
     uint8_t mac[6] = { MAC_ADDR_NUM_0, MAC_ADDR_NUM_1, MAC_ADDR_NUM_2,
@@ -163,14 +200,21 @@ void cdc_rndis_init(uint8_t busid, uintptr_t reg_base)
 }
 
 /************************* RNDIS_IN <-> EMAC_RX Sub-state machine *******************************/
+/** @name EMAC receive to RNDIS IN state identifiers
+ * @{ */
 #define RNDIS_IN_STA_STOP         0
 #define RNDIS_IN_STA_START        1
 #define RNDIS_IN_STA_WAIT_EMAC_RX 2
 #define RNDIS_IN_STA_WAIT_USBD_IN 3
+/** @} */
 static volatile uint8_t usbd_rndis_in_status = RNDIS_IN_STA_STOP;
 
 static volatile bool usbd_rndis_in_busy_flag = false;
 
+/** @brief Complete a RNDIS IN transfer and wake the bridge task.
+ * @param[in] len Number of bytes transmitted.
+ * @note Runs in USB transfer-completion context.
+ */
 void usbd_rndis_data_send_done(uint32_t len)
 {
     // LOG_I("rndis IN send done, len:%d\r\n", len);
@@ -179,6 +223,10 @@ void usbd_rndis_data_send_done(uint32_t len)
     usbd_rndis_emac_event_trig();
 }
 
+/** @brief Prepend a RNDIS packet header and start a USB IN transfer.
+ * @param[in,out] trans_desc EMAC receive descriptor containing the Ethernet frame.
+ * @pre `EMAC_BUF_HEAD_SIZE` reserves space immediately before the frame buffer.
+ */
 void usbd_rndis_data_send_start(struct bflb_emac_trans_desc_s *trans_desc)
 {
     rndis_data_packet_t *hdr;
@@ -194,6 +242,10 @@ void usbd_rndis_data_send_start(struct bflb_emac_trans_desc_s *trans_desc)
     usbd_rndis_start_write((uint8_t *)hdr, hdr->MessageLength);
 }
 
+/** @brief Advance the EMAC receive to RNDIS IN sub-state machine.
+ * @retval 0 State processing completed.
+ * @note The EMAC receive descriptor is retained until USB IN completes.
+ */
 static int usbd_rndis_in_emac_rx_polling(void)
 {
     int ret = 0;
@@ -240,15 +292,22 @@ polling_continue:
 }
 
 /************************* RNDIS_OUT <-> EMAC_TX Sub-state machine *******************************/
+/** @name RNDIS OUT to EMAC transmit state identifiers
+ * @{ */
 #define RNDIS_OUT_STA_STOP          0
 #define RNDIS_OUT_STA_START         1
 #define RNDIS_OUT_STA_WAIT_EMAC_TX  2
 #define RNDIS_OUT_STA_WAIT_USBD_OUT 3
+/** @} */
 static volatile uint8_t usbd_rndis_out_status = RNDIS_OUT_STA_STOP;
 
 static volatile bool usbd_rndis_out_busy_flag = false;
 static volatile uint16_t usbd_rndis_out_done_len = 0;
 
+/** @brief Complete a RNDIS OUT transfer and wake the bridge task.
+ * @param[in] len Number of received Ethernet payload bytes.
+ * @note Runs in USB transfer-completion context.
+ */
 void usbd_rndis_data_recv_done(uint32_t len)
 {
     // LOG_I("rndis OUT recv done, len:%d\r\n", len);
@@ -258,6 +317,10 @@ void usbd_rndis_data_recv_done(uint32_t len)
     usbd_rndis_emac_event_trig();
 }
 
+/** @brief Start receiving a RNDIS packet into an EMAC transmit buffer.
+ * @param[in,out] trans_desc Acquired EMAC transmit descriptor.
+ * @pre `EMAC_BUF_HEAD_SIZE` reserves space immediately before the frame buffer.
+ */
 void usbd_rndis_data_recv_start(struct bflb_emac_trans_desc_s *trans_desc)
 {
     rndis_data_packet_t *hdr;
@@ -267,6 +330,9 @@ void usbd_rndis_data_recv_start(struct bflb_emac_trans_desc_s *trans_desc)
     usbd_rndis_start_read((uint8_t *)hdr, sizeof(rndis_data_packet_t) + EMAC_TX_BUFF_SIZE);
 }
 
+/** @brief Advance the RNDIS OUT to EMAC transmit sub-state machine.
+ * @retval 0 State processing completed.
+ */
 static int usbd_rndis_out_emac_tx_polling(void)
 {
     int ret = 0;
@@ -315,13 +381,19 @@ polling_continue:
 
 /************************* RNDIS-EMAC state machine *******************************/
 
+/** @name RNDIS-to-EMAC bridge state identifiers
+ * @{ */
 #define RNDIS_EMAC_STA_STOP             0
 #define RNDIS_EMAC_STA_START            1
 #define RNDIS_EMAC_STA_WAIT_USBD_CFG    2
 #define RNDIS_EMAC_STA_WAIT_EPHY_LINKUP 3
 #define RNDIS_EMAC_STA_DATA_POLLING     4
+/** @} */
 static volatile uint32_t usbd_rndis_emac_sta = RNDIS_EMAC_STA_STOP;
 
+/** @brief Advance USB readiness, PHY link, and RNDIS bridge state machines.
+ * @retval 0 State processing completed.
+ */
 static int usbd_rndis_emac_polling(void)
 {
     static uint32_t status_time_ms = 0;
@@ -395,7 +467,7 @@ static int usbd_rndis_emac_polling(void)
             /* info dump */
             if (time_ms - info_dump_time_ms > 5000) {
                 info_dump_time_ms = time_ms;
-                eth_eamc_info_dump();
+                eth_emac_info_dump();
             }
             /* emac link check */
             if (time_ms - status_time_ms > 100) {
@@ -421,6 +493,7 @@ static int usbd_rndis_emac_polling(void)
 static TaskHandle_t usbd_rndis_emac_handle = NULL;
 
 /* usbd_rndis_emac event trigger */
+/** @brief Notify the RNDIS bridge task from task or interrupt context. */
 static void usbd_rndis_emac_event_trig(void)
 {
     if (usbd_rndis_emac_handle) {
@@ -438,18 +511,29 @@ static void usbd_rndis_emac_event_trig(void)
 }
 
 /* usbd_rndis_emac event wait */
+/** @brief Wait for a RNDIS bridge event.
+ * @param[in] timeout Maximum wait in FreeRTOS ticks.
+ */
 static void usbd_rndis_emac_event_wait(uint32_t timeout)
 {
     ulTaskNotifyTake(pdTRUE, timeout);
 }
 
 /* usbd_emac_event_cb */
+/** @brief Wake the bridge task for an EMAC completion event.
+ * @param[in] event EMAC interrupt event identifier; unused.
+ * @note Invoked from EMAC interrupt context.
+ */
 static void usbd_emac_event_cb(uint32_t event)
 {
     usbd_rndis_emac_event_trig();
 }
 
 /* usbd_rndis_emac_task */
+/** @brief Run the RNDIS-to-EMAC bridge state machine.
+ * @param[in] param Unused FreeRTOS task parameter.
+ * @note This task runs indefinitely.
+ */
 static void usbd_rndis_emac_task(void *param)
 {
     usbd_rndis_emac_sta = RNDIS_EMAC_STA_START;
@@ -463,6 +547,7 @@ static void usbd_rndis_emac_task(void *param)
 }
 
 /* usbd_rndis_emac init */
+/** @brief Initialize USB RNDIS, EMAC, PHY pins, and the bridge task. */
 void usbd_rndis_emac_init(void)
 {
     /* usb init */
@@ -479,6 +564,7 @@ void usbd_rndis_emac_init(void)
     xTaskCreate(usbd_rndis_emac_task, (char *)"usbd_rndis_emac", 1024, NULL, 15, &usbd_rndis_emac_handle);
 }
 
+/** @brief Stop the bridge task and deinitialize EMAC and USB. */
 void usb_rndis_emac_deinit(void)
 {
     if (usbd_rndis_emac_handle) {

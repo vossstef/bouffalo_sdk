@@ -7,12 +7,14 @@ For the current chip and interface support state, see
 
 ## 1. Select Chip and Interface
 
-Choose one host interface per firmware build.
+Choose one fixed host interface, or use dual profile on BL616/BL618DG when the
+same firmware must select SDIO or USB at boot.
 
 | Interface | Required options |
 | --- | --- |
 | `SDIO` | `CONFIG_NETHUB_PROFILE_SDIO=y`, `CONFIG_NETHUB_PROFILE_USB=n` |
 | `USB` | `CONFIG_NETHUB_PROFILE_USB=y`, `CONFIG_NETHUB_PROFILE_SDIO=n` |
+| `SDIO + USB dual` | `CONFIG_NETHUB_PROFILE_DUAL=y`; supported on BL616 and BL618DG |
 
 Low power is supported for `BL616` NetHub builds. Keep
 `CONFIG_NETHUB_LOWPOWER_ENABLE=n` for `BL616CL` and `BL618DG`.
@@ -104,8 +106,10 @@ For custom boards, confirm USB `D+` and `D-` polarity from the board schematic.
 
 ### 7.1 Which Interface Should I Bring Up First?
 
-Use `SDIO` for the default bring-up path. Use `USB` when the host connection is
-USB. `SPI` is not supported in the current customer bring-up flow.
+Use `SDIO` as the default Host bring-up path. Use `USB` when the host connection
+is USB, or explicitly enable dual profile on BL616/BL618DG when one firmware
+must support both hardware variants. `SPI` is not supported in the current
+customer bring-up flow.
 
 For chip-specific status and low-power support, see
 [NetHub.md](NetHub.md), "Current Support Matrix".

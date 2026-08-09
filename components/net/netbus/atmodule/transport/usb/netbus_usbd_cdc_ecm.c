@@ -119,7 +119,6 @@ typedef struct _usbecm_desc {
 #define USBD_VID           0xFFFF
 #define USBD_PID           0xFFFF
 #define USBD_MAX_POWER     100
-#define USBD_LANGID_STRING 1033
 
 /*!< config descriptor size */
 #define USB_CONFIG_SIZE    (9 + CDC_ECM_DESCRIPTOR_LEN + CDC_ACM_DESCRIPTOR_LEN)
@@ -127,105 +126,87 @@ typedef struct _usbecm_desc {
 /* str idx = 4 is for mac address: aa:bb:cc:dd:ee:ff*/
 #define CDC_ECM_MAC_STRING_INDEX      4
 
-/*!< global descriptor */
-static uint8_t cdc_ecm_descriptor[] = {
+static const uint8_t device_descriptor[] = {
     USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0xEF, 0x02, 0x01, USBD_VID, USBD_PID, 0x0100, 0x01),
+};
+
+static const uint8_t config_descriptor[] = {
     USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x04, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
     CDC_ECM_DESCRIPTOR_INIT(0x00, CDC_ECM_INT_EP, CDC_ECM_OUT_EP, CDC_ECM_IN_EP, CDC_MAX_MPS, CDC_ECM_MAC_STRING_INDEX),
     CDC_ACM_DESCRIPTOR_INIT(0x02, CDC_ACM_INT_EP, CDC_ACM_OUT_EP, CDC_ACM_IN_EP, CDC_MAX_MPS, 0x02),
-    ///////////////////////////////////////
-    /// string0 descriptor
-    ///////////////////////////////////////
-    USB_LANGID_INIT(USBD_LANGID_STRING),
-    ///////////////////////////////////////
-    /// string1 descriptor
-    ///////////////////////////////////////
-    0x14,                       /* bLength */
-    USB_DESCRIPTOR_TYPE_STRING, /* bDescriptorType */
-    'C', 0x00,                  /* wcChar0 */
-    'h', 0x00,                  /* wcChar1 */
-    'e', 0x00,                  /* wcChar2 */
-    'r', 0x00,                  /* wcChar3 */
-    'r', 0x00,                  /* wcChar4 */
-    'y', 0x00,                  /* wcChar5 */
-    'U', 0x00,                  /* wcChar6 */
-    'S', 0x00,                  /* wcChar7 */
-    'B', 0x00,                  /* wcChar8 */
-    ///////////////////////////////////////
-    /// string2 descriptor
-    ///////////////////////////////////////
-    0x2E,                       /* bLength */
-    USB_DESCRIPTOR_TYPE_STRING, /* bDescriptorType */
-    'C', 0x00,                  /* wcChar0 */
-    'h', 0x00,                  /* wcChar1 */
-    'e', 0x00,                  /* wcChar2 */
-    'r', 0x00,                  /* wcChar3 */
-    'r', 0x00,                  /* wcChar4 */
-    'y', 0x00,                  /* wcChar5 */
-    'U', 0x00,                  /* wcChar6 */
-    'S', 0x00,                  /* wcChar7 */
-    'B', 0x00,                  /* wcChar8 */
-    ' ', 0x00,                  /* wcChar9 */
-    'C', 0x00,                  /* wcChar10 */
-    'D', 0x00,                  /* wcChar11 */
-    'C', 0x00,                  /* wcChar12 */
-    ' ', 0x00,                  /* wcChar13 */
-    'E', 0x00,                  /* wcChar14 */
-    'C', 0x00,                  /* wcChar15 */
-    'M', 0x00,                  /* wcChar16 */
-    ' ', 0x00,                  /* wcChar17 */
-    'D', 0x00,                  /* wcChar18 */
-    'E', 0x00,                  /* wcChar19 */
-    'M', 0x00,                  /* wcChar20 */
-    'O', 0x00,                  /* wcChar21 */
-    ///////////////////////////////////////
-    /// string3 descriptor
-    ///////////////////////////////////////
-    0x16,                       /* bLength */
-    USB_DESCRIPTOR_TYPE_STRING, /* bDescriptorType */
-    '2', 0x00,                  /* wcChar0 */
-    '0', 0x00,                  /* wcChar1 */
-    '2', 0x00,                  /* wcChar2 */
-    '2', 0x00,                  /* wcChar3 */
-    '1', 0x00,                  /* wcChar4 */
-    '2', 0x00,                  /* wcChar5 */
-    '3', 0x00,                  /* wcChar6 */
-    '4', 0x00,                  /* wcChar7 */
-    '5', 0x00,                  /* wcChar8 */
-    '6', 0x00,                  /* wcChar9 */
-    ///////////////////////////////////////
-    /// string4 descriptor
-    ///////////////////////////////////////
-    0x1A,                       /* bLength */
-    USB_DESCRIPTOR_TYPE_STRING, /* bDescriptorType */
-    MAC_ADDR_ASCII_00, 0x00,    /* wcChar0 */
-    MAC_ADDR_ASCII_01, 0x00,    /* wcChar1 */
-    MAC_ADDR_ASCII_10, 0x00,    /* wcChar2 */
-    MAC_ADDR_ASCII_11, 0x00,    /* wcChar3 */
-    MAC_ADDR_ASCII_20, 0x00,    /* wcChar4 */
-    MAC_ADDR_ASCII_21, 0x00,    /* wcChar5 */
-    MAC_ADDR_ASCII_30, 0x00,    /* wcChar6 */
-    MAC_ADDR_ASCII_31, 0x00,    /* wcChar7 */
-    MAC_ADDR_ASCII_40, 0x00,    /* wcChar8 */
-    MAC_ADDR_ASCII_41, 0x00,    /* wcChar9 */
-    MAC_ADDR_ASCII_50, 0x00,    /* wcChar10 */
-    MAC_ADDR_ASCII_51, 0x00,    /* wcChar11 */
+};
+
 #ifdef CONFIG_USB_HS
-    ///////////////////////////////////////
-    /// device qualifier descriptor
-    ///////////////////////////////////////
+static const uint8_t device_quality_descriptor[] = {
     0x0a,
     USB_DESCRIPTOR_TYPE_DEVICE_QUALIFIER,
     0x00,
     0x02,
-    0x02,
-    0x02,
-    0x01,
-    0x40,
-    0x01,
     0x00,
+    0x00,
+    0x00,
+    0x40,
+    0x00,
+    0x00,
+};
 #endif
-    0x00
+
+static char cdc_ecm_mac_string[] = {
+    MAC_ADDR_ASCII_00, MAC_ADDR_ASCII_01, MAC_ADDR_ASCII_10, MAC_ADDR_ASCII_11,
+    MAC_ADDR_ASCII_20, MAC_ADDR_ASCII_21, MAC_ADDR_ASCII_30, MAC_ADDR_ASCII_31,
+    MAC_ADDR_ASCII_40, MAC_ADDR_ASCII_41, MAC_ADDR_ASCII_50, MAC_ADDR_ASCII_51,
+    '\0'
+};
+
+static const uint8_t *device_descriptor_callback(uint8_t speed)
+{
+    (void)speed;
+    return device_descriptor;
+}
+
+static const uint8_t *config_descriptor_callback(uint8_t speed)
+{
+    (void)speed;
+    return config_descriptor;
+}
+
+static const uint8_t *device_quality_descriptor_callback(uint8_t speed)
+{
+    (void)speed;
+#ifdef CONFIG_USB_HS
+    return device_quality_descriptor;
+#else
+    return NULL;
+#endif
+}
+
+static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
+{
+    static const char langid[] = { 0x09, 0x04 };
+
+    (void)speed;
+
+    switch (index) {
+        case USB_STRING_LANGID_INDEX:
+            return langid;
+        case USB_STRING_MFC_INDEX:
+            return "CherryUSB";
+        case USB_STRING_PRODUCT_INDEX:
+            return "CherryUSB_CDC_ECM_ACM";
+        case USB_STRING_SERIAL_INDEX:
+            return "2022123456";
+        case CDC_ECM_MAC_STRING_INDEX:
+            return cdc_ecm_mac_string;
+        default:
+            return NULL;
+    }
+}
+
+static const struct usb_descriptor cdc_ecm_acm_descriptor = {
+    .device_descriptor_callback = device_descriptor_callback,
+    .config_descriptor_callback = config_descriptor_callback,
+    .device_quality_descriptor_callback = device_quality_descriptor_callback,
+    .string_descriptor_callback = string_descriptor_callback,
 };
 
 struct usbd_interface intf0;
@@ -255,9 +236,8 @@ static void cdc_ecm_macaddr_init(void)
 
     ecm_print("cdc_ecm_macaddr_init: %s\r\n", mac_addr);
 
-    char *mac = (char *)&cdc_ecm_descriptor[0x12 + 0x9 + CDC_ECM_DESCRIPTOR_LEN + CDC_ACM_DESCRIPTOR_LEN + 4 + 0x14 + 0x2E + 0x16 + 2];
     for (int i = 0; i < 12; i++) {
-        *(mac + (2*i)) = mac_addr[i];
+        cdc_ecm_mac_string[i] = mac_addr[i];
     }
 }
 
@@ -270,7 +250,7 @@ static void cdc_ecm_init(void)
 {
     cdc_ecm_macaddr_init();
 
-    usbd_desc_register(0, cdc_ecm_descriptor);
+    usbd_desc_register(0, &cdc_ecm_acm_descriptor);
     usbd_add_interface(0, usbd_cdc_ecm_init_intf(&intf0, CDC_ECM_INT_EP, CDC_ECM_OUT_EP, CDC_ECM_IN_EP));
     usbd_add_interface(0, usbd_cdc_ecm_init_intf(&intf1, CDC_ECM_INT_EP, CDC_ECM_OUT_EP, CDC_ECM_IN_EP));
 

@@ -22,7 +22,7 @@ Examples(examples/wifi/sta/wifi_tcp, bl616):
 step1: sign the helloworld_bl616.bin with privatekey_uecc.pem and convert into base64 format as input imgfile_sign
 step2: sign the publickey_uecc.pem with privatekey_uecc.pem and convert into base64 format as input publickey_sign
 step3: sign the hash(sha256) of publickey_uecc.pem with privatekey_uecc.pem and convert into base64 format as input publickey_hash_sign
-step4: "bflb_fw_post_proc --imgfile=helloworld_bl616.bin --publickey_sign=tdZGKpDE0/BysnPH166h86/d4vJOrqxW2ObGuGp+SxpXFJouWQ+8bTVaBbYpVjgEfXE5dlDWz/BC+21hMiMlgg== --publickey_hash_sign=E4U3TCWEezXSRnzVVzsOQtLML0z3VX4FNunVj0tuqf0=  --imgfile_sign=Ft+u9TD6IM7nOf4lqssT4Ed9+KnnRzdUdUgKN1DLIu9doQUAhqVa1yq/Vyz2cvcA2eu1I/cZzFdKCipRTppz2g=="
+step4: "bflb_fw_post_proc --chipname=bl616 --imgfile=helloworld_bl616.bin --publickey_sign=tdZGKpDE0/BysnPH166h86/d4vJOrqxW2ObGuGp+SxpXFJouWQ+8bTVaBbYpVjgEfXE5dlDWz/BC+21hMiMlgg== --publickey_hash_sign=E4U3TCWEezXSRnzVVzsOQtLML0z3VX4FNunVj0tuqf0=  --imgfile_sign=Ft+u9TD6IM7nOf4lqssT4Ed9+KnnRzdUdUgKN1DLIu9doQUAhqVa1yq/Vyz2cvcA2eu1I/cZzFdKCipRTppz2g=="
 
 
 ***No secure boot***
@@ -133,7 +133,7 @@ Other options:
   e.g.2: append close jtag port option for efusedata.bin
   bflb_fw_post_proc --chipname=bl616 --edatafile_in=./efusedata.bin --ejtag_close=true
 
-  --edata: append new efuse data:start,hex_str;
+  --edata: append/update efuse data, format: offset,hex_str;offset,hex_str;
   e.g.: bflb_fw_post_proc --chipname=bl616 --edatafile_in=./efusedata.bin --edata="0x14,000102030405060708;0x55,99887766"
 
   --datafile: user data file to encrypt like image,efuse will also be update;
@@ -143,7 +143,7 @@ Other options:
   e.g.: bflb_fw_post_proc --chipname=bl616 --datafile=./build/build_out/wifi_tcp_bl616.bin --edatafile_in=./efusedata.bin --keyoffset=0x100 --key=000102030405060708090A0B0C0D0E0F --iv=100102030405060708090A0B00000000
 
   --dump_data: dump efuse data,mode: true/false
-  e.g.: bflb_fw_post_proc --chipname=bl616 --edatafile_in=./efusedata.bin -dump_data=true
+  e.g.: bflb_fw_post_proc --chipname=bl616 --edatafile_in=./efusedata.bin --dump_data=true
 
   --hd_append: header append file
   e.g.: bflb_fw_post_proc --chipname=bl616 --imgfile=wifi_tcp_bl616.bin --hd_append=./hd_append.bin

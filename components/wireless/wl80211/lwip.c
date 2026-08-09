@@ -62,6 +62,15 @@ void wl80211_tcpip_input(uint8_t vif_type, void *rxhdr, void *buf, uint32_t frm_
 {
     struct pbuf_custom *pc;
     struct pbuf *p;
+    struct eth_hdr *ethhdr = buf;
+
+    if ((vif_type == WL80211_VIF_STA) &&
+        (frm_len >= SIZEOF_ETH_HDR) &&
+        !memcmp(ethhdr->src.addr, vif2netif[WL80211_VIF_STA].hwaddr,
+                ETH_HWADDR_LEN)) {
+        wl80211_mac_rx_free(rxhdr);
+        return;
+    }
 
     // TODO If the current packet is being forwarded to the host, use zerocopy.
     if (frm_len < CONFIG_WL80211_RX_ZEROCOPY_THRES) {

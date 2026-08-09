@@ -779,17 +779,13 @@ static void gpiov_format_backend_warning(const struct gpiov_backend_warning *war
 
 static void gpiov_irq_handler(uint8_t pin)
 {
-    bool level = false;
-
     if (pin >= GPIOV_MAX_PIN_COUNT) {
         return;
     }
 
     g_pin_state[pin].irq_count++;
     g_pin_state[pin].last_irq_ms = bflb_mtimer_get_time_ms();
-    if (gpiov_backend_read_pin(pin, &level) == 0) {
-        g_pin_state[pin].last_level = level;
-    }
+    (void)gpiov_backend_read_pin(pin, &g_pin_state[pin].last_level);
     bflb_gpio_int_clear(g_gpio, pin);
 }
 

@@ -1,5 +1,8 @@
 #include "nh_hub.h"
 #include "nh_filter.h"
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+#include "nh_host_select.h"
+#endif
 #include "nh_internal.h"
 #include "nh_profile.h"
 #include "nh_runtime.h"
@@ -18,7 +21,9 @@ nethub_context_t *nh_ctx_get(void)
 
 int nethub_init(const nethub_config_t *config)
 {
+#if !defined(CONFIG_NETHUB_PROFILE_DUAL)
     const nh_profile_t *profile;
+#endif
 
     NETHUB_UNUSED(config);
 
@@ -26,18 +31,27 @@ int nethub_init(const nethub_config_t *config)
         return NETHUB_ERR_ALREADY_EXISTS;
     }
 
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+    nethub_host_select_reset();
+    if (nh_profile_get_by_host(NETHUB_CHANNEL_SDIO) == NULL ||
+        nh_profile_get_by_host(NETHUB_CHANNEL_USB) == NULL) {
+        return NETHUB_ERR_INTERNAL;
+    }
+    g_nethub_ctx.profile = NULL;
+    g_nethub_ctx.host_link_type = NETHUB_CHANNEL_MAX;
+#else
     profile = nh_profile_get();
     if (profile == NULL) {
         return NETHUB_ERR_INTERNAL;
     }
-
     g_nethub_ctx.profile = profile;
     g_nethub_ctx.host_link_type = profile->host_link_type;
+#endif
     g_nethub_ctx.initialized = true;
     g_nethub_ctx.started = false;
 
     LOG_I("init profile=%s host_link=%s\r\n",
-          profile->name,
+          nethub_profile_name(),
           nethub_channel_to_string(g_nethub_ctx.host_link_type));
     return NETHUB_OK;
 }
@@ -60,6 +74,9 @@ int nethub_deinit(void)
     g_nethub_ctx.started = false;
     g_nethub_ctx.profile = NULL;
     g_nethub_ctx.host_link_type = NETHUB_CHANNEL_MAX;
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+    nethub_host_select_reset();
+#endif
 
     return NETHUB_OK;
 }
@@ -82,6 +99,13 @@ int nethub_start(void)
     }
 
     g_nethub_ctx.started = true;
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+    ret = nethub_host_select_start();
+    if (ret != NETHUB_OK) {
+        g_nethub_ctx.started = false;
+        return ret;
+    }
+#endif
     return NETHUB_OK;
 }
 
@@ -142,6 +166,12 @@ nethub_route_result_t nethub_process_input(nethub_frame_t *frame, nethub_channel
         case NETHUB_CHANNEL_WIFI_STA:
         case NETHUB_CHANNEL_WIFI_AP:
             dst_type = g_nethub_ctx.host_link_type;
+            if (dst_type >= NETHUB_CHANNEL_MAX) {
+                if (frame->free_cb != NULL) {
+                    frame->free_cb(frame->cb_arg);
+                }
+                return NETHUB_ROUTE_STOP;
+            }
             break;
         case NETHUB_CHANNEL_SDIO:
         case NETHUB_CHANNEL_USB:
@@ -190,7 +220,15 @@ bool nethub_is_started(void)
 
 const char *nethub_profile_name(void)
 {
-    return g_nethub_ctx.profile ? g_nethub_ctx.profile->name : nh_profile_get_name();
+    if (g_nethub_ctx.profile != NULL) {
+        return g_nethub_ctx.profile->name;
+    }
+
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+    return "dual_profile";
+#else
+    return nh_profile_get_name();
+#endif
 }
 
 nethub_channel_t nethub_host_channel(void)
@@ -209,6 +247,15 @@ bool nethub_is_host_link_active(nethub_channel_t host_link)
 }
 
 int nethub_set_active_host_link(nethub_channel_t host_link)
+{
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+    return NETHUB_ERR_INVALID_STATE;
+#else
+    return nh_core_set_active_host_link(host_link);
+#endif
+}
+
+int nh_core_set_active_host_link(nethub_channel_t host_link)
 {
     const nh_profile_t *profile;
 

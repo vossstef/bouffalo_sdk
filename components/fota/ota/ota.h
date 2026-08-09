@@ -14,7 +14,10 @@
 #include "log.h"
 #include <bflb_sec_sha.h>
 
-#define CONFIG_FAST_OTA   (1)
+#ifndef CONFIG_FAST_OTA
+#define CONFIG_FAST_OTA 1
+#endif
+
 #define OTA_SLICE_SIZE    (4096)
 
 typedef struct ota_header {

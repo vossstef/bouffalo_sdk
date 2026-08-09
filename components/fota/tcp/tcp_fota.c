@@ -176,7 +176,13 @@ static void tcp_fota_service(void *arg)
 
     /* Auto-finish if configured (for the convenience tcp_fota() call) */
     if (fota->auto_finish && fota->status == TCP_FOTA_TRANSFER_FINISH) {
-        tcp_fota_finish(fota, 1);
+        free(recv_buf);
+        if (fota->sock >= 0) {
+            closesocket(fota->sock);
+        }
+        tcp_fota_finish(fota, fota->config.reboot);
+        vTaskDelete(NULL);
+        return;
     }
 
 _exit:

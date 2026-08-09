@@ -16,6 +16,9 @@
 #include "mr_virtualchan.h"
 
 #include "nh_vchan_backend.h"
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+#include "nh_hub.h"
+#endif
 #include "nethub.h"
 #include "nethub_vchan.h"
 
@@ -68,10 +71,16 @@ static int virtualchan_dnld_data_output(mr_virtualchan_priv_t *priv, mr_virtualc
         nethub_vchan_recv_cb_t cb = g_nethub_vchan_recv_cb[type];
         void *arg = g_nethub_vchan_recv_arg[type];
 
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+        if (nethub_is_host_link_active(NETHUB_CHANNEL_SDIO) && cb) {
+            cb(arg, hdr->data, hdr->len);
+        }
+#else
         (void)nethub_set_active_host_link(NETHUB_CHANNEL_SDIO);
         if (cb) {
             cb(arg, hdr->data, hdr->len);
         }
+#endif
     } else {
         LOG_E("arg err\r\n");
     }

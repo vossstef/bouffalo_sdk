@@ -3,9 +3,16 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+/**
+ * @file hid_keyboard_template.c
+ * @brief CherryUSB HID boot-keyboard device demonstration.
+ */
+
 #include "usbd_core.h"
 #include "usbd_hid.h"
 
+/** @name HID keyboard USB configuration
+ * @{ */
 #define USBD_VID                      0xffff
 #define USBD_PID                      0xffff
 #define USBD_MAX_POWER                100
@@ -17,11 +24,14 @@
 
 #define USB_HID_CONFIG_DESC_SIZ       34
 #define HID_KEYBOARD_REPORT_DESC_SIZE 63
+/** @} */
 
+/** @brief USB device descriptor for the HID keyboard. */
 static const uint8_t device_descriptor[] = {
     USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0x00, 0x00, 0x00, USBD_VID, USBD_PID, 0x0002, 0x01)
 };
 
+/** @brief USB configuration and HID interface descriptor set. */
 static const uint8_t config_descriptor[] = {
     USB_CONFIG_DESCRIPTOR_INIT(USB_HID_CONFIG_DESC_SIZ, 0x01, 0x01, USB_CONFIG_REMOTE_WAKEUP | USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
 
@@ -59,6 +69,7 @@ static const uint8_t config_descriptor[] = {
     /* 34 */
 };
 
+/** @brief USB device-qualifier descriptor. */
 static const uint8_t device_quality_descriptor[] = {
     ///////////////////////////////////////
     /// device qualifier descriptor
@@ -75,6 +86,7 @@ static const uint8_t device_quality_descriptor[] = {
     0x00,
 };
 
+/** @brief USB string descriptors. */
 static const char *string_descriptors[] = {
     (const char[]){ 0x09, 0x04 }, /* Langid */
     "CherryUSB",                  /* Manufacturer */
@@ -82,21 +94,38 @@ static const char *string_descriptors[] = {
     "2022123456",                 /* Serial Number */
 };
 
+/** @brief Return the device descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Device descriptor address.
+ */
 static const uint8_t *device_descriptor_callback(uint8_t speed)
 {
     return device_descriptor;
 }
 
+/** @brief Return the configuration descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Configuration descriptor address.
+ */
 static const uint8_t *config_descriptor_callback(uint8_t speed)
 {
     return config_descriptor;
 }
 
+/** @brief Return the device-qualifier descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Device-qualifier descriptor address.
+ */
 static const uint8_t *device_quality_descriptor_callback(uint8_t speed)
 {
     return device_quality_descriptor;
 }
 
+/** @brief Return a USB string descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @param[in] index String descriptor index.
+ * @return Descriptor string, or NULL when unsupported.
+ */
 static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
 {
     if (index > 3) {
@@ -105,6 +134,7 @@ static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
     return string_descriptors[index];
 }
 
+/** @brief Descriptor callback table for the HID keyboard. */
 const struct usb_descriptor hid_descriptor = {
     .device_descriptor_callback = device_descriptor_callback,
     .config_descriptor_callback = config_descriptor_callback,
@@ -113,6 +143,7 @@ const struct usb_descriptor hid_descriptor = {
 };
 
 /* USB HID device Configuration Descriptor */
+/** @brief Standalone HID descriptor retained for class requests. */
 static __USED uint8_t hid_desc[9] __ALIGN_END = {
     /* 18 */
     0x09,                    /* bLength: HID Descriptor size */
@@ -126,6 +157,7 @@ static __USED uint8_t hid_desc[9] __ALIGN_END = {
     0x00,
 };
 
+/** @brief HID boot-keyboard report descriptor. */
 static const uint8_t hid_keyboard_report_desc[HID_KEYBOARD_REPORT_DESC_SIZE] = {
     0x05, 0x01, // USAGE_PAGE (Generic Desktop)
     0x09, 0x06, // USAGE (Keyboard)
@@ -166,6 +198,10 @@ static volatile bool hid_ready_flag = false;
 static volatile bool hid_busy_flag = false;
 static volatile bool hid_suspend_flag = false;
 
+/** @brief Update keyboard state for USB device events.
+ * @param[in] busid USB device-controller index.
+ * @param[in] event CherryUSB device event identifier.
+ */
 static void usbd_event_handler(uint8_t busid, uint8_t event)
 {
     switch (event) {
@@ -201,6 +237,12 @@ static void usbd_event_handler(uint8_t busid, uint8_t event)
     }
 }
 
+/** @brief Mark an interrupt-IN report transfer complete.
+ * @param[in] busid USB device-controller index.
+ * @param[in] ep Endpoint address.
+ * @param[in] nbytes Number of bytes transferred.
+ * @note Runs in USB endpoint-completion context.
+ */
 void usbd_hid_int_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
 {
     hid_busy_flag = false;
@@ -213,6 +255,10 @@ static struct usbd_endpoint hid_in_ep = {
 
 static struct usbd_interface intf0;
 
+/** @brief Initialize the HID keyboard device.
+ * @param[in] busid USB device-controller index.
+ * @param[in] reg_base USB controller register base.
+ */
 void hid_keyboard_init(uint8_t busid, uintptr_t reg_base)
 {
     usbd_desc_register(busid, &hid_descriptor);
@@ -224,8 +270,15 @@ void hid_keyboard_init(uint8_t busid, uintptr_t reg_base)
     usbd_initialize(busid, reg_base, usbd_event_handler);
 }
 
+/** @brief DMA-accessible HID report buffer. */
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t write_buffer[64];
 
+/** @brief Submit one boot-keyboard input report.
+ * @param[in] busid USB device-controller index.
+ * @param[in] key_val HID usage code to report.
+ * @note The request is ignored while unconfigured or while a transfer is busy;
+ *       a suspended device requests remote wakeup instead.
+ */
 void hid_keyboard_test(uint8_t busid, uint8_t key_val)
 {
     if (hid_ready_flag == false) {

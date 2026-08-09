@@ -86,6 +86,7 @@ ifeq ($(CHIP), bl618dg)
 	CONFIG_PEC_V2 ?=y
 	CONFIG_DVP_RASTER ?=n
 	CONFIG_MULTIMEDIA_VIDEO ?=y
+	CONFIG_GCC_OPTIMISE_LEVEL ?=-Os
 
 	ifeq ($(CPU_MODEL), b0)
 		CROSS_COMPILE ?=riscv64-zephyr-elf-

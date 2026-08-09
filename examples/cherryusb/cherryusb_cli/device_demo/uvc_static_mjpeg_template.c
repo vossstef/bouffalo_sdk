@@ -3,10 +3,17 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+/**
+ * @file uvc_static_mjpeg_template.c
+ * @brief CherryUSB UVC device streaming a static MJPEG frame.
+ */
+
 #include "usbd_core.h"
 #include "usbd_video.h"
 #include "uvc_static_mjpeg_image.h"
 
+/** @name UVC stream configuration
+ * @{ */
 #define VIDEO_IN_EP        0x81
 #define VIDEO_INT_EP       0x82
 
@@ -45,14 +52,17 @@
                                            9 +                            \
                                            7)
 
-#define USBD_VID       0xffff
-#define USBD_PID       0xffff
-#define USBD_MAX_POWER 100
+#define USBD_VID           0xffff
+#define USBD_PID           0xffff
+#define USBD_MAX_POWER     100
+/** @} */
 
+/** @brief USB device descriptor for the UVC device. */
 static const uint8_t device_descriptor[] = {
     USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0xef, 0x02, 0x01, USBD_VID, USBD_PID, 0x0001, 0x01)
 };
 
+/** @brief USB configuration and UVC descriptor set. */
 static const uint8_t config_descriptor[] = {
     USB_CONFIG_DESCRIPTOR_INIT(USB_VIDEO_DESC_SIZ, 0x02, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
     //VIDEO_VC_DESCRIPTOR_INIT(0x00, VIDEO_INT_EP, 0x0100, VIDEO_VC_TERMINAL_LEN, 48000000, 0x02),
@@ -60,12 +70,13 @@ static const uint8_t config_descriptor[] = {
     VIDEO_VS_DESCRIPTOR_INIT(0x01, 0x00, 0x00),
     VIDEO_VS_INPUT_HEADER_DESCRIPTOR_INIT(0x01, VS_HEADER_SIZ, VIDEO_IN_EP, 0x00),
     VIDEO_VS_FORMAT_MJPEG_DESCRIPTOR_INIT(0x01, 0x01),
-    VIDEO_VS_FRAME_MJPEG_DESCRIPTOR_INIT(0x01, WIDTH, HEIGHT, MIN_BIT_RATE, MAX_BIT_RATE, MAX_FRAME_SIZE, DBVAL(INTERVAL), 0x01, DBVAL(INTERVAL)),
+    VIDEO_VS_FRAME_MJPEG_DESCRIPTOR_INIT(0x01, WIDTH, HEIGHT, MIN_BIT_RATE, MAX_BIT_RATE, MAX_FRAME_SIZE, INTERVAL),
     VIDEO_VS_DESCRIPTOR_INIT(0x01, 0x01, 0x01),
     /* 1.2.2.2 Standard VideoStream Isochronous Video Data Endpoint Descriptor */
     USB_ENDPOINT_DESCRIPTOR_INIT(VIDEO_IN_EP, 0x05, VIDEO_PACKET_SIZE, 0x01)
 };
 
+/** @brief USB device-qualifier descriptor. */
 static const uint8_t device_quality_descriptor[] = {
     ///////////////////////////////////////
     /// device qualifier descriptor
@@ -82,6 +93,7 @@ static const uint8_t device_quality_descriptor[] = {
     0x00,
 };
 
+/** @brief USB string descriptors. */
 static const char *string_descriptors[] = {
     (const char[]){ 0x09, 0x04 }, /* Langid */
     "CherryUSB",                  /* Manufacturer */
@@ -89,29 +101,47 @@ static const char *string_descriptors[] = {
     "2022123456",                 /* Serial Number */
 };
 
+/** @brief Return the device descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Device descriptor address.
+ */
 static const uint8_t *device_descriptor_callback(uint8_t speed)
 {
     return device_descriptor;
 }
 
+/** @brief Return the configuration descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Configuration descriptor address.
+ */
 static const uint8_t *config_descriptor_callback(uint8_t speed)
 {
     return config_descriptor;
 }
 
+/** @brief Return the device-qualifier descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Device-qualifier descriptor address.
+ */
 static const uint8_t *device_quality_descriptor_callback(uint8_t speed)
 {
     return device_quality_descriptor;
 }
 
+/** @brief Return a USB string descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @param[in] index String descriptor index.
+ * @return Descriptor string, or NULL when unsupported.
+ */
 static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
 {
-    if (index > 3) {
+    if (index >= (sizeof(string_descriptors) / sizeof(char *))) {
         return NULL;
     }
     return string_descriptors[index];
 }
 
+/** @brief Descriptor callback table for the UVC device. */
 const struct usb_descriptor video_descriptor = {
     .device_descriptor_callback = device_descriptor_callback,
     .config_descriptor_callback = config_descriptor_callback,
@@ -122,6 +152,10 @@ const struct usb_descriptor video_descriptor = {
 static volatile bool tx_flag = 0;
 static volatile bool iso_tx_busy = false;
 
+/** @brief Handle UVC USB device events.
+ * @param[in] busid USB device-controller index.
+ * @param[in] event CherryUSB device event identifier.
+ */
 static void usbd_event_handler(uint8_t busid, uint8_t event)
 {
     switch (event) {
@@ -150,12 +184,20 @@ static void usbd_event_handler(uint8_t busid, uint8_t event)
     }
 }
 
+/** @brief Enable streaming for an opened VideoStreaming interface.
+ * @param[in] busid USB device-controller index; unused.
+ * @param[in] intf Interface number; unused.
+ */
 void usbd_video_open(uint8_t busid, uint8_t intf)
 {
     tx_flag = 1;
     USB_LOG_INFO("UVC OPEN\r\n");
     iso_tx_busy = false;
 }
+/** @brief Disable streaming for a closed VideoStreaming interface.
+ * @param[in] busid USB device-controller index; unused.
+ * @param[in] intf Interface number; unused.
+ */
 void usbd_video_close(uint8_t busid, uint8_t intf)
 {
     USB_LOG_INFO("UVC CLOSE\r\n");
@@ -163,6 +205,12 @@ void usbd_video_close(uint8_t busid, uint8_t intf)
     iso_tx_busy = false;
 }
 
+/** @brief Continue a split isochronous transfer and detect frame completion.
+ * @param[in] busid USB device-controller index.
+ * @param[in] ep Isochronous endpoint address.
+ * @param[in] nbytes Number of bytes transferred.
+ * @note Runs in USB endpoint-completion context.
+ */
 void usbd_video_iso_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
 {
     // USB_LOG_INFO("iso %d\r\n", nbytes);
@@ -183,6 +231,10 @@ static struct usbd_endpoint video_in_ep = {
 static struct usbd_interface intf0;
 static struct usbd_interface intf1;
 
+/** @brief Initialize the static-frame UVC device.
+ * @param[in] busid USB device-controller index.
+ * @param[in] reg_base USB controller register base.
+ */
 void uvc_mjpeg_init(uint8_t busid, uintptr_t reg_base)
 {
     usbd_desc_register(busid, &video_descriptor);
@@ -193,12 +245,16 @@ void uvc_mjpeg_init(uint8_t busid, uintptr_t reg_base)
     usbd_initialize(busid, reg_base, usbd_event_handler);
 }
 
+/** @brief DMA-accessible UVC packetization buffer. */
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t packet_buffer[MAX_PAYLOAD_SIZE];
 
 #if (VIDEO_NO_COPY_MODE)
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t frame_buffer[32 * 1024];
 #endif
 
+/** @brief Start the next static MJPEG frame when the stream is idle.
+ * @param[in] busid USB device-controller index.
+ */
 void uvc_mjpeg_test_polling(uint8_t busid)
 {
     if (tx_flag && iso_tx_busy == false) {

@@ -8,7 +8,11 @@ static const struct nhif_ops *nh_host_link_get_endpoint_ops(void)
         return ctx->profile->host_endpoint_ops;
     }
 
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+    return NULL;
+#else
     return nh_profile_get_endpoint_ops(0);
+#endif
 }
 
 bool nethub_host_link_is_idle(void)

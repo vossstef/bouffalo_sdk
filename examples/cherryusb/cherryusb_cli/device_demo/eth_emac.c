@@ -1,3 +1,8 @@
+/**
+ * @file eth_emac.c
+ * @brief EMAC and Ethernet PHY transport for CherryUSB network devices.
+ */
+
 /* emac and phy */
 #include "bflb_mtimer.h"
 #include "bflb_emac.h"
@@ -16,14 +21,15 @@
 #define DBG_TAG "ETH_EMAC"
 #include "log.h"
 
+/** @brief Round a size up to the requested power-of-two alignment. */
 #define ETH_EMAC_ALIGN_UP(size, align) (((size) + (align) - 1) & ~((align) - 1))
 
 static void eth_emac_irq_cb(void *arg, uint32_t irq_event, struct bflb_emac_trans_desc_s *trans_desc);
 
-/* tx buff def */
-static uint8_t ATTR_NOCACHE_NOINIT_RAM_SECTION __ALIGNED(32) emac_tx_buff[EMAC_TX_BUFF_CNT][ETH_EMAC_ALIGN_UP((EAMC_BUF_HEAD_SIZE + EMAC_TX_BUFF_SIZE), 32)];
-/* rx buff def */
-static uint8_t ATTR_NOCACHE_NOINIT_RAM_SECTION __ALIGNED(32) emac_rx_buff[EMAC_RX_BUFF_CNT][ETH_EMAC_ALIGN_UP((EAMC_BUF_HEAD_SIZE + EMAC_RX_BUFF_SIZE), 32)];
+/** @brief Non-cacheable EMAC transmit-buffer pool. */
+static uint8_t ATTR_NOCACHE_NOINIT_RAM_SECTION __ALIGNED(32) emac_tx_buff[EMAC_TX_BUFF_CNT][ETH_EMAC_ALIGN_UP((EMAC_BUF_HEAD_SIZE + EMAC_TX_BUFF_SIZE), 32)];
+/** @brief Non-cacheable EMAC receive-buffer pool. */
+static uint8_t ATTR_NOCACHE_NOINIT_RAM_SECTION __ALIGNED(32) emac_rx_buff[EMAC_RX_BUFF_CNT][ETH_EMAC_ALIGN_UP((EMAC_BUF_HEAD_SIZE + EMAC_RX_BUFF_SIZE), 32)];
 
 /* tx pool queue */
 static QueueHandle_t emac_tx_pool_queue = NULL;
@@ -65,7 +71,13 @@ static struct bflb_emac_config_s emac_cfg = {
     .max_frame_len = (14 + 4 + 1500 + 4),
 };
 
-/* tx/rx done callback  */
+/**
+ * @brief Process EMAC interrupt events and recycle completed descriptors.
+ * @param[in] arg Driver callback argument; currently unused.
+ * @param[in] irq_event EMAC interrupt event identifier.
+ * @param[in,out] trans_desc Descriptor associated with the event, when present.
+ * @note Runs in interrupt context and invokes the registered event callback there.
+ */
 static void eth_emac_irq_cb(void *arg, uint32_t irq_event, struct bflb_emac_trans_desc_s *trans_desc)
 {
     BaseType_t pxHigherPriorityTaskWoken = pdFALSE;
@@ -141,11 +153,13 @@ static void eth_emac_irq_cb(void *arg, uint32_t irq_event, struct bflb_emac_tran
     }
 }
 
+/** @brief Register the EMAC completion-event callback. */
 void eth_emac_event_cb_register(eth_emac_event_cb_t cb)
 {
     eth_emac_event_cb = cb;
 }
 
+/** @brief Initialize the EMAC transport and PHY. */
 int eth_emac_init(void)
 {
     int ret;
@@ -193,7 +207,7 @@ int eth_emac_init(void)
     }
     for (int i = 0; i < EMAC_TX_BUFF_CNT; i++) {
         struct bflb_emac_trans_desc_s tx_desc = {
-            .buff_addr = &emac_tx_buff[i][EAMC_BUF_HEAD_SIZE],
+            .buff_addr = &emac_tx_buff[i][EMAC_BUF_HEAD_SIZE],
         };
         xQueueSend(emac_tx_pool_queue, &tx_desc, portMAX_DELAY);
     }
@@ -205,7 +219,7 @@ int eth_emac_init(void)
 
     for (int i = 0; i < EMAC_RX_BUFF_CNT; i++) {
         struct bflb_emac_trans_desc_s rx_desc = {
-            .buff_addr = &emac_rx_buff[i][EAMC_BUF_HEAD_SIZE],
+            .buff_addr = &emac_rx_buff[i][EMAC_BUF_HEAD_SIZE],
         };
         bflb_emac_queue_rx_push(emac0, &rx_desc);
         emac_debug_info.rx_push_cnt += 1;
@@ -220,6 +234,7 @@ int eth_emac_init(void)
     return 0;
 }
 
+/** @brief Disable and release the EMAC transport resources. */
 int eth_emac_deinit(void)
 {
     /* disable emac tx/rx */
@@ -248,6 +263,7 @@ int eth_emac_deinit(void)
     return 0;
 }
 
+/** @brief Reset queues and restart EMAC transmit and receive operation. */
 void eth_emac_restart(void)
 {
     LOG_W("Eth Emac ReStart (LinkDown) !!!\r\n");
@@ -270,7 +286,7 @@ void eth_emac_restart(void)
     xQueueReset(emac_tx_pool_queue);
     for (int i = 0; i < EMAC_TX_BUFF_CNT; i++) {
         struct bflb_emac_trans_desc_s tx_desc = {
-            .buff_addr = &emac_tx_buff[i][EAMC_BUF_HEAD_SIZE],
+            .buff_addr = &emac_tx_buff[i][EMAC_BUF_HEAD_SIZE],
         };
         xQueueSend(emac_tx_pool_queue, &tx_desc, portMAX_DELAY);
     }
@@ -279,7 +295,7 @@ void eth_emac_restart(void)
     xQueueReset(emac_rx_process_queue);
     for (int i = 0; i < EMAC_RX_BUFF_CNT; i++) {
         struct bflb_emac_trans_desc_s rx_desc = {
-            .buff_addr = &emac_rx_buff[i][EAMC_BUF_HEAD_SIZE],
+            .buff_addr = &emac_rx_buff[i][EMAC_BUF_HEAD_SIZE],
         };
         bflb_emac_queue_rx_push(emac0, &rx_desc);
         emac_debug_info.rx_push_cnt += 1;
@@ -290,6 +306,7 @@ void eth_emac_restart(void)
     bflb_emac_feature_control(emac0, EMAC_CMD_SET_RX_EN, true);
 }
 
+/** @brief Poll and apply the current PHY link state. */
 bool eth_link_state_update(void)
 {
     static int speed_mode = 0;
@@ -356,6 +373,7 @@ bool eth_link_state_update(void)
     }
 }
 
+/** @brief Acquire a transmit descriptor from the free pool. */
 int eth_emac_tx_buff_get(struct bflb_emac_trans_desc_s *trans_desc, uint32_t timeout)
 {
     if (xQueueReceive(emac_tx_pool_queue, trans_desc, timeout) == pdFALSE) {
@@ -366,6 +384,7 @@ int eth_emac_tx_buff_get(struct bflb_emac_trans_desc_s *trans_desc, uint32_t tim
     return 0;
 }
 
+/** @brief Submit a transmit descriptor to the EMAC. */
 int eth_emac_tx_buff_push(struct bflb_emac_trans_desc_s *trans_desc)
 {
     trans_desc->attr_flag = 0;
@@ -382,6 +401,7 @@ int eth_emac_tx_buff_push(struct bflb_emac_trans_desc_s *trans_desc)
     return 0;
 }
 
+/** @brief Acquire a completed receive descriptor. */
 int eth_emac_rx_data_get(struct bflb_emac_trans_desc_s *trans_desc, uint32_t timeout)
 {
     if (xQueueReceive(emac_rx_process_queue, trans_desc, timeout) == pdFALSE) {
@@ -392,6 +412,7 @@ int eth_emac_rx_data_get(struct bflb_emac_trans_desc_s *trans_desc, uint32_t tim
     return 0;
 }
 
+/** @brief Return a consumed receive descriptor to the EMAC. */
 int eth_emac_rx_data_free(struct bflb_emac_trans_desc_s *trans_desc)
 {
     trans_desc->attr_flag = 0;
@@ -407,7 +428,8 @@ int eth_emac_rx_data_free(struct bflb_emac_trans_desc_s *trans_desc)
     return 0;
 }
 
-void eth_eamc_info_dump(void)
+/** @brief Print EMAC counters and descriptor availability. */
+void eth_emac_info_dump(void)
 {
     uint32_t tx_db_avail = bflb_emac_feature_control(emac0, EMAC_CMD_GET_TX_DB_AVAILABLE, 0);
     uint32_t rx_db_avail = bflb_emac_feature_control(emac0, EMAC_CMD_GET_RX_DB_AVAILABLE, 0);

@@ -56,6 +56,46 @@
 
 static ATTR_NOCACHE_NOINIT_RAM_SECTION struct bflb_sha256_link_ctx_s link_ctx_temp;
 
+#if defined(BL602)
+#define BL602_DTCM_END 0x02020000UL
+
+/* BL602 SHA link mode cannot reliably update its descriptor in DTCM. */
+static struct bflb_sha_link_s working_link_cfg
+    __attribute__((section(".wifi_ram"), aligned(4)));
+
+static int sha256_link_cfg_is_in_tcm(const struct bflb_sha_link_s *link_cfg)
+{
+    uintptr_t addr = (uintptr_t)link_cfg & 0x0FFFFFFFUL;
+
+    return addr < BL602_DTCM_END;
+}
+
+static void sha256_link_cfg_load(struct bflb_sha256_link_ctx_s *ctx)
+{
+    if (sha256_link_cfg_is_in_tcm(&ctx->link_cfg)) {
+        memcpy(&working_link_cfg, &ctx->link_cfg, sizeof(working_link_cfg));
+        ctx->link_addr = (uint32_t)(uintptr_t)&working_link_cfg;
+    }
+}
+
+static void sha256_link_cfg_store(struct bflb_sha256_link_ctx_s *ctx)
+{
+    if (ctx->link_addr == (uint32_t)(uintptr_t)&working_link_cfg) {
+        memcpy(&ctx->link_cfg, &working_link_cfg, sizeof(working_link_cfg));
+    }
+}
+#else
+static void sha256_link_cfg_load(struct bflb_sha256_link_ctx_s *ctx)
+{
+    (void)ctx;
+}
+
+static void sha256_link_cfg_store(struct bflb_sha256_link_ctx_s *ctx)
+{
+    (void)ctx;
+}
+#endif
+
 void mbedtls_sha256_init( mbedtls_sha256_context *ctx )
 {
     SHA256_VALIDATE( ctx != NULL );
@@ -67,8 +107,10 @@ void mbedtls_sha256_init( mbedtls_sha256_context *ctx )
     mbedtls_platform_zeroize( ctx, sizeof( mbedtls_sha256_context ) );
     ctx->sha = sha;
 
+    bflb_sec_sha_mutex_take();
     bflb_group0_request_sha_access(sha);
     bflb_sha_link_init(sha);
+    bflb_sec_sha_mutex_give();
 }
 
 void mbedtls_sha256_free( mbedtls_sha256_context *ctx )
@@ -102,8 +144,10 @@ int mbedtls_sha256_starts_ret( mbedtls_sha256_context *ctx, int is224 )
     }
 
     bflb_sec_sha_mutex_take();
+    bflb_sha_link_init(ctx->sha);
     memcpy(&link_ctx_temp, &ctx->link_ctx, sizeof(struct bflb_sha256_link_ctx_s));
     bflb_sha256_link_start(ctx->sha, &link_ctx_temp, is224);
+    sha256_link_cfg_load(&link_ctx_temp);
     memcpy(&ctx->link_ctx, &link_ctx_temp, sizeof(struct bflb_sha256_link_ctx_s));
     bflb_sec_sha_mutex_give();
     return( 0 );
@@ -133,7 +177,7 @@ int mbedtls_sha256_update_ret( mbedtls_sha256_context *ctx,
                                const unsigned char *input,
                                size_t ilen )
 {
-    //int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret;
 
     SHA256_VALIDATE_RET( ctx != NULL );
     SHA256_VALIDATE_RET( ilen == 0 || input != NULL );
@@ -143,10 +187,17 @@ int mbedtls_sha256_update_ret( mbedtls_sha256_context *ctx,
 
     bflb_l1c_dcache_clean_range((void *)input, ilen);
     bflb_sec_sha_mutex_take();
+    bflb_sha_link_init(ctx->sha);
     memcpy(&link_ctx_temp, &ctx->link_ctx, sizeof(struct bflb_sha256_link_ctx_s));
-    bflb_sha256_link_update(ctx->sha, &link_ctx_temp, input, ilen);
+    sha256_link_cfg_load(&link_ctx_temp);
+    ret = bflb_sha256_link_update(ctx->sha, &link_ctx_temp, input, ilen);
+    sha256_link_cfg_store(&link_ctx_temp);
     memcpy(&ctx->link_ctx, &link_ctx_temp, sizeof(struct bflb_sha256_link_ctx_s));
     bflb_sec_sha_mutex_give();
+
+    if( ret != 0 )
+        return( MBEDTLS_ERR_PLATFORM_HW_ACCEL_FAILED );
+
     return( 0 );
 }
 
@@ -180,8 +231,11 @@ int mbedtls_sha256_finish_ret( mbedtls_sha256_context *ctx,
     SHA256_VALIDATE_RET( (unsigned char *)output != NULL );
 
     bflb_sec_sha_mutex_take();
+    bflb_sha_link_init(ctx->sha);
     memcpy(&link_ctx_temp, &ctx->link_ctx, sizeof(struct bflb_sha256_link_ctx_s));
+    sha256_link_cfg_load(&link_ctx_temp);
     bflb_sha256_link_finish(ctx->sha, &link_ctx_temp, output);
+    sha256_link_cfg_store(&link_ctx_temp);
     bflb_sec_sha_mutex_give();
     return( 0 );
 }

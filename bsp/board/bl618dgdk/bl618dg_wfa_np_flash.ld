@@ -26,7 +26,7 @@ MEMORY
     ram_psram  (wxa)   : ORIGIN = 0x88400000, LENGTH = 4M
     ram_nocache (!rx) : ORIGIN = 0x21020400, LENGTH = 256K - 1K /* reserved 1k for security */
     ram_memory  (!rx) : ORIGIN = 0x61020400, LENGTH = 256K - 1K /* reserved 1k for security */
-    ram_wifi  (wxa)   : ORIGIN = 0x21050000, LENGTH = 320K
+    ram_wifi  (wxa)   : ORIGIN = 0x21070000, LENGTH = 320K
 }
 
 SECTIONS
@@ -439,4 +439,6 @@ SECTIONS
     ASSERT(__etext_final <= ORIGIN(xip_memory) + LENGTH(xip_memory), "code memory overflow")
 
     PROVIDE( _heap_wifi_size = ORIGIN(ram_wifi) + LENGTH(ram_wifi) - _heap_wifi_start );
+    ASSERT((ORIGIN(ram_memory) - 0x40000000 + LENGTH(ram_memory)) <= ORIGIN(ram_wifi), "ram_memory and ram_wifi physically overlap")
+    ASSERT((ORIGIN(ram_wifi) + LENGTH(ram_wifi)) <= 0x210C0000, "ram_wifi exceeds BL618DG B0 WRAM")
 }

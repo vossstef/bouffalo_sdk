@@ -3,9 +3,15 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+/**
+ * @file uac_v1_mic_speaker_multichan_template.c
+ * @brief CherryUSB UAC 1.0 stereo microphone and speaker demonstration.
+ */
+
 #include "usbd_core.h"
 #include "usbd_audio.h"
 
+/** @brief Enable an explicit speaker feedback endpoint when set to 1. */
 #define USING_FEEDBACK 0
 
 #define USBD_VID       0xffff
@@ -83,13 +89,15 @@
 #define OUTPUT_CH_ENABLE 0x00ff
 #endif
 
-/* AUDIO Class Config */
+/** @name Audio stream format configuration
+ * @{ */
 #define AUDIO_SPEAKER_FREQ            16000U
 #define AUDIO_SPEAKER_FRAME_SIZE_BYTE 2u
 #define AUDIO_SPEAKER_RESOLUTION_BIT  16u
 #define AUDIO_MIC_FREQ                16000U
 #define AUDIO_MIC_FRAME_SIZE_BYTE     2u
 #define AUDIO_MIC_RESOLUTION_BIT      16u
+/** @} */
 
 #define AUDIO_SAMPLE_FREQ(frq)        (uint8_t)(frq), (uint8_t)((frq >> 8)), (uint8_t)((frq >> 16))
 
@@ -130,10 +138,12 @@
                       AUDIO_SIZEOF_AC_FEATURE_UNIT_DESC(OUT_CHANNEL_NUM, 1) + \
                       AUDIO_SIZEOF_AC_OUTPUT_TERMINAL_DESC)
 
+/** @brief USB device descriptor for the UAC device. */
 static const uint8_t device_descriptor[] = {
     USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0xef, 0x02, 0x01, USBD_VID, USBD_PID, 0x0001, 0x01)
 };
 
+/** @brief USB configuration and UAC 1.0 descriptor set. */
 static const uint8_t config_descriptor[] = {
     USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x03, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
     AUDIO_AC_DESCRIPTOR_INIT(0x00, 0x03, AUDIO_AC_SIZ, 0x00, 0x01, 0x02),
@@ -155,6 +165,7 @@ static const uint8_t config_descriptor[] = {
                              EP_INTERVAL, AUDIO_SAMPLE_FREQ_3B(AUDIO_MIC_FREQ)),
 };
 
+/** @brief USB device-qualifier descriptor. */
 static const uint8_t device_quality_descriptor[] = {
     ///////////////////////////////////////
     /// device qualifier descriptor
@@ -171,6 +182,7 @@ static const uint8_t device_quality_descriptor[] = {
     0x00,
 };
 
+/** @brief USB string descriptors. */
 static const char *string_descriptors[] = {
     (const char[]){ 0x09, 0x04 }, /* Langid */
     "CherryUSB",                  /* Manufacturer */
@@ -178,21 +190,38 @@ static const char *string_descriptors[] = {
     "2022123456",                 /* Serial Number */
 };
 
+/** @brief Return the device descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Device descriptor address.
+ */
 static const uint8_t *device_descriptor_callback(uint8_t speed)
 {
     return device_descriptor;
 }
 
+/** @brief Return the configuration descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Configuration descriptor address.
+ */
 static const uint8_t *config_descriptor_callback(uint8_t speed)
 {
     return config_descriptor;
 }
 
+/** @brief Return the device-qualifier descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Device-qualifier descriptor address.
+ */
 static const uint8_t *device_quality_descriptor_callback(uint8_t speed)
 {
     return device_quality_descriptor;
 }
 
+/** @brief Return a USB string descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @param[in] index String descriptor index.
+ * @return Descriptor string, or NULL when unsupported.
+ */
 static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
 {
     if (index > 3) {
@@ -201,6 +230,7 @@ static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
     return string_descriptors[index];
 }
 
+/** @brief Descriptor callback table for the UAC device. */
 const struct usb_descriptor audio_v1_descriptor = {
     .device_descriptor_callback = device_descriptor_callback,
     .config_descriptor_callback = config_descriptor_callback,
@@ -208,7 +238,9 @@ const struct usb_descriptor audio_v1_descriptor = {
     .string_descriptor_callback = string_descriptor_callback
 };
 
+/** @brief DMA-accessible speaker OUT packet buffer. */
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t read_buffer[AUDIO_OUT_PACKET];
+/** @brief DMA-accessible microphone IN packet buffer. */
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t write_buffer[AUDIO_IN_PACKET];
 #if USING_FEEDBACK == 1
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t s_speaker_feedback_buffer[4];
@@ -220,6 +252,10 @@ static volatile bool ep_tx_busy_flag = false;
 static volatile uint32_t s_mic_sample_rate;
 static volatile uint32_t s_speaker_sample_rate;
 
+/** @brief Handle UAC USB device lifecycle events.
+ * @param[in] busid USB device-controller index.
+ * @param[in] event CherryUSB device event identifier.
+ */
 static void usbd_event_handler(uint8_t busid, uint8_t event)
 {
     switch (event) {
@@ -249,6 +285,10 @@ static void usbd_event_handler(uint8_t busid, uint8_t event)
     }
 }
 
+/** @brief Start the speaker or microphone stream for an alternate interface.
+ * @param[in] busid USB device-controller index.
+ * @param[in] intf Streaming interface number; 1 selects the speaker.
+ */
 void usbd_audio_open(uint8_t busid, uint8_t intf)
 {
     if (intf == 1) {
@@ -268,6 +308,10 @@ void usbd_audio_open(uint8_t busid, uint8_t intf)
     }
 }
 
+/** @brief Stop the speaker or microphone stream.
+ * @param[in] busid USB device-controller index; unused.
+ * @param[in] intf Streaming interface number; 1 selects the speaker.
+ */
 void usbd_audio_close(uint8_t busid, uint8_t intf)
 {
     if (intf == 1) {
@@ -280,6 +324,11 @@ void usbd_audio_close(uint8_t busid, uint8_t intf)
     }
 }
 
+/** @brief Store the sampling frequency selected for an audio endpoint.
+ * @param[in] busid USB device-controller index; unused.
+ * @param[in] ep Audio endpoint address.
+ * @param[in] sampling_freq Sampling frequency in hertz.
+ */
 void usbd_audio_set_sampling_freq(uint8_t busid, uint8_t ep, uint32_t sampling_freq)
 {
     if (ep == AUDIO_OUT_EP) {
@@ -289,6 +338,11 @@ void usbd_audio_set_sampling_freq(uint8_t busid, uint8_t ep, uint32_t sampling_f
     }
 }
 
+/** @brief Return the selected sampling frequency for an audio endpoint.
+ * @param[in] busid USB device-controller index; unused.
+ * @param[in] ep Audio endpoint address.
+ * @return Sampling frequency in hertz, or 0 for an unknown endpoint.
+ */
 uint32_t usbd_audio_get_sampling_freq(uint8_t busid, uint8_t ep)
 {
     (void)busid;
@@ -304,12 +358,24 @@ uint32_t usbd_audio_get_sampling_freq(uint8_t busid, uint8_t ep)
     return freq;
 }
 
+/** @brief Complete a speaker OUT packet and rearm reception.
+ * @param[in] busid USB device-controller index.
+ * @param[in] ep Completed endpoint address; unused.
+ * @param[in] nbytes Number of bytes received.
+ * @note Runs in USB endpoint-completion context.
+ */
 void usbd_audio_out_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
 {
     USB_LOG_RAW("actual out len:%d\r\n", (unsigned int)nbytes);
     usbd_ep_start_read(busid, AUDIO_OUT_EP, read_buffer, AUDIO_OUT_PACKET);
 }
 
+/** @brief Complete a microphone IN packet.
+ * @param[in] busid USB device-controller index; unused.
+ * @param[in] ep Completed endpoint address; unused.
+ * @param[in] nbytes Number of bytes transmitted.
+ * @note Runs in USB endpoint-completion context.
+ */
 void usbd_audio_in_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
 {
     USB_LOG_RAW("actual in len:%d\r\n", (unsigned int)nbytes);
@@ -317,6 +383,12 @@ void usbd_audio_in_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
 }
 
 #if USING_FEEDBACK == 1
+/** @brief Update and resubmit the explicit speaker feedback value.
+ * @param[in] busid USB device-controller index.
+ * @param[in] ep Completed endpoint address; unused.
+ * @param[in] nbytes Number of feedback bytes transmitted.
+ * @note Runs in USB endpoint-completion context.
+ */
 void usbd_audio_iso_out_feedback_callback(uint8_t busid, uint8_t ep, uint32_t nbytes)
 {
     USB_LOG_RAW("actual feedback len:%d\r\n", (unsigned int)nbytes);
@@ -347,6 +419,7 @@ static struct usbd_interface intf0;
 static struct usbd_interface intf1;
 static struct usbd_interface intf2;
 
+/** @brief Audio feature-unit entities exposed to class-control requests. */
 struct audio_entity_info audio_entity_table[] = {
     { .bEntityId = AUDIO_IN_FU_ID,
       .bDescriptorSubtype = AUDIO_CONTROL_FEATURE_UNIT,
@@ -358,6 +431,10 @@ struct audio_entity_info audio_entity_table[] = {
 
 // In windows, audio driver cannot remove auto, so when you modify any descriptor information, please modify string descriptors too.
 
+/** @brief Register and initialize the UAC 1.0 device.
+ * @param[in] busid USB device-controller index.
+ * @param[in] reg_base USB controller register base.
+ */
 void uac_v1_init(uint8_t busid, uintptr_t reg_base)
 {
     usbd_desc_register(busid, &audio_v1_descriptor);
@@ -373,6 +450,7 @@ void uac_v1_init(uint8_t busid, uintptr_t reg_base)
 }
 
 // clang-format off
+/** @brief Interleaved stereo PCM sine-wave test samples. */
 static uint16_t sin_0db_l32_r16_2ch[64] = {
     0x0000,0x0000, 0x18F8,0x30FB, 0x30FB,0x5A81, 0x471C,0x7640, 0x5A81,0x7FFF, 0x6A6C,0x7640, 0x7640,0x5A81, 0x7D89,0x30FB,
     0x7FFF,0x0000, 0x7D89,0xCF05, 0x7640,0xA57F, 0x6A6C,0x89C0, 0x5A81,0x8001, 0x471C,0x89C0, 0x30FB,0xA57F, 0x18F8,0xCF05,
@@ -381,6 +459,11 @@ static uint16_t sin_0db_l32_r16_2ch[64] = {
 };
 // clang-format on
 
+/** @brief Generate and synchronously submit microphone test packets.
+ * @param[in] busid USB device-controller index.
+ * @note While the microphone stream is open, this function busy-waits for each
+ *       endpoint completion before returning.
+ */
 void uac_v1_test_polling(uint8_t busid)
 {
     static uint32_t pcm_offset = 0;

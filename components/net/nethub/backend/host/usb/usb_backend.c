@@ -13,6 +13,9 @@
 
 #include "compiler/compiler_ld.h"
 #include "FreeRTOS.h"
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+#include "nh_host_select.h"
+#endif
 #include "queue.h"
 #include "semphr.h"
 #include "stream_buffer.h"
@@ -363,8 +366,18 @@ static void transport_usb_event_cb(uint8_t event)
         case USBD_EVENT_CONFIGURED:
             LOG_W("USBD_EVENT_CONFIGURED\r\n");
             g_transport_usb_ctx.configured = true;
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+            if (nethub_host_report_candidate(NETHUB_CHANNEL_USB)) {
+                (void)transport_usb_cmd_acm_start_out_read();
+                (void)transport_usb_ecm_set_connect(true);
+            } else {
+                g_transport_usb_ctx.configured = false;
+                (void)transport_usb_ecm_set_connect(false);
+            }
+#else
             (void)transport_usb_cmd_acm_start_out_read();
             (void)transport_usb_ecm_set_connect(true);
+#endif
             transport_usb_wake_io_tasks(&higher_priority_task_woken);
             break;
         default:

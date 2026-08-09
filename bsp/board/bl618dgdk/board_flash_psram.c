@@ -295,7 +295,7 @@ static int ATTR_TCM_SECTION flash_check_bootheader(spi_flash_cfg_type *pflash_cf
     uint32_t crc32 = 0;
     uint8_t *pcrc32 = read_data + 252;
 
-    stat = bflb_sflash_read(pflash_cfg, SF_CTRL_QIO_MODE, 0, 0x00000000, read_data, sizeof(read_data));
+    stat = bflb_sflash_read(pflash_cfg, pflash_cfg->io_mode&0xf, 0, 0x00000000, read_data, sizeof(read_data));
     if (0 != stat) {
         return -1;
     }

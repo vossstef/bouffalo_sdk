@@ -5,7 +5,7 @@
 #define TEST_COUNT 10
 
 struct bflb_adc_channel_s chan[] = {
-    {.pos_chan = ADC_EXTERNAL_CHANNEL_8, .neg_chan = ADC_EXTERNAL_CHANNEL_10,}, /* GPIO6 -> GPIO10 */
+    {.pos_chan = ADC_EXTERNAL_CHANNEL_6, .neg_chan = ADC_EXTERNAL_CHANNEL_8,}, /* GPIO1 -> GPIO6 */
 };
 
 struct bflb_device_s *adc;

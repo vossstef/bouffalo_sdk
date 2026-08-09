@@ -21,7 +21,7 @@ The script will automatically:
 2. Load ELF PT_LOAD file data at LMA
 3. Parse the log and load the last valid coredump at VMA
 4. Start the GDB server
-5. Start riscv64-unknown-elf-gdb with the ELF file
+5. Find and start the available RISC-V GDB with the ELF file
 6. Run `file` and `target remote`
 7. Source `tools/bouffalo_sdk.gdb` and any extra `-x` init file
 
@@ -45,6 +45,7 @@ from typing import Optional, Tuple, List
 from dataclasses import dataclass
 
 from crash_capture import parse_coredump_sections
+from toolchain import get_tool
 
 
 BIN_COREDUMP_MAGIC = b"BKCD"
@@ -1016,26 +1017,33 @@ def main():
     time.sleep(0.5)
 
     # Build GDB command with -ex parameters
-    gdb_cmd = ['riscv64-unknown-elf-gdb']
-    gdb_cmd.extend(['-ex', f'file {elf_file}'])
-    gdb_cmd.extend(['-ex', f'target remote localhost:{port}'])
-    if default_gdb_init.exists():
-        gdb_cmd.extend(['-x', str(default_gdb_init)])
-    else:
-        print(f"Warning: default GDB init not found: {default_gdb_init}")
-    if gdb_init:
-        gdb_cmd.extend(['-x', gdb_init])
-
-    print(f"Auto-starting GDB client: {' '.join(gdb_cmd)}")
-
     try:
-        gdb_process = subprocess.Popen(gdb_cmd)
-    except FileNotFoundError:
-        print("Warning: riscv64-unknown-elf-gdb not found. Please start GDB manually.")
+        gdb_cmd = [get_tool('gdb')]
+    except FileNotFoundError as error:
+        print(f"Warning: {error}. Please start GDB manually.")
         gdb_process = None
     except Exception as e:
-        print(f"Warning: Failed to start GDB: {e}")
+        print(f"Warning: Failed to find GDB: {e}")
         gdb_process = None
+    else:
+        gdb_cmd.extend(['-ex', f'file {elf_file}'])
+        gdb_cmd.extend(['-ex', f'target remote localhost:{port}'])
+        if default_gdb_init.exists():
+            gdb_cmd.extend(['-x', str(default_gdb_init)])
+        else:
+            print(f"Warning: default GDB init not found: {default_gdb_init}")
+        if gdb_init:
+            gdb_cmd.extend(['-x', gdb_init])
+
+        print(f"Auto-starting GDB client: {' '.join(gdb_cmd)}")
+        try:
+            gdb_process = subprocess.Popen(gdb_cmd)
+        except FileNotFoundError:
+            print("Warning: GDB executable disappeared. Please start GDB manually.")
+            gdb_process = None
+        except Exception as e:
+            print(f"Warning: Failed to start GDB: {e}")
+            gdb_process = None
 
     try:
         # Keep server running

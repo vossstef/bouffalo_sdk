@@ -82,11 +82,24 @@ cat validation_artifacts/2.1.5/wifi_ota_bl616.bin.ota | nc -N -nvl 3365
 
 Use CLI commands on the BL616 serial port to connect Wi-Fi and trigger OTA.
 
+The HTTP/HTTPS and TCP shell commands accept a `reboot` option:
+
+```text
+https_ota_start <url> [reboot]
+wifi_ota_test <url> [reboot]
+tcp_ota_start <server_ip> [port] [reboot]
+```
+
+`wifi_ota_test` is a backward-compatible alias of `https_ota_start`. For all three commands, `reboot` defaults to `1`. Set it to `0` to remain on the currently running firmware after a successful update. Every command invocation starts an OTA regardless of this option; `reboot` only controls the reset after success and is not saved. To specify `reboot` for TCP OTA, the port argument must also be supplied.
+
 ```bash
 bouffalolab />wifi_sta_connect BL_TEST 12345678
 bouffalolab />tcp_ota_start 192.168.18.125 3365
 bouffalolab />wifi_ota_test http://192.168.18.125:5000/build/build_out/wifi_ota_bl616.bin.ota
 bouffalolab />wifi_ota_test https://192.168.18.125:5000/build/build_out/wifi_ota_bl616.bin.ota
+bouffalolab />tcp_ota_start 192.168.18.125 3365 0
+bouffalolab />https_ota_start http://192.168.18.125:5000/build/build_out/wifi_ota_bl616.bin.ota 0
+bouffalolab />https_ota_start https://192.168.18.125:5000/build/build_out/wifi_ota_bl616.bin.ota 0
 
 ```
 
@@ -175,7 +188,7 @@ In general IOT application scenarios, the Flash layout is as follows:
 4. Check the OTA Header sent by the server; if check is successful, continue to get the OTA data.
 5. Calculates whether the hash value of the OTA data is correct.
 6. If the hash value is calculated incorrectly, the OTA process is exited and the partition table and currently active partition flags are not updated. If hash is correct, then partition table and current active partition flags are updated, and the `age++` indicates the number of OTA updates.
-7. reboot system.
+7. If `reboot` is `1` (the default), reboot the system. If it is `0`, continue running the current firmware; the updated partition is used on a later reboot.
 8. If the OTA case run crashes, recover it according to your system policy. This example no longer injects an extra watchdog reset path for OTA automation.
 
 ## Dump OTA log

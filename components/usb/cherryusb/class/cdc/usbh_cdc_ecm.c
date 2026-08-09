@@ -79,6 +79,7 @@ static int usbh_cdc_ecm_connect(struct usbh_hubport *hport, uint8_t intf)
     uint8_t *p;
     uint8_t cur_iface = 0xff;
     uint8_t mac_str_idx = 0xff;
+    uint32_t desc_len = 0;
 
     struct usbh_cdc_ecm *cdc_ecm_class = &g_cdc_ecm_class;
 
@@ -111,7 +112,12 @@ static int usbh_cdc_ecm_connect(struct usbh_hubport *hport, uint8_t intf)
                 break;
         }
         /* skip to next descriptor */
+        desc_len += p[DESC_bLength];
         p += p[DESC_bLength];
+
+        if (desc_len > hport->config.config_desc.wTotalLength) {
+            return -USB_ERR_INVAL;
+        }
     }
 
 get_mac:
@@ -304,16 +310,6 @@ int usbh_cdc_ecm_eth_output(uint32_t buflen)
 
     usbh_bulk_urb_fill(&g_cdc_ecm_class.bulkout_urb, g_cdc_ecm_class.hport, g_cdc_ecm_class.bulkout, g_cdc_ecm_tx_buffer, buflen, USB_OSAL_WAITING_FOREVER, NULL, NULL);
     return usbh_submit_urb(&g_cdc_ecm_class.bulkout_urb);
-}
-
-__WEAK void usbh_cdc_ecm_run(struct usbh_cdc_ecm *cdc_ecm_class)
-{
-    (void)cdc_ecm_class;
-}
-
-__WEAK void usbh_cdc_ecm_stop(struct usbh_cdc_ecm *cdc_ecm_class)
-{
-    (void)cdc_ecm_class;
 }
 
 const struct usbh_class_driver cdc_ecm_class_driver = {

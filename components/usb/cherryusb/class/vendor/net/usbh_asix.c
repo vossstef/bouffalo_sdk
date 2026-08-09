@@ -15,8 +15,8 @@
 
 static struct usbh_asix g_asix_class;
 
-static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_asix_rx_buffer[USB_ALIGN_UP(CONFIG_USBHOST_ASIX_ETH_MAX_TX_SIZE, CONFIG_USB_ALIGN_SIZE)];
-static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_asix_tx_buffer[USB_ALIGN_UP(CONFIG_USBHOST_ASIX_ETH_MAX_RX_SIZE, CONFIG_USB_ALIGN_SIZE)];
+static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_asix_rx_buffer[USB_ALIGN_UP(CONFIG_USBHOST_ASIX_ETH_MAX_RX_SIZE, CONFIG_USB_ALIGN_SIZE)];
+static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_asix_tx_buffer[USB_ALIGN_UP(CONFIG_USBHOST_ASIX_ETH_MAX_TX_SIZE, CONFIG_USB_ALIGN_SIZE)];
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_asix_inttx_buffer[USB_ALIGN_UP(16, CONFIG_USB_ALIGN_SIZE)];
 
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_asix_buf[USB_ALIGN_UP(32, CONFIG_USB_ALIGN_SIZE)];
@@ -793,16 +793,6 @@ int usbh_asix_eth_output(uint32_t buflen)
 
     usbh_bulk_urb_fill(&g_asix_class.bulkout_urb, g_asix_class.hport, g_asix_class.bulkout, g_asix_tx_buffer, actual_len, USB_OSAL_WAITING_FOREVER, NULL, NULL);
     return usbh_submit_urb(&g_asix_class.bulkout_urb);
-}
-
-__WEAK void usbh_asix_run(struct usbh_asix *asix_class)
-{
-    (void)asix_class;
-}
-
-__WEAK void usbh_asix_stop(struct usbh_asix *asix_class)
-{
-    (void)asix_class;
 }
 
 static const uint16_t asix_id_table[][2] = {

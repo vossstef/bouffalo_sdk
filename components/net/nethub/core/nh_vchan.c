@@ -12,9 +12,12 @@ int nethub_vchan_send(nethub_vchan_type_t type, const void *data, uint16_t len)
 
     if (ctx->profile != NULL && ctx->profile->vchan_ops != NULL) {
         ops = ctx->profile->vchan_ops;
-    } else {
+    }
+#if !defined(CONFIG_NETHUB_PROFILE_DUAL)
+    else {
         ops = nh_profile_get_vchan_ops();
     }
+#endif
 
     if (ops == NULL || ops->send == NULL) {
         return NETHUB_ERR_NOT_SUPPORTED;

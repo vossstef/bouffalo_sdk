@@ -84,7 +84,20 @@ typedef struct {
     uint16_t next_hus;
 } btble_controller_lp_fw_adv_info_t;
 
+#define BTBLE_ST_NONE        0xFF
+#define BTBLE_ST_ADV         0
+#define BTBLE_ST_RX_CONN_IND 1
+#define BTBLE_ST_CONN        2
+
 typedef struct {
+    /*
+     * State recorded before handing control to LPFW, one of BTBLE_ST_*.
+     * BTBLE_ST_RX_CONN_IND is excluded; LPFW returns that state in
+     * btble_controller_lp_fw_activity_t.state.
+     */
+    uint8_t state;
+    /* True when the next BLE wake-up is for a scheduled radio event; false for other internal controller timer. */
+    bool is_arbTarget;
     /* Current RX descriptor byte offset in BLE EM. */
     uint16_t rx_desc_off;
     /* RX data buffer byte offset in BLE EM. */
@@ -103,7 +116,55 @@ typedef struct {
     btble_controller_lp_fw_adv_info_t adv;
 } btble_controller_lp_fw_info_t;
 
+typedef struct {
+    /* Final LPFW state, one of BTBLE_ST_*. */
+    uint8_t state;
+    /*
+     * LPFW activity program time in half-slots. Current meanings:
+     * - state == BTBLE_ST_ADV: next ADV program time.
+     * - state == BTBLE_ST_RX_CONN_IND: program time of the ADV event that
+     *   received the CONNECT_IND, not the following advertising event time.
+    */
+    uint32_t next_hs;
+    /* Fine time corresponding to next_hs, with the same activity-specific meaning. */
+    uint16_t next_hus;
+    /*
+     * BLE EM byte address of the RX descriptor that received the
+     * Connection Indication (CONNECT_IND).
+     * Valid when state == BTBLE_ST_RX_CONN_IND.
+     */
+    uint32_t conn_ind_rx_desc_addr;
+    /*
+     * BLE deep-sleep duration programmed by LPFW, in low-power clock cycles.
+     * Valid when lpfw_ble_awake is false.
+     */
+    uint32_t sleep_duration;
+    /*
+     * True when BLE was awake as LPFW returned control to APP.
+     * When false, BLE remains in deep sleep and sleep_duration is valid.
+     */
+    bool lpfw_ble_awake;
+} btble_controller_lp_fw_activity_t;
+
+/**
+ * @brief Get the BLE controller information for LPFW handoff.
+ *
+ * Called by the APP low-power preparation path after the controller has
+ * recorded an active BLE activity. The returned information is copied to
+ * LPFW before control is handed over.
+ *
+ * @return Pointer to the recorded LPFW handoff information.
+ */
 btble_controller_lp_fw_info_t *btble_controller_get_lp_fw_info(void);
+
+/**
+ * @brief Restore a BLE activity after LPFW returns control to the APP.
+ *
+ * @param[in] restore LPFW activity state and timing to restore.
+ *
+ * @return 0 on success, otherwise an error code.
+ */
+int btble_controller_lp_fw_activity_restore(const btble_controller_lp_fw_activity_t *restore);
 
 /**
  * @brief BLE event priority configuration limits

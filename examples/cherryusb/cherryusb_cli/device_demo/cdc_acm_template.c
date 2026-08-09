@@ -3,6 +3,11 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+/**
+ * @file cdc_acm_template.c
+ * @brief CherryUSB CDC ACM device with greeting and loopback modes.
+ */
+
 #include "usbd_core.h"
 #include "usbd_cdc_acm.h"
 
@@ -17,7 +22,8 @@
 #define DBG_TAG "ACM"
 #include "log.h"
 
-/*!< endpoint address */
+/** @name CDC ACM USB configuration
+ * @{ */
 #define CDC_IN_EP       0x83
 #define CDC_OUT_EP      0x04
 #define CDC_INT_EP      0x85
@@ -34,16 +40,20 @@
 #else
 #define CDC_MAX_MPS 64
 #endif
+/** @} */
 
+/** @brief USB device descriptor for the CDC ACM device. */
 static const uint8_t device_descriptor[] = {
     USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0xEF, 0x02, 0x01, USBD_VID, USBD_PID, 0x0100, 0x01)
 };
 
+/** @brief USB configuration descriptor for the CDC ACM device. */
 static const uint8_t config_descriptor[] = {
     USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x02, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
     CDC_ACM_DESCRIPTOR_INIT(0x00, CDC_INT_EP, CDC_OUT_EP, CDC_IN_EP, CDC_MAX_MPS, 0x02)
 };
 
+/** @brief USB device-qualifier descriptor. */
 static const uint8_t device_quality_descriptor[] = {
     ///////////////////////////////////////
     /// device qualifier descriptor
@@ -60,6 +70,7 @@ static const uint8_t device_quality_descriptor[] = {
     0x00,
 };
 
+/** @brief USB string descriptors. */
 static const char *string_descriptors[] = {
     (const char[]){ 0x09, 0x04 }, /* Langid */
     "CherryUSB",                  /* Manufacturer */
@@ -67,21 +78,38 @@ static const char *string_descriptors[] = {
     "2022123456",                 /* Serial Number */
 };
 
+/** @brief Return the device descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Device descriptor address.
+ */
 static const uint8_t *device_descriptor_callback(uint8_t speed)
 {
     return device_descriptor;
 }
 
+/** @brief Return the configuration descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Configuration descriptor address.
+ */
 static const uint8_t *config_descriptor_callback(uint8_t speed)
 {
     return config_descriptor;
 }
 
+/** @brief Return the device-qualifier descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Device-qualifier descriptor address.
+ */
 static const uint8_t *device_quality_descriptor_callback(uint8_t speed)
 {
     return device_quality_descriptor;
 }
 
+/** @brief Return a USB string descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @param[in] index String descriptor index.
+ * @return Descriptor string, or NULL when unsupported.
+ */
 static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
 {
     if (index > 3) {
@@ -90,6 +118,7 @@ static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
     return string_descriptors[index];
 }
 
+/** @brief Descriptor callback table for the CDC ACM device. */
 const struct usb_descriptor cdc_descriptor = {
     .device_descriptor_callback = device_descriptor_callback,
     .config_descriptor_callback = config_descriptor_callback,
@@ -97,10 +126,15 @@ const struct usb_descriptor cdc_descriptor = {
     .string_descriptor_callback = string_descriptor_callback
 };
 
+/** @name CDC ACM data-buffer sizes
+ * @{ */
 #define USBD_CDC_ACM_RD_BUFF_SIZE (512)
 #define USBD_CDC_ACM_WR_BUFF_SIZE (4 * 1024)
+/** @} */
 
+/** @brief DMA-accessible endpoint OUT buffer. */
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t read_buffer[USBD_CDC_ACM_RD_BUFF_SIZE];
+/** @brief DMA-accessible endpoint IN buffer. */
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t write_buffer[USBD_CDC_ACM_WR_BUFF_SIZE];
 
 static Ring_Buffer_Type loopback_rb;
@@ -120,6 +154,10 @@ static volatile uint32_t acm_stats_start_ms = 0;
 
 TaskHandle_t usbd_cdc_acm_handle = NULL;
 
+/**
+ * @brief Notify the CDC ACM send task of a state or transfer event.
+ * @note Safe in task and interrupt contexts.
+ */
 void usbd_cdc_acm_event_trig(void)
 {
     if (usbd_cdc_acm_handle) {
@@ -136,11 +174,18 @@ void usbd_cdc_acm_event_trig(void)
     }
 }
 
+/** @brief Wait for a CDC ACM task notification.
+ * @param[in] timeout Maximum wait in FreeRTOS ticks.
+ */
 void usbd_cdc_acm_event_wait(uint32_t timeout)
 {
     ulTaskNotifyTake(pdTRUE, timeout);
 }
 
+/** @brief Update CDC ACM readiness for USB device events.
+ * @param[in] busid USB device-controller index.
+ * @param[in] event CherryUSB device event identifier.
+ */
 static void usbd_event_handler(uint8_t busid, uint8_t event)
 {
     switch (event) {
@@ -182,6 +227,12 @@ static void usbd_event_handler(uint8_t busid, uint8_t event)
     }
 }
 
+/** @brief Buffer received CDC data and rearm endpoint OUT.
+ * @param[in] busid USB device-controller index.
+ * @param[in] ep Completed endpoint address; unused.
+ * @param[in] nbytes Number of bytes received.
+ * @note Runs in USB endpoint-completion context.
+ */
 void usbd_cdc_acm_bulk_out(uint8_t busid, uint8_t ep, uint32_t nbytes)
 {
     // USB_LOG_RAW("dnld done, size: %d\r\n", nbytes);
@@ -209,6 +260,12 @@ void usbd_cdc_acm_bulk_out(uint8_t busid, uint8_t ep, uint32_t nbytes)
     usbd_cdc_acm_event_trig();
 }
 
+/** @brief Complete a CDC endpoint-IN transfer and send a ZLP when required.
+ * @param[in] busid USB device-controller index.
+ * @param[in] ep Completed endpoint address; unused.
+ * @param[in] nbytes Number of bytes transmitted.
+ * @note Runs in USB endpoint-completion context.
+ */
 void usbd_cdc_acm_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
 {
     if (usb_acm_ready_flag == false) {
@@ -229,10 +286,12 @@ void usbd_cdc_acm_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
 
 /* ringbuff lock/unlock */
 static volatile uintptr_t irq_flag;
+/** @brief Enter the ring-buffer critical section by saving IRQ state. */
 static void rb_lock_cb(void)
 {
     irq_flag = bflb_irq_save();
 }
+/** @brief Leave the ring-buffer critical section and restore IRQ state. */
 static void rb_unlock_cb(void)
 {
     bflb_irq_restore(irq_flag);
@@ -252,6 +311,10 @@ struct usbd_endpoint cdc_acm_in_ep = {
 static struct usbd_interface intf0;
 static struct usbd_interface intf1;
 
+/** @brief Register and initialize the CDC ACM device.
+ * @param[in] busid USB device-controller index.
+ * @param[in] reg_base USB controller register base.
+ */
 void cdc_acm_init(uint8_t busid, uintptr_t reg_base)
 {
     usbd_desc_register(busid, &cdc_descriptor);
@@ -264,6 +327,11 @@ void cdc_acm_init(uint8_t busid, uintptr_t reg_base)
 
 volatile bool dtr_enable = 0;
 /* usbd set dtr callback */
+/** @brief Handle a host DTR control-line change.
+ * @param[in] busid USB device-controller index; unused.
+ * @param[in] intf CDC interface number; unused.
+ * @param[in] dtr New DTR state; true enables loopback mode.
+ */
 void usbd_cdc_acm_set_dtr(uint8_t busid, uint8_t intf, bool dtr)
 {
     dtr_enable = dtr;
@@ -275,6 +343,11 @@ void usbd_cdc_acm_set_dtr(uint8_t busid, uint8_t intf, bool dtr)
     usbd_cdc_acm_event_trig();
 }
 /* usbd get dtr callback */
+/** @brief Handle a host RTS control-line change.
+ * @param[in] busid USB device-controller index; unused.
+ * @param[in] intf CDC interface number; unused.
+ * @param[in] rts New RTS state; currently unused.
+ */
 void usbd_cdc_acm_set_rts(uint8_t busid, uint8_t intf, bool rts)
 {
     // LOG_I("set_rts: %d\r\n", rts);
@@ -283,6 +356,11 @@ void usbd_cdc_acm_set_rts(uint8_t busid, uint8_t intf, bool rts)
 
 static volatile struct cdc_line_coding acm_line_coding;
 /* usbd set line coding callback */
+/** @brief Store line-coding parameters supplied by the host.
+ * @param[in] busid USB device-controller index; unused.
+ * @param[in] intf CDC interface number; unused.
+ * @param[in] line_coding New CDC line coding.
+ */
 void usbd_cdc_acm_set_line_coding(uint8_t busid, uint8_t intf, struct cdc_line_coding *line_coding)
 {
     // LOG_I("Set line coding, rate:%d, bits:%d, format:%d, parity:%d.\r\n",
@@ -291,6 +369,11 @@ void usbd_cdc_acm_set_line_coding(uint8_t busid, uint8_t intf, struct cdc_line_c
     acm_line_coding = *line_coding;
 }
 /* usbd get line coding callback */
+/** @brief Return the current line-coding parameters.
+ * @param[in] busid USB device-controller index; unused.
+ * @param[in] intf CDC interface number; unused.
+ * @param[out] line_coding Receives the current CDC line coding.
+ */
 void usbd_cdc_acm_get_line_coding(uint8_t busid, uint8_t intf, struct cdc_line_coding *line_coding)
 {
     (void)busid;
@@ -301,13 +384,21 @@ void usbd_cdc_acm_get_line_coding(uint8_t busid, uint8_t intf, struct cdc_line_c
 }
 
 /************************* ACM data send state machine *******************************/
+/** @name CDC ACM send-state identifiers
+ * @{ */
 #define ACM_SEND_STA_STOP               0
 #define ACM_SEND_STA_START              1
 #define ACM_SEND_STA_WAIT_USBD_CFG      2
 #define ACM_SEND_STA_SEND_HELLO         3
 #define ACM_SEND_STA_WAIT_LOOPBAKE_DATA 4
 #define ACM_SEND_STA_WAIT_SEND_DONE     5
+/** @} */
 
+/**
+ * @brief Run the CDC ACM greeting and DTR-controlled loopback state machine.
+ * @param[in] param Unused FreeRTOS task parameter.
+ * @note This task runs indefinitely and waits on task notifications when idle.
+ */
 void cdc_acm_data_send_task(void *param)
 {
     uint32_t time_node_ms = 0;
@@ -430,6 +521,7 @@ void cdc_acm_data_send_task(void *param)
     }
 }
 
+/** @brief Start the CDC ACM device and send-state task. */
 void usbd_cdc_acm_init(void)
 {
     /* usb init */
@@ -440,6 +532,7 @@ void usbd_cdc_acm_init(void)
     xTaskCreate(cdc_acm_data_send_task, (char *)"cdc_acm_send", 1024, NULL, 15, &usbd_cdc_acm_handle);
 }
 
+/** @brief Delete the send-state task and deinitialize the CDC ACM device. */
 void usbd_cdc_acm_deinit(void)
 {
     if (usbd_cdc_acm_handle) {

@@ -27,10 +27,12 @@
 #if defined(CONFIG_FATFS_SDH_SDCARD)
 
 void fatfs_sdh_driver_register(void);
+void fatfs_sdh_driver_unregister(void);
 
 #elif defined(CONFIG_FATFS_USBH)
 
 void fatfs_usbh_driver_register(struct usbh_msc *msc_class);
+void fatfs_usbh_driver_unregister(struct usbh_msc *msc_class);
 
 #endif
 

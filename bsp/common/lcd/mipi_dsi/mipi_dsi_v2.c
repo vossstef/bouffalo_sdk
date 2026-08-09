@@ -454,3 +454,122 @@ int mipi_dsi_v2_frame_callback_register(uint32_t callback_type, void (*callback)
     }
     return 0;
 }
+
+/* ---------- RGB565 base framebuffer + OSD1 SEOF path ----------
+ *
+ * The camera preview uses DPI's RGB565 base framebuffer directly. OSD1 stays
+ * transparent and exists only to generate a frame-boundary interrupt. Keep all
+ * state separate from the OSD0/LVGL path above so existing DSI applications
+ * cannot affect this mode. */
+
+static struct bflb_device_s *dsi_v2_rgb565_dpi = NULL;
+static struct bflb_device_s *dsi_v2_rgb565_osd = NULL;
+static void *dsi_v2_rgb565_screen_using = NULL;
+static void (*dsi_v2_rgb565_swap_callback)(void) = NULL;
+static void (*dsi_v2_rgb565_cycle_callback)(void) = NULL;
+
+static void mipi_dsi_v2_rgb565_osd1_isr(int irq, void *arg)
+{
+    (void)irq;
+    (void)arg;
+
+    bflb_osd_int_clear(dsi_v2_rgb565_osd);
+
+    if (dsi_v2_rgb565_cycle_callback != NULL) {
+        dsi_v2_rgb565_cycle_callback();
+    }
+    if (dsi_v2_rgb565_swap_callback != NULL) {
+        dsi_v2_rgb565_swap_callback();
+    }
+}
+
+int mipi_dsi_v2_rgb565_display_init(const mipi_dsi_v2_timing_t *cfg, uint32_t framebuffer_addr,
+                                    uint32_t osd_sync_buf)
+{
+    struct bflb_dpi_config_s dpi_config;
+    struct bflb_osd_blend_config_s osd_blend_config;
+
+    if (cfg == NULL || framebuffer_addr == 0 || osd_sync_buf == 0) {
+        return -2;
+    }
+
+    dsi_v2_rgb565_dpi = bflb_device_get_by_name("dpi");
+    dsi_v2_rgb565_osd = bflb_device_get_by_name("osd1");
+    if (dsi_v2_rgb565_dpi == NULL || dsi_v2_rgb565_osd == NULL) {
+        return -1;
+    }
+
+    dpi_config = (struct bflb_dpi_config_s){
+        .width = cfg->width,
+        .height = cfg->height,
+        .hsw = cfg->hsw,
+        .hbp = cfg->hbp,
+        .hfp = cfg->hfp,
+        .vsw = cfg->vsw,
+        .vbp = cfg->vbp,
+        .vfp = cfg->vfp,
+        .interface = DPI_INTERFACE_24_PIN,
+        .input_sel = DPI_INPUT_SEL_FRAMEBUFFER_WITH_OSD,
+        .test_pattern = DPI_TEST_PATTERN_NULL,
+        .data_format = DPI_DATA_FORMAT_RGB565,
+        .framebuffer_addr = framebuffer_addr,
+        .uv_framebuffer_addr = 0,
+    };
+    bflb_dpi_init(dsi_v2_rgb565_dpi, &dpi_config);
+    bflb_dpi_feature_control(dsi_v2_rgb565_dpi, DPI_CMD_SET_BURST, DPI_BURST_INCR8);
+
+    osd_blend_config = (struct bflb_osd_blend_config_s){
+        .blend_format = OSD_BLEND_FORMAT_ARGB8888,
+        .order_a = 3,
+        .order_rv = 2,
+        .order_gy = 1,
+        .order_bu = 0,
+        .coor = {
+            .start_x = 0,
+            .start_y = 0,
+            .end_x = 1,
+            .end_y = 1,
+        },
+        .layer_buffer_addr = osd_sync_buf,
+    };
+    bflb_osd_blend_init(dsi_v2_rgb565_osd, &osd_blend_config);
+    bflb_osd_blend_set_global_a(dsi_v2_rgb565_osd, true, 0);
+    bflb_osd_blend_enable(dsi_v2_rgb565_osd);
+
+    bflb_osd_int_clear(dsi_v2_rgb565_osd);
+    bflb_irq_attach(dsi_v2_rgb565_osd->irq_num, mipi_dsi_v2_rgb565_osd1_isr, NULL);
+    bflb_osd_int_mask(dsi_v2_rgb565_osd, false);
+    bflb_irq_enable(dsi_v2_rgb565_osd->irq_num);
+
+    dsi_v2_rgb565_screen_using = (void *)(uintptr_t)framebuffer_addr;
+    return 0;
+}
+
+int mipi_dsi_v2_rgb565_screen_switch(void *screen_buffer)
+{
+    if (screen_buffer == NULL) {
+        return -1;
+    }
+    if (dsi_v2_rgb565_dpi == NULL || dsi_v2_rgb565_osd == NULL) {
+        return -2;
+    }
+
+    bflb_dpi_framebuffer_switch(dsi_v2_rgb565_dpi, (uint32_t)(uintptr_t)screen_buffer);
+    dsi_v2_rgb565_screen_using = screen_buffer;
+    return 0;
+}
+
+void *mipi_dsi_v2_rgb565_get_screen_using(void)
+{
+    return dsi_v2_rgb565_screen_using;
+}
+
+int mipi_dsi_v2_rgb565_frame_callback_register(uint32_t callback_type, void (*callback)(void))
+{
+    if (callback_type == MIPI_DSI_V2_FRAME_INT_TYPE_SWAP) {
+        dsi_v2_rgb565_swap_callback = callback;
+    } else if (callback_type == MIPI_DSI_V2_FRAME_INT_TYPE_CYCLE) {
+        dsi_v2_rgb565_cycle_callback = callback;
+    }
+    return 0;
+}

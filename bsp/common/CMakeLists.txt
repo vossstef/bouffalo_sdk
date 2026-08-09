@@ -101,6 +101,7 @@ if(CONFIG_BSP_LCD)
         target_sources(app PRIVATE lcd/mipi_dsi/ili9806e_kd050fwfia019_dsi.c)
         target_sources(app PRIVATE lcd/mipi_dsi/st7102_yh494_dsi.c)
         target_sources(app PRIVATE lcd/mipi_dsi/axs15231b_hs035_dsi.c)
+        target_sources(app PRIVATE lcd/mipi_dsi/jd9365tx_7kf82_dsi.c)
     endif()
     sdk_add_include_directories(lcd/mipi_dsi)
 

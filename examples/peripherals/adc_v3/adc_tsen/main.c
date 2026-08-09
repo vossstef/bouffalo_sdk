@@ -4,18 +4,50 @@
 
 #define TEST_COUNT 10
 
-struct bflb_adc_channel_s chan[] = {
-    {.pos_chan = ADC0_INTERNAL_CHANNEL_TSEN_P, .neg_chan = ADC0_INTERNAL_CHANNEL_NULL,},
+static struct bflb_adc_channel_s chan_vbat[] = {
+    {
+        .pos_chan = ADC0_INTERNAL_CHANNEL_VBAT_HALF,
+        .neg_chan = ADC0_INTERNAL_CHANNEL_NULL,
+    },
 };
 
-struct bflb_device_s *adc;
+static struct bflb_adc_channel_s chan_tsen_inject[] = {
+    {
+        .pos_chan = ADC0_INTERNAL_CHANNEL_TSEN_P,
+        .neg_chan = ADC0_INTERNAL_CHANNEL_NULL,
+    },
+    {
+        .pos_chan = ADC0_INTERNAL_CHANNEL_TSEN_N,
+        .neg_chan = ADC0_INTERNAL_CHANNEL_NULL,
+    },
+};
+
+static struct bflb_device_s *adc;
+
+static float adc_read_tsen_inject(void)
+{
+    uint32_t raw_tsen_p;
+    uint32_t raw_tsen_n;
+
+    bflb_adc_clear_fifo_inject(adc, 0);
+    bflb_adc_clear_fifo_inject(adc, 1);
+    bflb_adc_start_conversion_inject(adc);
+    while ((bflb_adc_get_count_inject(adc, 0) == 0) || (bflb_adc_get_count_inject(adc, 1) == 0)) {}
+
+    raw_tsen_p = bflb_adc_read_raw_inject(adc, 0);
+    raw_tsen_n = bflb_adc_read_raw_inject(adc, 1);
+
+    return bflb_adc_tsen_raw_to_temperature(adc, raw_tsen_p, raw_tsen_n);
+}
 
 int main(void)
 {
-    board_init();
-    board_adc_gpio_init();
+    uint32_t raw_vbat;
+    struct bflb_adc_result_s vbat_result;
 
-    adc = bflb_device_get_by_name("adc_v3_0");
+    board_init();
+
+    adc = bflb_device_get_by_name(BFLB_NAME_ADC_V3_0);
     printf("adc_v3_0 = 0x%08lX\r\n", adc);
 
     struct bflb_adc_common_config_s common_cfg;
@@ -32,14 +64,24 @@ int main(void)
 
     bflb_adc_common_init(&common_cfg);
     bflb_adc_init(adc, &cfg);
-    bflb_adc_channel_config_internal(adc, chan, sizeof(chan) / sizeof(chan[0]));
-    bflb_adc_tsen_init(adc, ADC_TSEN_MOD_INTERNAL_DIODE);
+    bflb_adc_channel_config_internal(adc, chan_vbat, sizeof(chan_vbat) / sizeof(chan_vbat[0]));
+    bflb_adc_channel_config_internal_inject(adc, chan_tsen_inject,
+                                            sizeof(chan_tsen_inject) / sizeof(chan_tsen_inject[0]));
+    bflb_adc_feature_control(adc, ADC_CMD_VBAT_EN, true);
+    bflb_adc_start_conversion(adc);
 
     for (int i = 0; i < TEST_COUNT; i++) {
+        while (bflb_adc_get_count(adc) == 0) {}
+        raw_vbat = bflb_adc_read_raw(adc);
+        bflb_adc_parse_result(adc, &raw_vbat, &vbat_result, 1);
+        printf("vbat= %d mV\r\n", vbat_result.millivolt * 2);
+
+        printf("temperature = %.2f\r\n", adc_read_tsen_inject());
         bflb_mtimer_delay_ms(100);
-        printf("temp = %.2f\r\n", bflb_adc_tsen_get_temp(adc));
     }
-    printf("ADC temperature sensor test complete\r\n");
+
+    bflb_adc_stop_conversion(adc);
+    printf("ADC VBAT and temperature sensor inject test complete\r\n");
 
     while (1) {
         bflb_mtimer_delay_ms(1000);

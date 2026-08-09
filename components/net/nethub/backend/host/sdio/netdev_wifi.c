@@ -199,8 +199,8 @@ int netdev_wifi_init(mr_msg_ctrl_priv_t *msg_ctrl)
         .upld_frame_count = NETDEV_NETHUB_CNT,
         .upld_frame_buff = netdev_nethub_frame_buff,
 #ifdef BL618DG
-        .dnld_credit_max = 18,
-        .upld_credit_update_threshold = 14,
+        .dnld_credit_max = 23,
+        .upld_credit_update_threshold = 6,
 #else
         .dnld_credit_max = 8,
         .upld_credit_update_threshold = 6,

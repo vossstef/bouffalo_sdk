@@ -29,6 +29,10 @@ void adc_isr(int irq, void *arg)
 
 int main(void)
 {
+    struct bflb_adc_inject_context_s inject_context;
+    bool inject_context_active = false;
+    int ret;
+
     board_init();
     board_adc_gpio_init();
 
@@ -42,10 +46,28 @@ int main(void)
     cfg.resolution = ADC_RESOLUTION_16B;
     cfg.vref = ADC_VREF_INTERNAL_1P25;
 
-    bflb_adc_init(adc, &cfg);
+    if (bflb_adc_init(adc, &cfg) < 0) {
+        printf("Failed to initialize ADC\r\n");
+        return -1;
+    }
     bflb_adc_channel_config_external(adc, chan_regular, sizeof(chan_regular) / sizeof(chan_regular[0]));
-    bflb_adc_channel_config_external_inject(adc, chan_inject, sizeof(chan_inject) / sizeof(chan_inject[0]));
-    bflb_adc_feature_control(adc, ADC_CMD_SET_THRE_RDY_INJECT, sizeof(chan_inject) / sizeof(chan_inject[0]));
+    if (bflb_adc_inject_context_save(adc, &inject_context) < 0) {
+        printf("Failed to acquire ADC inject context\r\n");
+        return -1;
+    }
+    inject_context_active = true;
+    ret = bflb_adc_channel_config_external_inject(adc, chan_inject, sizeof(chan_inject) / sizeof(chan_inject[0]));
+    if (ret < 0) {
+        printf("Failed to configure ADC inject channels: %d\r\n", ret);
+        bflb_adc_inject_context_restore(adc, &inject_context);
+        return -1;
+    }
+    ret = bflb_adc_feature_control(adc, ADC_CMD_SET_THRE_RDY_INJECT, sizeof(chan_inject) / sizeof(chan_inject[0]));
+    if (ret < 0) {
+        printf("Failed to configure ADC inject threshold: %d\r\n", ret);
+        bflb_adc_inject_context_restore(adc, &inject_context);
+        return -1;
+    }
     bflb_adc_int_mask(adc, ADC_INT_INJECT_FIFO_RDY, false);
     bflb_irq_attach(adc->irq_num, adc_isr, NULL);
     bflb_irq_enable(adc->irq_num);
@@ -70,6 +92,15 @@ int main(void)
                 bflb_adc_parse_result(adc, &raw_data, &result, 1);
                 printf("inject_%d: raw_data = 0x%08lX, pos=%d, neg=%d, millivolt=%d\r\n", i, raw_data, result.pos_chan, result.neg_chan, result.millivolt);
             }
+            if (bflb_adc_inject_context_restore(adc, &inject_context) == 0) {
+                inject_context_active = false;
+            }
+        }
+    }
+    if (inject_context_active) {
+        ret = bflb_adc_inject_context_restore(adc, &inject_context);
+        if (ret < 0) {
+            printf("Failed to restore ADC inject context: %d\r\n", ret);
         }
     }
     bflb_adc_stop_conversion(adc);

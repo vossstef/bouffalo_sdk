@@ -78,8 +78,6 @@ static void __ota_status_cb(void *arg, https_fota_status_t event)
         case HTTPS_FOTA_SUCCESS:
             printf("HTTPS_FOTA_SUCCESS\r\n");
             *ota_progress = 0;
-            vTaskDelay(pdMS_TO_TICKS(100));
-            bl_sys_reset_por();
             break;
 
         case HTTPS_FOTA_ABORT:
@@ -93,8 +91,8 @@ static void __ota_status_cb(void *arg, https_fota_status_t event)
 }
 
 /**
- * @brief Shell command: https_ota_start <url>
- *   e.g. https_ota_start http://192.168.31.112:5000/build/build_out/fw.bin.ota
+ * @brief Shell command: https_ota_start <url> [reboot]
+ *   e.g. https_ota_start http://192.168.31.112:5000/build/build_out/fw.bin.ota 0
  */
 int cmd_https_ota_start(int argc, char **argv)
 {
@@ -104,8 +102,8 @@ int cmd_https_ota_start(int argc, char **argv)
 
     struct https_fota_config config = {0};
 
-    if (argc <= 1) {
-        printf("Usage: https_ota_start <url>\r\n");
+    if (argc <= 1 || argc > 3) {
+        printf("Usage: https_ota_start <url> [reboot: 0|1, default: 1]\r\n");
         return -1;
     }
     if (ota_progress) {
@@ -118,6 +116,16 @@ int cmd_https_ota_start(int argc, char **argv)
 
     config.callback = __ota_status_cb;
     config.user_arg = &ota_progress;
+    config.reboot = true;
+    if (argc == 3) {
+        if (strcmp(argv[2], "0") == 0) {
+            config.reboot = false;
+        } else if (strcmp(argv[2], "1") != 0) {
+            ota_progress = 0;
+            printf("Usage: https_ota_start <url> [reboot: 0|1, default: 1]\r\n");
+            return -1;
+        }
+    }
 
     ret = app_https_ota_fill_config(url, &config);
     if (ret != 0) {

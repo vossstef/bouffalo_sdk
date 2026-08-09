@@ -46,7 +46,10 @@ int main(void)
     cfg.resolution = ADC_RESOLUTION_14B;
     cfg.vref = ADC_VREF_INTERNAL_1P25;
 
-    bflb_adc_init(adc, &cfg);
+    if (bflb_adc_init(adc, &cfg) < 0) {
+        printf("Failed to initialize ADC\r\n");
+        return -1;
+    }
     bflb_adc_channel_config_external(adc, chan, sizeof(chan) / sizeof(chan[0]));
     bflb_adc_feature_control(adc, ADC_CMD_SET_THRE_DMA_REGULAR, ADC_THRE_FOR_DMA_4);
     bflb_adc_link_rxdma(adc, true);

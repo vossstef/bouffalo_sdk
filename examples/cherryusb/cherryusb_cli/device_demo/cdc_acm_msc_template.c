@@ -3,6 +3,11 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+/**
+ * @file cdc_acm_msc_template.c
+ * @brief CherryUSB composite CDC ACM and mass-storage device.
+ */
+
 #include "usbd_core.h"
 #include "usbd_cdc_acm.h"
 #include "usbd_msc.h"
@@ -45,16 +50,19 @@
 #define MSC_MAX_MPS 64
 #endif
 
+/** @brief USB device descriptor for the composite device. */
 static const uint8_t device_descriptor[] = {
     USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0xEF, 0x02, 0x01, USBD_VID, USBD_PID, 0x0100, 0x01)
 };
 
+/** @brief Composite CDC ACM and MSC configuration descriptor. */
 static const uint8_t config_descriptor[] = {
     USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x03, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
     CDC_ACM_DESCRIPTOR_INIT(0x00, CDC_INT_EP, CDC_OUT_EP, CDC_IN_EP, CDC_MAX_MPS, 0x02),
     MSC_DESCRIPTOR_INIT(0x02, MSC_OUT_EP, MSC_IN_EP, MSC_MAX_MPS, 0x00)
 };
 
+/** @brief USB device-qualifier descriptor. */
 static const uint8_t device_quality_descriptor[] = {
     ///////////////////////////////////////
     /// device qualifier descriptor
@@ -71,6 +79,7 @@ static const uint8_t device_quality_descriptor[] = {
     0x00,
 };
 
+/** @brief USB string descriptors. */
 static const char *string_descriptors[] = {
     (const char[]){ 0x09, 0x04 }, /* Langid */
     "CherryUSB",                  /* Manufacturer */
@@ -78,21 +87,38 @@ static const char *string_descriptors[] = {
     "2022123456",                 /* Serial Number */
 };
 
+/** @brief Return the device descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Device descriptor address.
+ */
 static const uint8_t *device_descriptor_callback(uint8_t speed)
 {
     return device_descriptor;
 }
 
+/** @brief Return the configuration descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Configuration descriptor address.
+ */
 static const uint8_t *config_descriptor_callback(uint8_t speed)
 {
     return config_descriptor;
 }
 
+/** @brief Return the device-qualifier descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Device-qualifier descriptor address.
+ */
 static const uint8_t *device_quality_descriptor_callback(uint8_t speed)
 {
     return device_quality_descriptor;
 }
 
+/** @brief Return a USB string descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @param[in] index String descriptor index.
+ * @return Descriptor string, or NULL when unsupported.
+ */
 static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
 {
     if (index > 3) {
@@ -101,6 +127,7 @@ static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
     return string_descriptors[index];
 }
 
+/** @brief Descriptor callback table for the composite device. */
 const struct usb_descriptor cdc_msc_descriptor = {
     .device_descriptor_callback = device_descriptor_callback,
     .config_descriptor_callback = config_descriptor_callback,
@@ -119,6 +146,10 @@ extern void cdc_acm_data_send_task(void *param);
 void usbd_cdc_acm_event_trig(void);
 
 /*  */
+/** @brief Update shared CDC ACM readiness for USB device events.
+ * @param[in] busid USB device-controller index.
+ * @param[in] event CherryUSB device event identifier.
+ */
 static void usbd_event_handler(uint8_t busid, uint8_t event)
 {
     switch (event) {
@@ -162,6 +193,10 @@ static struct usbd_interface intf0;
 static struct usbd_interface intf1;
 static struct usbd_interface intf2;
 
+/** @brief Register and initialize the composite CDC ACM and MSC device.
+ * @param[in] busid USB device-controller index.
+ * @param[in] reg_base USB controller register base.
+ */
 void cdc_acm_msc_init(uint8_t busid, uintptr_t reg_base)
 {
     usbd_desc_register(busid, &cdc_msc_descriptor);
@@ -175,6 +210,7 @@ void cdc_acm_msc_init(uint8_t busid, uintptr_t reg_base)
     usbd_initialize(busid, reg_base, usbd_event_handler);
 }
 
+/** @brief Start the composite device and its CDC ACM send task. */
 void usbd_acm_msc_init(void)
 {
     /* usb init */
@@ -185,6 +221,7 @@ void usbd_acm_msc_init(void)
     xTaskCreate(cdc_acm_data_send_task, (char *)"cdc_acm_send", 1024, NULL, 15, &usbd_cdc_acm_handle);
 }
 
+/** @brief Stop the CDC ACM send task and deinitialize the composite device. */
 void usbd_acm_msc_deinit(void)
 {
     if (usbd_cdc_acm_handle) {

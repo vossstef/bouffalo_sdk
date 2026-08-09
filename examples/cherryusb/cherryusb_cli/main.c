@@ -1,3 +1,8 @@
+/**
+ * @file main.c
+ * @brief CherryUSB device and host demonstration application entry point.
+ */
+
 #include "bflb_mtimer.h"
 #include "bflb_uart.h"
 #include "board.h"
@@ -23,6 +28,12 @@
 
 static TaskHandle_t start_handle;
 
+/**
+ * @brief Initialize the command shell and optional lwIP stack.
+ *
+ * @param[in] param Unused FreeRTOS task parameter.
+ * @note The task deletes itself after initialization is complete.
+ */
 void start_main(void *param)
 {
     LOG_I("[OS] start_main task run\r\n");
@@ -41,6 +52,11 @@ void start_main(void *param)
     vTaskDelete(NULL);
 }
 
+/**
+ * @brief Initialize the board and start the CherryUSB demonstration scheduler.
+ *
+ * @return This function does not return after the scheduler starts.
+ */
 int main(void)
 {
     board_init();

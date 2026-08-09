@@ -15,7 +15,7 @@ CONFIG_MR_NETLINK?=n
 CONFIG_MR_VIRTUALCHAN?=n
 
 # Speed test module enable
-CONFIG_MR_SPEED_TEST?=y
+CONFIG_MR_SPEED_TEST?=n
 
 # TTY module and user command enable
 CONFIG_MR_TTY?=n

@@ -353,7 +353,7 @@ static int rndis_set_cmd_handler(uint8_t *data, uint32_t len)
 {
     rndis_set_msg_t *cmd = (rndis_set_msg_t *)data;
     rndis_set_cmplt_t *resp;
-    rndis_config_parameter_t *param;
+    // rndis_config_parameter_t *param;
 
     (void)len;
 
@@ -365,14 +365,9 @@ static int rndis_set_cmd_handler(uint8_t *data, uint32_t len)
 
     switch (cmd->Oid) {
         case OID_GEN_RNDIS_CONFIG_PARAMETER:
-            param = (rndis_config_parameter_t *)((uint8_t *)&(cmd->RequestId) + cmd->InformationBufferOffset);
-            USB_LOG_WRN("RNDIS cfg param: NameOfs=%d, NameLen=%d, ValueOfs=%d, ValueLen=%d\r\n",
-                        param->ParameterNameOffset, param->ParameterNameLength,
-                        param->ParameterValueOffset, param->ParameterValueLength);
             break;
         case OID_GEN_CURRENT_PACKET_FILTER:
             if (cmd->InformationBufferLength < sizeof(g_usbd_rndis.net_filter)) {
-                USB_LOG_WRN("PACKET_FILTER!\r\n");
                 resp->Status = RNDIS_STATUS_INVALID_DATA;
             } else {
                 uint32_t *filter;
@@ -494,13 +489,8 @@ void rndis_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
 {
     (void)busid;
 
-    if ((nbytes % usbd_get_ep_mps(0, ep)) == 0 && nbytes) {
-        /* send zlp */
-        usbd_ep_start_write(0, ep, NULL, 0);
-    } else {
-        usbd_rndis_data_send_done(g_rndis_tx_data_length);
-        g_rndis_tx_data_length = 0;
-    }
+    usbd_rndis_data_send_done(g_rndis_tx_data_length);
+    g_rndis_tx_data_length = 0;
 }
 
 void rndis_int_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
@@ -520,6 +510,11 @@ int usbd_rndis_start_write(uint8_t *buf, uint32_t len)
 
     if (g_rndis_tx_data_length > 0) {
         return -USB_ERR_BUSY;
+    }
+
+    if((len % usbd_get_ep_mps(0, rndis_ep_data[RNDIS_IN_EP_IDX].ep_addr)) == 0) {
+        /* If the data length is a multiple of the endpoint max packet size, add one byte to indicate the end of the transfer. */
+        len += 1;
     }
 
     g_rndis_tx_data_length = len;

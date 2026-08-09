@@ -11,5 +11,6 @@ typedef struct {
 } nethub_context_t;
 
 nethub_context_t *nh_ctx_get(void);
+int nh_core_set_active_host_link(nethub_channel_t host_link);
 
 #endif

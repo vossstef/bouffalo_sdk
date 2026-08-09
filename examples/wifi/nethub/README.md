@@ -12,8 +12,9 @@ continue with the documents under `docs/`.
 | --- | --- |
 | Default interface | `SDIO` |
 | USB interface | device-side backend implemented with `ECM + ACM` |
+| BL616 / BL618DG dual profile | `CONFIG_NETHUB_PROFILE_DUAL=y` enables boot-only SDIO/USB autodetect and locks the first effective host candidate |
 | SPI interface | not implemented |
-| USER virtual channel | default interface is `SDIO` |
+| USER virtual channel | end-to-end in-tree Host support is currently on `SDIO`; the USB ACM device path is implemented |
 | Optional AT control solution | available through example composition, not a core NetHub dependency |
 | Low power | see `docs/NetHub.md`, "Current Support Matrix" |
 
@@ -56,10 +57,12 @@ Configuration entry:
 Important options:
 
 - `CONFIG_NETHUB=y`
+- `CONFIG_NETHUB_PROFILE_DUAL=y`
+  - BL616 and BL618DG production option: compile SDIO and USB together, wait for the first effective host candidate, then lock one active host; after lock, the selected host follows its single-profile behavior
 - `CONFIG_NETHUB_PROFILE_SDIO=y`
 - `CONFIG_NETHUB_PROFILE_USB=y`
 - `CONFIG_NETHUB_PROFILE_SPI=y`
-  - config symbol names use `PROFILE`, but choose exactly one interface per build
+  - config symbol names use `PROFILE`; use SDIO-only, USB-only, or the dual profile option on BL616 and BL618DG
 - `CONFIG_WL80211=y`
   - use the `wl80211` Wi-Fi backend
 - `CONFIG_WL80211` unset
@@ -83,6 +86,7 @@ About `CONFIG_NETHUB_AT_USE_VCHAN`:
 
 Current default example values include:
 
+- `CONFIG_NETHUB_PROFILE_DUAL=n`
 - `CONFIG_NETHUB_PROFILE_SDIO=y`
 - `CONFIG_NETHUB_PROFILE_USB=n`
 - `CONFIG_NETHUB_CTRLCHANNEL_USE_ATMODULE=y`

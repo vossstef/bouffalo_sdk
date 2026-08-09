@@ -254,6 +254,10 @@ SECTIONS
     . = ALIGN(CONFIG_PMP_ALIGN_SIZE);
     SECTION_LOAD_PROLOGUE(tcm_text, ,)
     {
+#ifdef CONFIG_RAM_COPY_CODE
+        *(.text*)
+#endif
+
 #if defined(CONFIG_WFA) && !defined(CONFIG_PSRAM_COPY_CODE)
         INCLUDE run_in_ram_function.ld.in
 
@@ -318,6 +322,11 @@ SECTIONS
         *_clz*.o*(.rodata*)
         *bflb_flash*.o*(.rodata*)
         *bl616_romapi_patch*.o*(.rodata*)
+
+#ifdef CONFIG_RAM_COPY_CODE
+        *(.rodata*)
+        *(.srodata*)
+#endif
 
         . = ALIGN(CONFIG_PMP_ALIGN_SIZE);
     } > ram AT > rom

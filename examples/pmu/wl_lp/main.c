@@ -2,6 +2,8 @@
 #include "task.h"
 #include "timers.h"
 
+#include <stdlib.h>
+#include <string.h>
 #include <lwip/tcpip.h>
 #include <lwip/sockets.h>
 #include <lwip/netdb.h>
@@ -91,6 +93,8 @@ extern void wifi_event_handler(async_input_event_t ev, void *priv);
  ****************************************************************************/
 
 #if defined(BL616CL)
+static PM_LOWPOWER_CFG_Type app_lowpower_cfg;
+
 static void wl_lp_bl616cl_gpio_ie_disable(uint8_t pin)
 {
     uint32_t reg_addr;
@@ -109,30 +113,30 @@ static void wl_lp_bl616cl_pds_gpio_prepare(void)
     wl_lp_bl616cl_gpio_ie_disable(GPIO_PIN_18);
 }
 
-static void wl_lp_bl616cl_dcdc_init(void)
-{
-#if (PM_EXT_DCDC_SYS_ENABLE_PIN != 0xFF)
-    pm_dcdc_sys_enable_ctrl(PM_EXT_DCDC_SYS_ENABLE_PIN, ENABLE);
-    printf("[PMU] DCDC SYS enable GPIO: GPIO_%d\r\n", PM_EXT_DCDC_SYS_ENABLE_PIN);
-#endif
-
-#if (PM_EXT_DCDC_SOC_CTRL_PIN != 0xFF)
-    pm_dcdc_soc_vsel_ctrl(PM_EXT_DCDC_SOC_CTRL_PIN, 1);
-    printf("[PMU] DCDC SOC vsel GPIO: GPIO_%d, active level 0.9V\r\n", PM_EXT_DCDC_SOC_CTRL_PIN);
-#endif
-
-#if (PM_EXT_DCDC_SOC_ENABLE_PIN != 0xFF)
-    HBN_SW_Set_Ldo_Soc_Vout(PM_PDS_LDO_SOC_ACTIVE_LEVEL);
-    pm_dcdc_soc_enable_ctrl(PM_EXT_DCDC_SOC_ENABLE_PIN, ENABLE);
-    printf("[PMU] DCDC SOC enable GPIO: GPIO_%d\r\n", PM_EXT_DCDC_SOC_ENABLE_PIN);
-#endif
-}
-
 void lp_hook_pre_user(void *arg)
 {
     (void)arg;
 
     wl_lp_bl616cl_pds_gpio_prepare();
+}
+
+static int app_lowpower_mode_load(uint8_t mode)
+{
+    const PM_LOWPOWER_CFG_Type *mode_cfg;
+
+    mode_cfg = pm_power_mode_cfg_get(mode);
+    if (mode_cfg == NULL) {
+        return -1;
+    }
+
+    app_lowpower_cfg = *mode_cfg;
+
+    return 0;
+}
+
+const PM_LOWPOWER_CFG_Type *bl616cl_lowpower_cfg_get(void)
+{
+    return &app_lowpower_cfg;
 }
 #endif
 
@@ -561,6 +565,20 @@ static void cmd_hbn_test(int argc, char **argv)
             bl_lp_hbn_enter(&hbn_test_cfg);
         }
     }
+#elif defined(BL616CL)
+    uint32_t sleep_seconds = 5;
+    uint32_t hbn_level = PM_HBN_LEVEL_0;
+
+    if (argc >= 2) {
+        sleep_seconds = (uint32_t)atoi(argv[1]);
+    }
+    if (argc >= 3) {
+        hbn_level = (uint32_t)atoi(argv[2]);
+    }
+
+    printf("enter hbn_%lu mode, sleep %lus\r\n", hbn_level, sleep_seconds);
+    vTaskDelay(1);
+    pm_hbn_mode_enter(hbn_level, 32768 * sleep_seconds);
 #else
     (void)argc;
     (void)argv;
@@ -674,6 +692,143 @@ static void cmd_lpfw_clock_cfg(int argc, char **argv)
 }
 #endif
 
+#if defined(BL616CL)
+static int parse_u8_arg(const char *arg, uint8_t *value)
+{
+    char *endptr;
+    unsigned long val;
+
+    if ((arg == NULL) || (value == NULL)) {
+        return -1;
+    }
+
+    val = strtoul(arg, &endptr, 0);
+    if ((endptr == arg) || (*endptr != '\0') || (val > 0xFF)) {
+        return -1;
+    }
+
+    *value = (uint8_t)val;
+    return 0;
+}
+
+static void cmd_pm_power(int argc, char **argv)
+{
+    uint8_t mode;
+    uint8_t dcdc_sys_enable_pin;
+    uint8_t dcdc_soc_enable_pin;
+    uint8_t dcdc_soc_vsel_pin;
+    uint8_t lp_mask;
+    uint8_t pds_clk;
+    const PM_LOWPOWER_CFG_Type *cfg;
+    PM_LOWPOWER_CFG_Type new_cfg;
+
+    if ((argc == 2) && (strcmp(argv[1], "list") == 0)) {
+        for (uint8_t i = 0; i < PM_POWER_MODE_MAX; i++) {
+            cfg = pm_power_mode_cfg_get(i);
+            if (cfg != NULL) {
+                printf("%u: %s\r\n", i, cfg->name);
+            }
+        }
+        return;
+    }
+
+    if ((argc == 2) && (strcmp(argv[1], "get") == 0)) {
+        printf("pm_power cfg: %s\r\n", app_lowpower_cfg.name ? app_lowpower_cfg.name : "");
+        printf("  dcdc_sys_gpio          : 0x%02x\r\n", app_lowpower_cfg.sys_cfg.dcdc_sys_enable_pin);
+        printf("  dcdc_sys_pds_enable    : %u\r\n", app_lowpower_cfg.sys_cfg.dcdc_sys_pds_enable);
+        printf("  ldo_sys_active_level   : %u\r\n", app_lowpower_cfg.sys_cfg.ldo_sys_active_level);
+        printf("  ldo_sys_pds_level      : %u\r\n", app_lowpower_cfg.sys_cfg.ldo_sys_pds_level);
+        printf("  dcdc_soc_gpio          : 0x%02x\r\n", app_lowpower_cfg.soc_cfg.dcdc_soc_enable_pin);
+        printf("  dcdc_soc_vsel_gpio     : 0x%02x\r\n", app_lowpower_cfg.soc_cfg.dcdc_soc_vsel_pin);
+        printf("  dcdc_soc_pds_enable    : %u\r\n", app_lowpower_cfg.soc_cfg.dcdc_soc_pds_enable);
+        printf("  dcdc_soc_pds_level     : %u\r\n", app_lowpower_cfg.soc_cfg.dcdc_soc_pds_level);
+        printf("  ldo_soc_active_level   : %u\r\n", app_lowpower_cfg.soc_cfg.ldo_soc_active_level);
+        printf("  ldo_soc_enter_pds      : %u\r\n", app_lowpower_cfg.soc_cfg.ldo_soc_enter_pds_level);
+        printf("  ldo_soc_pds_level      : %u\r\n", app_lowpower_cfg.soc_cfg.ldo_soc_pds_level);
+        printf("  pds_gpio_keep_en       : %u\r\n", app_lowpower_cfg.lp_cfg.pds_gpio_keep_en);
+        printf("  hbn_gpio_keep_en       : %u\r\n", app_lowpower_cfg.lp_cfg.hbn_gpio_keep_en);
+        printf("  pds_flash_power_off    : %u\r\n", app_lowpower_cfg.lp_cfg.pds_flash_power_off);
+        printf("  pll_power_off          : %u\r\n", app_lowpower_cfg.lp_cfg.pll_power_off);
+        printf("  rf_power_off           : %u\r\n", app_lowpower_cfg.lp_cfg.rf_power_off);
+        printf("  clk_default_sel        : %u\r\n", app_lowpower_cfg.lp_cfg.clk_default_sel);
+        printf("  set_all_ram_ret_en     : %u\r\n", app_lowpower_cfg.lp_cfg.set_all_ram_ret_en);
+        printf("  hbn_flash_power_off    : %u\r\n", app_lowpower_cfg.lp_cfg.hbn_flash_power_off);
+        printf("  ldo18io_power_down     : %u\r\n", app_lowpower_cfg.lp_cfg.ldo18io_power_down);
+        return;
+    }
+
+    if ((argc == 5) || (argc == 7)) {
+        if ((parse_u8_arg(argv[1], &mode) != 0) ||
+            (parse_u8_arg(argv[2], &dcdc_sys_enable_pin) != 0) ||
+            (parse_u8_arg(argv[3], &dcdc_soc_enable_pin) != 0) ||
+            (parse_u8_arg(argv[4], &dcdc_soc_vsel_pin) != 0)) {
+            printf("invalid argument\r\n");
+            return;
+        }
+
+        cfg = pm_power_mode_cfg_get(mode);
+        if (cfg == NULL) {
+            printf("invalid mode\r\n");
+            return;
+        }
+        new_cfg = *cfg;
+
+        if (((new_cfg.sys_cfg.dcdc_sys_enable_pin == 0xFF) && (dcdc_sys_enable_pin != 0xFF)) ||
+            ((new_cfg.soc_cfg.dcdc_soc_enable_pin == 0xFF) && (dcdc_soc_enable_pin != 0xFF)) ||
+            ((new_cfg.soc_cfg.dcdc_soc_vsel_pin == 0xFF) && (dcdc_soc_vsel_pin != 0xFF)) ||
+            ((dcdc_sys_enable_pin != 0xFF) && (dcdc_sys_enable_pin >= GPIO_PIN_MAX)) ||
+            ((dcdc_soc_enable_pin != 0xFF) && (dcdc_soc_enable_pin >= GPIO_PIN_MAX)) ||
+            ((dcdc_soc_vsel_pin != 0xFF) && (dcdc_soc_vsel_pin >= GPIO_PIN_MAX)) ||
+            ((dcdc_sys_enable_pin != 0xFF) && (dcdc_sys_enable_pin == dcdc_soc_enable_pin)) ||
+            ((dcdc_sys_enable_pin != 0xFF) && (dcdc_sys_enable_pin == dcdc_soc_vsel_pin)) ||
+            ((dcdc_soc_enable_pin != 0xFF) && (dcdc_soc_enable_pin == dcdc_soc_vsel_pin))) {
+            printf("invalid GPIO config for current mode\r\n");
+            return;
+        }
+
+        new_cfg.sys_cfg.dcdc_sys_enable_pin = dcdc_sys_enable_pin;
+        new_cfg.soc_cfg.dcdc_soc_enable_pin = dcdc_soc_enable_pin;
+        new_cfg.soc_cfg.dcdc_soc_vsel_pin = dcdc_soc_vsel_pin;
+
+        if (argc == 7) {
+            if ((parse_u8_arg(argv[5], &lp_mask) != 0) ||
+                (parse_u8_arg(argv[6], &pds_clk) != 0) ||
+                (pds_clk > PM_PDS_CLK_RC16M)) {
+                printf("invalid LP config\r\n");
+                return;
+            }
+
+            new_cfg.lp_cfg.pds_gpio_keep_en = (lp_mask >> 0) & 0x1;
+            new_cfg.lp_cfg.hbn_gpio_keep_en = (lp_mask >> 1) & 0x1;
+            new_cfg.lp_cfg.pds_flash_power_off = (lp_mask >> 2) & 0x1;
+            new_cfg.lp_cfg.pll_power_off = (lp_mask >> 3) & 0x1;
+            new_cfg.lp_cfg.rf_power_off = (lp_mask >> 4) & 0x1;
+            new_cfg.lp_cfg.clk_default_sel = pds_clk;
+            new_cfg.lp_cfg.set_all_ram_ret_en = (lp_mask >> 5) & 0x1;
+            new_cfg.lp_cfg.hbn_flash_power_off = (lp_mask >> 6) & 0x1;
+            new_cfg.lp_cfg.ldo18io_power_down = (lp_mask >> 7) & 0x1;
+        }
+
+        app_lowpower_cfg = new_cfg;
+        pm_dcdc_sys_exit_pds(&app_lowpower_cfg.sys_cfg);
+        pm_dcdc_soc_exit_pds(&app_lowpower_cfg.soc_cfg);
+        printf("power config updated: %u %s\r\n", mode, app_lowpower_cfg.name ? app_lowpower_cfg.name : "");
+        return;
+    }
+
+    {
+        printf("usage: pm_power list\r\n");
+        printf("usage: pm_power get\r\n");
+        printf("usage: pm_power <mode> <dcdc_sys_gpio> <dcdc_soc_gpio> <dcdc_soc_vsel_gpio>\r\n");
+        printf("usage: pm_power <mode> <dcdc_sys_gpio> <dcdc_soc_gpio> <dcdc_soc_vsel_gpio> <lp_mask> <pds_clk>\r\n");
+        printf("       use 0xff for unused GPIO\r\n");
+        printf("       lp_mask bit0=pds_gpio_keep bit1=hbn_gpio_keep bit2=pds_flash_off bit3=pll_off bit4=rf_off bit5=ram_ret bit6=hbn_flash_off bit7=ldo18io_down\r\n");
+        printf("       pds_clk: 0=f32k, 1=rc32m, 2=xtal, 3=xtal_lp, 4=rc8m, 5=rc16m\r\n");
+        return;
+    }
+}
+#endif
+
 SHELL_CMD_EXPORT_ALIAS(cmd_tickless, tickless, cmd tickless);
 SHELL_CMD_EXPORT_ALIAS(cmd_wifi_lp, wifi_lp_test, wifi low power test);
 SHELL_CMD_EXPORT_ALIAS(test_tcp_keepalive, lpfw_tcp_keepalive, tcp keepalive test);
@@ -683,6 +838,9 @@ SHELL_CMD_EXPORT_ALIAS(cmd_send_arp, arp_send, cmd send arp);
 #if !defined(BL616)
 SHELL_CMD_EXPORT_ALIAS(cmd_lpfw_uart_cfg, lpfw_uart, cmd lpfw_uart);
 SHELL_CMD_EXPORT_ALIAS(cmd_lpfw_clock_cfg, lpfw_clock, cmd lpfw_clock);
+#endif
+#if defined(BL616CL)
+SHELL_CMD_EXPORT_ALIAS(cmd_pm_power, pm_power, cmd pm_power);
 #endif
 #endif
 
@@ -745,16 +903,14 @@ void tcpip_init_done(void *arg)
 int main(void)
 {
     board_init();
-
+#if defined(BL616CL)
+    app_lowpower_mode_load(PM_LDO13_LDO07_PDSLDO07);
+#endif
 #if defined(BL616)
     uint8_t soc_v, rt_v, aon_v;
     hal_pm_ldo11_cfg(PM_PDS_LDO_LEVEL_SOC_DEFAULT, PM_PDS_LDO_LEVEL_RT_DEFAULT, PM_PDS_LDO_LEVEL_AON_DEFAULT);
     hal_pm_ldo11_cfg_get(&soc_v, &rt_v, &aon_v);
     printf("SOC:%d RT:%d AON:%d\r\n", soc_v, rt_v, aon_v);
-#endif
-
-#if defined(BL616CL)
-    wl_lp_bl616cl_dcdc_init();
 #endif
 
     uart0 = bflb_device_get_by_name("uart0");

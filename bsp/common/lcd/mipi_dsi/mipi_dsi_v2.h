@@ -62,7 +62,7 @@ typedef struct {
     uint8_t  lane_num;   /* BFLB_DSI_LANES_x (1 / 2 / 4) */
     uint8_t  lane_order; /* BFLB_DSI_LANE_ORDER_xxx */
     uint8_t  data_type;  /* BFLB_DSI_DATA_xxx (e.g. BFLB_DSI_DATA_RGB565) */
-    uint8_t  reset_pin;  /* GPIO pin used for the panel reset line */
+    uint8_t  reset_pin;  /* GPIO pin used for the panel reset line, or external */
 
     /* PLL / clock tree (all panel-determined) */
     const GLB_DSIPLL_Cfg_Type *pll_cfg; /* resolved DSI PLL config for the board xtal */
@@ -75,6 +75,8 @@ typedef struct {
     /* D-PHY HS timing (panel/clock-rate specific) */
     bflb_dsi_dphy_config_t dphy;
 } mipi_dsi_v2_timing_t;
+
+#define MIPI_DSI_V2_RESET_EXTERNAL UINT8_MAX
 
 /* DSI PLL clock table (BL618DG specific). 800 MHz VCO / bitclk_div 2 = 400 MHz HS
  * bit clock (200 MHz DDR clock lane, 400 Mbps/lane). A panel may point its
@@ -189,6 +191,29 @@ void *mipi_dsi_v2_get_screen_using(void);
 /* Register a frame callback, invoked from the OSD SEOF ISR. SWAP and CYCLE are
  * both supported (mirrors the DPI framework). callback==NULL clears. Returns 0. */
 int mipi_dsi_v2_frame_callback_register(uint32_t callback_type, void (*callback)(void));
+
+/* RGB565 camera scan-out path. This is intentionally independent from the
+ * existing YUV background + OSD0/LVGL path above:
+ *   [1] RGB565 DPI base framebuffer
+ *   [2] transparent 1x1 ARGB8888 OSD1 blend layer
+ *   [3] OSD1 SEOF interrupt driving frame callbacks
+ *
+ * 'framebuffer_addr' is the initial RGB565 DPI base buffer. 'osd_sync_buf'
+ * points to one ARGB8888 pixel used only to keep OSD1 active for SEOF. The
+ * caller owns both buffers and must clean dcache before initialization. */
+int mipi_dsi_v2_rgb565_display_init(const mipi_dsi_v2_timing_t *cfg, uint32_t framebuffer_addr,
+                                    uint32_t osd_sync_buf);
+
+/* Switch the RGB565 DPI base framebuffer. Call from a callback registered by
+ * mipi_dsi_v2_rgb565_frame_callback_register(), so the change happens during
+ * OSD1 SEOF rather than in the middle of a scanout. */
+int mipi_dsi_v2_rgb565_screen_switch(void *screen_buffer);
+
+/* Return the RGB565 framebuffer currently selected for DPI scanout. */
+void *mipi_dsi_v2_rgb565_get_screen_using(void);
+
+/* Register OSD1 SEOF callbacks for the RGB565 camera scan-out path. */
+int mipi_dsi_v2_rgb565_frame_callback_register(uint32_t callback_type, void (*callback)(void));
 
 /* Base (DPI background) layer swap, invoked from the OSD SEOF ISR on every frame
  * boundary. Weak no-op by default: OSD0-only LVGL apps need no override (the base

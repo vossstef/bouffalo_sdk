@@ -18,6 +18,8 @@ import struct
 from collections import defaultdict
 from pathlib import Path
 
+from toolchain import get_tool
+
 # Unwind entry structure (binary format, version 4.1 with function size, no alignment)
 #
 # File structure (in order):
@@ -105,14 +107,15 @@ from pathlib import Path
 def get_all_functions(elf_file):
     """Get all function addresses from symbol table"""
     try:
+        nm = get_tool('nm')
         result = subprocess.run(
-            ['riscv64-unknown-elf-nm', '--defined-only', '--format=posix', '--numeric-sort', elf_file],
+            [nm, '--defined-only', '--format=posix', '--numeric-sort', elf_file],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
             check=True
         )
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
         print(f"Error running nm: {e}", file=sys.stderr)
         return {}
 
@@ -133,14 +136,15 @@ def get_all_functions(elf_file):
 def parse_objdump_frames(elf_file):
     """Parse DWARF frame information from objdump output"""
     try:
+        objdump = get_tool('objdump')
         result = subprocess.run(
-            ['riscv64-unknown-elf-objdump', '--dwarf=frames', elf_file],
+            [objdump, '--dwarf=frames', elf_file],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
             check=True
         )
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
         print(f"Error running objdump: {e}", file=sys.stderr)
         return {}
 
@@ -248,14 +252,15 @@ def parse_objdump_frames(elf_file):
 def get_function_names(elf_file):
     """Get function names from symbol table"""
     try:
+        nm = get_tool('nm')
         result = subprocess.run(
-            ['riscv64-unknown-elf-nm', '--defined-only', '--format=posix', elf_file],
+            [nm, '--defined-only', '--format=posix', elf_file],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
             check=True
         )
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
         print(f"Error running nm: {e}", file=sys.stderr)
         return {}
 

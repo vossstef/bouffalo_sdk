@@ -318,24 +318,24 @@
 /* Setup packet definition used to read raw data from USB line */
 struct usb_setup_packet {
     /** Request type. Bits 0:4 determine recipient, see
-	 * \ref usb_request_recipient. Bits 5:6 determine type, see
-	 * \ref usb_request_type. Bit 7 determines data transfer direction, see
-	 * \ref usb_endpoint_direction.
-	 */
+     * \ref usb_request_recipient. Bits 5:6 determine type, see
+     * \ref usb_request_type. Bit 7 determines data transfer direction, see
+     * \ref usb_endpoint_direction.
+     */
     uint8_t bmRequestType;
 
     /** Request. If the type bits of bmRequestType are equal to
-	 * \ref usb_request_type::LIBUSB_REQUEST_TYPE_STANDARD
-	 * "USB_REQUEST_TYPE_STANDARD" then this field refers to
-	 * \ref usb_standard_request. For other cases, use of this field is
-	 * application-specific. */
+     * \ref usb_request_type::LIBUSB_REQUEST_TYPE_STANDARD
+     * "USB_REQUEST_TYPE_STANDARD" then this field refers to
+     * \ref usb_standard_request. For other cases, use of this field is
+     * application-specific. */
     uint8_t bRequest;
 
     /** Value. Varies according to request */
     uint16_t wValue;
 
     /** Index. Varies according to request, typically used to pass an index
-	 * or offset */
+     * or offset */
     uint16_t wIndex;
 
     /** Number of bytes to transfer */
@@ -766,12 +766,12 @@ struct usb_desc_header {
 #define USB_MSOSV1_COMP_ID_FUNCTION_MTP_DESCRIPTOR_INIT(bFirstInterfaceNumber)\
     bFirstInterfaceNumber,                          /* bFirstInterfaceNumber */\
     0x01,                                           /* reserved1 */            \
-    'M', 'T', 'P', 'U', 'S', 'B', 0x00, 0x00,       /* compatibleID[8] */      \
+    'M', 'T', 'P', 0x00, 0x00, 0x00, 0x00, 0x00,    /* compatibleID[8] */      \
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* subCompatibleID[8] */   \
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00              /* reserved2[6] */
 
 #define USB_MSOSV1_COMP_ID_FUNCTION_ADB_DESCRIPTOR_INIT(bFirstInterfaceNumber)\
-    bFirstInterfaceNumber,                          * bFirstInterfaceNumber */\
+    bFirstInterfaceNumber,                          /* bFirstInterfaceNumber */\
     0x01,                                           /* reserved1 */            \
     'A', 'D', 'B', 0x00, 0x00, 0x00, 0x00, 0x00,    /* compatibleID[8] */      \
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* subCompatibleID[8] */   \

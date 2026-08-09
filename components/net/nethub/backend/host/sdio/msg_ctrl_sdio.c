@@ -17,6 +17,9 @@
 #include "mr_netdev.h"
 
 #include "msg_ctrl_sdio.h"
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+#include "nh_host_select.h"
+#endif
 
 #define DBG_TAG "MSG"
 #include "log.h"
@@ -26,6 +29,22 @@
 static FRAME_BUFFER_ATTR msg_sdio_dnld_fmt_t msg_dnld_frame_buff[MSG_DNLD_FRAME_CNT + 1];
 
 mr_msg_ctrl_priv_t *g_msg_sdio_ctrl = NULL;
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+static bool g_msg_sdio_ready_candidate_reported;
+
+static int msg_ctrl_sdio_task_cb(mr_msg_ctrl_priv_t *msg_ctrl, uint32_t *notified_value)
+{
+    (void)msg_ctrl;
+    (void)notified_value;
+
+    if (!g_msg_sdio_ready_candidate_reported) {
+        g_msg_sdio_ready_candidate_reported = true;
+        (void)nethub_host_report_candidate(NETHUB_CHANNEL_SDIO);
+    }
+
+    return 0;
+}
+#endif
 
 int msg_ctrl_sdio_init(void)
 {
@@ -47,7 +66,11 @@ int msg_ctrl_sdio_init(void)
         .task_priority = 27,
         .task_stack_size = 1024,
         .task_period_max_ms = portMAX_DELAY,
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+        .msg_task_cb = msg_ctrl_sdio_task_cb,
+#else
         .msg_task_cb = NULL,
+#endif
     };
 
     msg_ctrl = mr_msg_ctrl_init(&msg_ctrl_cfg);

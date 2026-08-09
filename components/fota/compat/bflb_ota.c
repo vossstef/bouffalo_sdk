@@ -22,7 +22,7 @@ int bflb_ota_start(uint32_t file_size)
 {
     if (handle) {
         LOG_W("ota had start\r\n");
-        return 0;
+        return -1;
     }
 
     handle = ota_start();

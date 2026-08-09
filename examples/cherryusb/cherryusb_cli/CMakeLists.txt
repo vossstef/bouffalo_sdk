@@ -5,6 +5,7 @@ find_package(bouffalo_sdk REQUIRED HINTS $ENV{BL_SDK_BASE})
 
 sdk_add_compile_definitions(-D SHELL_THREAD_PRIO=20)
 
+sdk_add_include_directories(./config_file)
 sdk_add_include_directories(.)
 sdk_set_main_file(main.c)
 
@@ -40,7 +41,7 @@ if(CONFIG_CHERRYUSB_DEVICE)
     endif()
 
     # composite device
-    if(CONFIG_CHERRYUSB_DEVICE_CDC_ACM AND CONFIG_CHERRYUSB_DEVICE_HID)
+    if(CONFIG_CHERRYUSB_DEVICE_CDC_ACM AND CONFIG_CHERRYUSB_DEVICE_MSC)
         target_sources(app PRIVATE ./device_demo/cdc_acm_msc_template.c)
     endif()
 

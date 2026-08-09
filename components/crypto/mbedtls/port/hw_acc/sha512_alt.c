@@ -65,8 +65,10 @@ void mbedtls_sha512_init( mbedtls_sha512_context *ctx )
     mbedtls_platform_zeroize( ctx, sizeof( mbedtls_sha512_context ) );
     ctx->sha = sha;
 
+    bflb_sec_sha_mutex_take();
     bflb_group0_request_sha_access(sha);
     bflb_sha_link_init(sha);
+    bflb_sec_sha_mutex_give();
 }
 
 void mbedtls_sha512_free( mbedtls_sha512_context *ctx )
@@ -103,6 +105,7 @@ int mbedtls_sha512_starts_ret( mbedtls_sha512_context *ctx, int is384 )
     }
 
     bflb_sec_sha_mutex_take();
+    bflb_sha_link_init(ctx->sha);
     memcpy(&link_ctx_temp, &ctx->link_ctx, sizeof(struct bflb_sha512_link_ctx_s));
     bflb_sha512_link_start(ctx->sha, &link_ctx_temp, is384);
     memcpy(&ctx->link_ctx, &link_ctx_temp, sizeof(struct bflb_sha512_link_ctx_s));
@@ -133,7 +136,7 @@ int mbedtls_sha512_update_ret( mbedtls_sha512_context *ctx,
                                const unsigned char *input,
                                size_t ilen )
 {
-    //int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    int ret;
 
     SHA512_VALIDATE_RET( ctx != NULL );
     SHA512_VALIDATE_RET( ilen == 0 || input != NULL );
@@ -143,10 +146,15 @@ int mbedtls_sha512_update_ret( mbedtls_sha512_context *ctx,
 
     bflb_l1c_dcache_clean_range((void *)input, ilen);
     bflb_sec_sha_mutex_take();
+    bflb_sha_link_init(ctx->sha);
     memcpy(&link_ctx_temp, &ctx->link_ctx, sizeof(struct bflb_sha512_link_ctx_s));
-    bflb_sha512_link_update(ctx->sha, &link_ctx_temp, input, ilen);
+    ret = bflb_sha512_link_update(ctx->sha, &link_ctx_temp, input, ilen);
     memcpy(&ctx->link_ctx, &link_ctx_temp, sizeof(struct bflb_sha512_link_ctx_s));
     bflb_sec_sha_mutex_give();
+
+    if( ret != 0 )
+        return( MBEDTLS_ERR_PLATFORM_HW_ACCEL_FAILED );
+
     return( 0 );
 }
 
@@ -181,6 +189,7 @@ int mbedtls_sha512_finish_ret( mbedtls_sha512_context *ctx,
     SHA512_VALIDATE_RET( (unsigned char *)output != NULL );
 
     bflb_sec_sha_mutex_take();
+    bflb_sha_link_init(ctx->sha);
     memcpy(&link_ctx_temp, &ctx->link_ctx, sizeof(struct bflb_sha512_link_ctx_s));
     bflb_sha512_link_finish(ctx->sha, &link_ctx_temp, output);
     bflb_sec_sha_mutex_give();

@@ -27,6 +27,7 @@
 
 struct sd_card_s sd_card;
 struct sdh_host_s sdh_host;
+static bool sdh_driver_inited;
 
 int MMC_disk_status()
 {
@@ -35,17 +36,16 @@ int MMC_disk_status()
 
 int MMC_disk_initialize()
 {
-    static bool inited = false;
-
-    if (inited) {
+    if (sdh_driver_inited) {
         sdh_sd_deinit(&sd_card);
+        sdh_driver_inited = false;
     }
 
     if (sdh_sd_card_init(&sd_card, &sdh_host) < 0) {
         sdh_sd_deinit(&sd_card);
         return -1;
     }
-    inited = true;
+    sdh_driver_inited = true;
 
     return 0;
 }
@@ -112,4 +112,16 @@ void fatfs_sdh_driver_register(void)
     SDH_DiskioDriver.error_code_parsing = Translate_Result_Code;
 
     disk_driver_callback_init(DEV_SD, &SDH_DiskioDriver);
+}
+
+void fatfs_sdh_driver_unregister(void)
+{
+    FATFS_DiskioDriverTypeDef SDH_DiskioDriver = { NULL };
+
+    disk_driver_callback_init(DEV_SD, &SDH_DiskioDriver);
+
+    if (sdh_driver_inited) {
+        sdh_sd_deinit(&sd_card);
+        sdh_driver_inited = false;
+    }
 }

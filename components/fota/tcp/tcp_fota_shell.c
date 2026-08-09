@@ -49,21 +49,33 @@ static void tcp_fota_dump_partition(pt_table_stuff_config *pt_stuff)
 }
 
 /**
- * @brief Shell command: tcp_ota_start <ip> [port]
+ * @brief Shell command: tcp_ota_start <ip> [port] [reboot]
  */
 int cmd_tcp_ota_start(int argc, char **argv)
 {
-    if (argc < 2) {
-        printf("Usage: tcp_ota_start <ip> [port]\r\n");
+    struct tcp_fota_config config = {0};
+
+    if (argc < 2 || argc > 4) {
+        printf("Usage: tcp_ota_start <ip> [port] [reboot: 0|1, default: 1]\r\n");
         return -1;
     }
 
     const char *ip = argv[1];
     const char *port = (argc >= 3) ? argv[2] : NULL;
 
+    config.reboot = true;
+    if (argc == 4) {
+        if (strcmp(argv[3], "0") == 0) {
+            config.reboot = false;
+        } else if (strcmp(argv[3], "1") != 0) {
+            printf("Usage: tcp_ota_start <ip> [port] [reboot: 0|1, default: 1]\r\n");
+            return -1;
+        }
+    }
+
     printf("Starting TCP OTA from %s:%s\r\n", ip, port ? port : TCP_FOTA_DEFAULT_PORT);
 
-    int ret = tcp_fota(ip, port, NULL);
+    int ret = tcp_fota(ip, port, &config);
     if (ret != 0) {
         printf("TCP OTA failed: %d\r\n", ret);
     }

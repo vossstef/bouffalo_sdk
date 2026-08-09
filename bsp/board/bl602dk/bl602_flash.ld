@@ -28,9 +28,8 @@ MEMORY
     fw_header_memory  (rx)  : ORIGIN = 0x23000000 - 0x1000, LENGTH = 4K
     xip_memory  (rx)  : ORIGIN = 0x23000000, LENGTH = 1024K
     itcm_memory (rx)  : ORIGIN = 0x22010000, LENGTH = 16K
-    dtcm_memory (rx)  : ORIGIN = 0x42014000, LENGTH = 48K
-    ram_memory  (!rx) : ORIGIN = 0x42020000, LENGTH = 176K
-    ram_wifi    (wxa) : ORIGIN = 0x42042000 - __EM_SIZE, LENGTH = (8K + 104K - 64K - 8K) /*leave 8K left for BLE*/
+    ram_memory  (!rx) : ORIGIN = 0x42014000, LENGTH = 184K
+    ram_wifi    (wxa) : ORIGIN = 0x42042000 , LENGTH = (112K - 64K - 8K - __EM_SIZE) /*leave 8K left for BLE*/
 }
 
 SECTIONS
@@ -125,8 +124,6 @@ SECTIONS
         PROVIDE( _dump_sections = ABSOLUTE(.));
         LONG(ORIGIN(itcm_memory));
         LONG(LENGTH(itcm_memory));
-        LONG(ORIGIN(dtcm_memory));
-        LONG(LENGTH(dtcm_memory));
         LONG(ORIGIN(ram_memory));
         LONG(LENGTH(ram_memory));
         LONG(0xffffffff);
@@ -193,26 +190,20 @@ SECTIONS
 
         . = ALIGN(4);
         __tcm_data_end__ = .;
-    } > dtcm_memory
+    } > ram_memory
 
     /*************************************************************************/
-    /* .stack_dummy section doesn't contains any symbols. It is only
-     * used for linker to calculate size of stack sections, and assign
-     * values to stack symbols later */
-    .stack_dummy (NOLOAD):
+    .stack (NOLOAD):
     {
-        . = ALIGN(0x4);
+        . = ALIGN(16);
+        __StackLimit = .;
         . = . + StackSize;
-        . = ALIGN(0x4);
-    } > dtcm_memory
+        __StackTop = .;
+    } > ram_memory
 
-    /* Set stack top to end of RAM, and stack limit move down by
-     * size of stack_dummy section */
-    __StackTop = ORIGIN(dtcm_memory) + LENGTH(dtcm_memory);
     PROVIDE( __freertos_irq_stack_top = __StackTop);
     PROVIDE( _sp_main = __StackTop);
-    PROVIDE( _sp_base = __StackTop - StackSize);
-    __StackLimit = __StackTop - SIZEOF(.stack_dummy);
+    PROVIDE( _sp_base = __StackLimit);
 
     /* Check if data + heap + stack exceeds RAM limit */
     ASSERT(__StackLimit >= __tcm_data_end__, "region RAM overflowed with stack")

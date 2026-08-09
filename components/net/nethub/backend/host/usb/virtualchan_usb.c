@@ -1,5 +1,8 @@
 #include "nethub_vchan.h"
 #include "usb_backend.h"
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+#include "nh_hub.h"
+#endif
 #include "nh_profile.h"
 #include "nethub_defs.h"
 #include "nethub.h"
@@ -133,7 +136,14 @@ static void nethub_vchan_usb_stream_process(void)
             continue;
         }
 
+#if defined(CONFIG_NETHUB_PROFILE_DUAL)
+        if (!nethub_is_host_link_active(NETHUB_CHANNEL_USB)) {
+            nethub_vchan_usb_stream_drop(frame_len);
+            continue;
+        }
+#else
         (void)nethub_set_active_host_link(NETHUB_CHANNEL_USB);
+#endif
         nethub_vchan_usb_dispatch(NETHUB_VCHAN_USB_RX_TYPE,
                                   &g_nethub_vchan_usb_rx_buf[NETHUB_VCHAN_USB_HDR_LEN],
                                   payload_len);

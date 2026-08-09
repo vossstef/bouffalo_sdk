@@ -63,6 +63,7 @@ typedef void (*pfn_tcp_fota_t)(void *arg, tcp_fota_status_t event);
 struct tcp_fota_config {
     pfn_tcp_fota_t callback; /**< Status callback function */
     void *user_arg;          /**< User context passed to callback */
+    bool reboot;             /**< Reboot after a successful automatic update */
 };
 
 /** Opaque handle for TCP FOTA session */

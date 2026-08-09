@@ -5,6 +5,9 @@ CONFIG_SHELL =y
 CONFIG_CHERRYUSB =y
 CONFIG_CHERRYUSB_OSAL =freertos
 
+CONFIG_VSNPRINTF_FLOAT      =y
+CONFIG_VSNPRINTF_FLOAT_EX   =y
+
 # USB Device configuration
 
 # Enable the CherryUSB device mode

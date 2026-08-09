@@ -6,7 +6,7 @@
 #ifdef BL618DG
 #define MSG_DNLD_FRAME_CNT (26)
 #else
-#define MSG_DNLD_FRAME_CNT (16)
+#define MSG_DNLD_FRAME_CNT (15)
 #endif
 
 #pragma pack(push, 1)

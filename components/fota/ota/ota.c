@@ -28,7 +28,11 @@
 #define OTA_DEBUG_IMG 0
 #define OTA_ERASE_BLOCK_SIZE (4*1024)
 
+#if defined(BL602)
+static ATTR_WIFI_RAM_SECTION __attribute__((aligned(32))) struct bflb_sha256_link_ctx_s _sha_ctx;
+#else
 static ATTR_NOCACHE_NOINIT_RAM_SECTION __attribute__((aligned(32))) struct bflb_sha256_link_ctx_s _sha_ctx;
+#endif
 
 #ifdef CONFIG_OTA_VERSION_CHECK
 #ifdef CONFIG_OTA_VERSION_PREFIX
@@ -113,6 +117,14 @@ static int ota_check_header_software_version(const uint8_t *field, uint32_t fiel
 }
 #endif
 
+static void ota_sha256_start(ota_handle_t handle)
+{
+    bflb_sec_sha_mutex_take();
+    bflb_sha_link_init(handle->sha_dev);
+    bflb_sha256_link_start(handle->sha_dev, handle->ctx_sha256, 0);
+    bflb_sec_sha_mutex_give();
+}
+
 static int ota_sha256_update(ota_handle_t handle, const uint8_t *buf, uint32_t len)
 {
     int ret;
@@ -123,6 +135,7 @@ static int ota_sha256_update(ota_handle_t handle, const uint8_t *buf, uint32_t l
 
     bflb_l1c_dcache_clean_range((void *)buf, len);
     bflb_sec_sha_mutex_take();
+    bflb_sha_link_init(handle->sha_dev);
     ret = bflb_sha256_link_update(handle->sha_dev, handle->ctx_sha256, buf, len);
     bflb_sec_sha_mutex_give();
     if (ret != 0) {
@@ -131,6 +144,14 @@ static int ota_sha256_update(ota_handle_t handle, const uint8_t *buf, uint32_t l
     }
 
     return 0;
+}
+
+static void ota_sha256_finish(ota_handle_t handle)
+{
+    bflb_sec_sha_mutex_take();
+    bflb_sha_link_init(handle->sha_dev);
+    bflb_sha256_link_finish(handle->sha_dev, handle->ctx_sha256, handle->sha256_result);
+    bflb_sec_sha_mutex_give();
 }
 
 static int ota_erase(ota_handle_t handle, uint32_t offset, uint32_t len)
@@ -272,6 +293,8 @@ static int _check_ota_header(ota_header_t *ota_header, uint32_t *ota_len, int *u
  ota_handle_t ota_start(void)
 {
     ota_handle_t ota_handle = malloc(sizeof(struct ota_handle));
+    int status;
+
     if (!ota_handle) {
         LOG_E("[OTA] Error: malloc failed\r\n");
         return NULL;
@@ -289,7 +312,7 @@ static int _check_ota_header(ota_header_t *ota_header, uint32_t *ota_len, int *u
     pt_table_set_flash_operation(bflb_flash_erase, bflb_flash_write, bflb_flash_read);
 #endif
 
-    ota_handle->active_id = pt_table_get_active_partition_need_lock(ota_handle->pt_table_stuff);
+    ota_handle->active_id = pt_table_get_active_partition_from_ram(ota_handle->pt_table_stuff);
     if (PT_TABLE_ID_INVALID == ota_handle->active_id) {
         LOG_E("No valid PT\r\n");
         goto _fail;
@@ -298,6 +321,14 @@ static int _check_ota_header(ota_header_t *ota_header, uint32_t *ota_len, int *u
 
     if (pt_table_get_active_entries_by_name(&ota_handle->pt_table_stuff[ota_handle->active_id], (uint8_t *)OTA_PARTITION_NAME_TYPE_FW, &ota_handle->pt_fw_entry)) {
         LOG_E("PtTable get active entry fail!\r\n");
+        goto _fail;
+    }
+
+    status = pt_table_update_entry(!ota_handle->active_id,
+                                &ota_handle->pt_table_stuff[ota_handle->active_id],
+                                &ota_handle->pt_fw_entry);
+    if (status != 0) {
+        LOG_E("[OTA] Set running partition active fail! %d\r\n", status);
         goto _fail;
     }
 
@@ -327,7 +358,6 @@ static int _check_ota_header(ota_header_t *ota_header, uint32_t *ota_len, int *u
     }
     ota_handle->ctx_sha256 = &_sha_ctx;
     bflb_group0_request_sha_access(ota_handle->sha_dev);
-    bflb_sha_link_init(ota_handle->sha_dev);
 
 #if CONFIG_FAST_OTA
     ota_erase(ota_handle, 0, ota_handle->part_size);
@@ -429,9 +459,7 @@ static int ota_verify_flash(ota_handle_t handle)
         return -1;
     }
 
-    bflb_sec_sha_mutex_take();
-    bflb_sha256_link_start(handle->sha_dev, handle->ctx_sha256, 0);
-    bflb_sec_sha_mutex_give();
+    ota_sha256_start(handle);
 
     while (rd_offset < bin_size) {
         read_size = (bin_size - rd_offset >= OTA_SLICE_SIZE) ? OTA_SLICE_SIZE : (bin_size - rd_offset);
@@ -446,9 +474,7 @@ static int ota_verify_flash(ota_handle_t handle)
         rd_offset += read_size;
     }
 
-    bflb_sec_sha_mutex_take();
-    bflb_sha256_link_finish(handle->sha_dev, handle->ctx_sha256, handle->sha256_result);
-    bflb_sec_sha_mutex_give();
+    ota_sha256_finish(handle);
 
     if (handle->tail_hash_size) {
         if (bflb_flash_read(handle->ota_addr + bin_size, expected_hash, sizeof(expected_hash))) {
@@ -557,4 +583,3 @@ int ota_rollback(void)
     }
 	return 0;
 }
-

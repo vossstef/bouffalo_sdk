@@ -515,19 +515,22 @@ void net_iperf_tcp_close(struct fhost_iperf_stream *stream)
     if (info == NULL)
         goto end;
 
-    tcp_arg(info->pcb, NULL);
-    tcp_sent(info->pcb, NULL);
-    tcp_recv(info->pcb, NULL);
-    tcp_poll(info->pcb, NULL, 0);
-    tcp_err(info->pcb, NULL);
-    tcp_abort(info->pcb);
+    if (info->pcb != NULL)
+    {
+        tcp_arg(info->pcb, NULL);
+        tcp_sent(info->pcb, NULL);
+        tcp_recv(info->pcb, NULL);
+        tcp_poll(info->pcb, NULL, 0);
+        tcp_err(info->pcb, NULL);
+        tcp_abort(info->pcb);
+        info->pcb = NULL;
+    }
 
     //Print final stats
     iperf_current_time(&report->end_time);
     fhost_iperf_print_stats(stream, &report->start_time, &report->end_time, &report->stats);
 
     //Delete tcp info
-    info->pcb = NULL;
     rtos_free(info);
     stream->arg = NULL;
 
@@ -550,8 +553,11 @@ void net_iperf_tcp_close(struct fhost_iperf_stream *stream)
 static void net_iperf_tcp_err(void *arg, err_t err)
 {
     struct fhost_iperf_stream *stream = (struct fhost_iperf_stream *) arg;
+    struct net_iperf_tcp_info *info = stream->arg;
 
     fhost_printf("Abort TCP (error %d)\n", err);
+    if (info != NULL)
+        info->pcb = NULL;
     net_iperf_tcp_close(stream);
 }
 
@@ -727,7 +733,7 @@ static err_t net_iperf_tcp_recv_cb(void * arg, struct tcp_pcb *newpcb,
     struct fhost_iperf_stream *stream = (struct fhost_iperf_stream*) arg;
     struct net_iperf_tcp_info *info = (struct net_iperf_tcp_info*) stream->arg;
     struct iperf_report *report = &stream->report;
-    err_t ret = ERR_OK;
+    u16_t rx_len;
 
     // We receive an empty frame from client => close connection
     if (p == NULL)
@@ -735,14 +741,14 @@ static err_t net_iperf_tcp_recv_cb(void * arg, struct tcp_pcb *newpcb,
         //TODO: Client requested transmission after end of test
         stream->active = false;
         net_iperf_tcp_close(stream);
-        return ERR_OK;
+        return ERR_ABRT;
     }
 
     if (err != ERR_OK || !stream->active)
     {
+        pbuf_free(p);
         net_iperf_tcp_close(stream);
-        ret = ERR_OK;
-        goto end;
+        return ERR_ABRT;
     }
 
     // If waiting for TCP settings or TX bytes multiple of 128KBytes
@@ -750,9 +756,9 @@ static err_t net_iperf_tcp_recv_cb(void * arg, struct tcp_pcb *newpcb,
     {
         if (net_iperf_tcp_read_client_hdr(p, stream) != ERR_OK)
         {
+            pbuf_free(p);
             net_iperf_tcp_close(stream);
-            ret = ERR_VAL;
-            goto end;
+            return ERR_ABRT;
         }
         fhost_iperf_init_stats(stream);
         info->state = IPERF_TCP_RECEIVED;
@@ -764,16 +770,20 @@ static err_t net_iperf_tcp_recv_cb(void * arg, struct tcp_pcb *newpcb,
 
     info->poll_count = 0;
     report->stats.bytes += p->tot_len;
+
+    rx_len = p->tot_len;
+
+    /* Return the zero-copy FHOST RX buffer before stats and TCP window work. */
+    pbuf_free(p);
+
+    tcp_recved(newpcb, rx_len);
+
     iperf_current_time(&report->packet_time);
 
     // interval stats
     fhost_iperf_print_interv_stats(stream);
 
-    // Acknowledge data
-    tcp_recved(newpcb, p->tot_len);
-end:
-    pbuf_free(p);
-    return ret;
+    return ERR_OK;
 }
 
 /**
@@ -783,9 +793,10 @@ end:
  * @param[in] pcb       Pointer to tcp Protocol Control Block
  * @param[in] stream    Pointer to iperf stream
  * @param[in] settings  Pointer to iperf settings
+ * @return ERR_ABRT if the TCP PCB was aborted, otherwise ERR_OK
  ****************************************************************************************
  **/
-static void net_iperf_tcp_send(struct tcp_pcb* pcb,
+static err_t net_iperf_tcp_send(struct tcp_pcb* pcb,
                                 struct fhost_iperf_stream *stream,
                                 struct fhost_iperf_settings* iperf_settings)
 {
@@ -794,7 +805,7 @@ static void net_iperf_tcp_send(struct tcp_pcb* pcb,
     uint32_t ppl;
 
     if (is_running) {
-        return;
+        return ERR_OK;
     }
 
     ppl = rtos_protect();
@@ -823,7 +834,7 @@ static void net_iperf_tcp_send(struct tcp_pcb* pcb,
                 is_running = false;
                 rtos_unprotect(ppl);
                 #endif
-                return;
+                return ERR_ABRT;
             }
         }
         else
@@ -837,7 +848,7 @@ static void net_iperf_tcp_send(struct tcp_pcb* pcb,
                 is_running = false;
                 rtos_unprotect(ppl);
                 #endif
-                return;
+                return ERR_ABRT;
             }
         }
 
@@ -873,6 +884,7 @@ static void net_iperf_tcp_send(struct tcp_pcb* pcb,
     is_running = false;
     rtos_unprotect(ppl);
     #endif
+    return ERR_OK;
 }
 
 /**
@@ -907,11 +919,12 @@ static err_t net_iperf_tcp_poll(void *arg, struct tcp_pcb *pcb)
         rtos_mutex_lock(stream->iperf_mutex);
         net_iperf_tcp_close(stream);
         rtos_mutex_unlock(stream->iperf_mutex);
+        return ERR_ABRT;
     }
     else if (!stream->iperf_settings.flags.is_server)
     {
         // Send more data if we are client
-        net_iperf_tcp_send(pcb, stream, &stream->iperf_settings);
+        return net_iperf_tcp_send(pcb, stream, &stream->iperf_settings);
     }
 
     return ERR_OK;
@@ -1043,8 +1056,7 @@ static err_t net_iperf_tcp_sent(void *arg, struct tcp_pcb *pcb, u16_t len)
     struct net_iperf_tcp_info *info = (struct net_iperf_tcp_info*) stream->arg;
 
     info->poll_count = 0;
-    net_iperf_tcp_send(pcb, stream, &stream->iperf_settings);
-    return ERR_OK;
+    return net_iperf_tcp_send(pcb, stream, &stream->iperf_settings);
 }
 
 /**
@@ -1693,8 +1705,7 @@ int net_iperf_udp_client_run(struct fhost_iperf_stream* stream)
         }
         else
         {
-            TRACE_APP(ERR, "NET_IPERF_AL : SEND ERR");
-            fhost_printf("NET_IPERF_AL : SEND ERR udp_sendto : %d", err_log);
+            fhost_printf("NET_IPERF_AL : SEND ERR udp_sendto : %d\r\n", err_log);
             goto cleanup;
         }
 
@@ -1799,6 +1810,7 @@ int net_iperf_udp_client_run(struct fhost_iperf_stream* stream)
     else
         ret = 0;
 
+cleanup:
     // Wait until all of pbuf are freed
     while (rtos_semaphore_get_count(stream->send_buf_semaphore) < FHOST_IPERF_SEND_BUF_CNT)
     {
@@ -1806,7 +1818,6 @@ int net_iperf_udp_client_run(struct fhost_iperf_stream* stream)
         rtos_semaphore_signal(stream->send_buf_semaphore, false);
     }
 
-cleanup:
     if (pcb) {
         LOCK_TCPIP_CORE();
         udp_remove(pcb);
@@ -2070,7 +2081,7 @@ static RTOS_TASK_FCT(fhost_iperf_main)
             // UDP Client
             if (net_iperf_udp_client_run(iperf_stream))
             {
-                TRACE_APP(ERR, "IPERF: Failed to start UDP client");
+                fhost_printf("IPERF: UDP client exited with error\r\n");
                 goto end;
             }
         }

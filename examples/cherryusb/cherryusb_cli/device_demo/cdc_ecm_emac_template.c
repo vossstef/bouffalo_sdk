@@ -1,3 +1,8 @@
+/**
+ * @file cdc_ecm_emac_template.c
+ * @brief CherryUSB CDC ECM device bridged to the hardware EMAC.
+ */
+
 #include "bflb_mtimer.h"
 #include "bflb_emac.h"
 
@@ -21,7 +26,8 @@
 #define DBG_TAG "ECM"
 #include "log.h"
 
-/*!< endpoint address */
+/** @name CDC ECM USB configuration
+ * @{ */
 #define CDC_ECM_IN_EP   0x81
 #define CDC_ECM_OUT_EP  0x02
 #define CDC_ECM_INT_EP  0x83
@@ -43,16 +49,20 @@
 
 /* str idx = 4 is for mac address: aa:bb:cc:dd:ee:ff*/
 #define CDC_ECM_MAC_STRING_INDEX      4
+/** @} */
 
+/** @brief USB device descriptor for the CDC ECM device. */
 static const uint8_t device_descriptor[] = {
     USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0xEF, 0x02, 0x01, USBD_VID, USBD_PID, 0x0100, 0x01),
 };
 
+/** @brief USB configuration descriptor for the CDC ECM device. */
 static const uint8_t config_descriptor[] = {
     USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x02, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
     CDC_ECM_DESCRIPTOR_INIT(0x00, CDC_ECM_INT_EP, CDC_ECM_OUT_EP, CDC_ECM_IN_EP, CDC_MAX_MPS, CDC_ECM_MAC_STRING_INDEX)
 };
 
+/** @brief USB device-qualifier descriptor. */
 static const uint8_t device_quality_descriptor[] = {
     ///////////////////////////////////////
     /// device qualifier descriptor
@@ -69,6 +79,7 @@ static const uint8_t device_quality_descriptor[] = {
     0x00,
 };
 
+/** @brief USB string descriptors, including the hexadecimal MAC address. */
 static const char *string_descriptors[] = {
     (const char[]){ 0x09, 0x04 }, /* Langid */
     "CherryUSB",                  /* Manufacturer */
@@ -79,21 +90,38 @@ static const char *string_descriptors[] = {
                     MAC_ADDR_ASCII_50, MAC_ADDR_ASCII_51, 0 }
 };
 
+/** @brief Return the device descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Device descriptor address.
+ */
 static const uint8_t *device_descriptor_callback(uint8_t speed)
 {
     return device_descriptor;
 }
 
+/** @brief Return the configuration descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Configuration descriptor address.
+ */
 static const uint8_t *config_descriptor_callback(uint8_t speed)
 {
     return config_descriptor;
 }
 
+/** @brief Return the device-qualifier descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @return Device-qualifier descriptor address.
+ */
 static const uint8_t *device_quality_descriptor_callback(uint8_t speed)
 {
     return device_quality_descriptor;
 }
 
+/** @brief Return a USB string descriptor.
+ * @param[in] speed Negotiated USB speed; unused.
+ * @param[in] index String descriptor index.
+ * @return Descriptor string, or NULL when unsupported.
+ */
 static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
 {
     if (index > 4) {
@@ -102,6 +130,7 @@ static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
     return string_descriptors[index];
 }
 
+/** @brief Descriptor callback table for the CDC ECM device. */
 const struct usb_descriptor cdc_ecm_descriptor = {
     .device_descriptor_callback = device_descriptor_callback,
     .config_descriptor_callback = config_descriptor_callback,
@@ -116,6 +145,10 @@ static void usbd_ecm_emac_event_wait(uint32_t timeout);
 static volatile bool usb_ecm_ready_flag = false;
 
 /* usb event handler */
+/** @brief Update ECM readiness and wake the bridge task for USB events.
+ * @param[in] busid USB device-controller index.
+ * @param[in] event CherryUSB device event identifier.
+ */
 static void usbd_event_handler(uint8_t busid, uint8_t event)
 {
     switch (event) {
@@ -160,6 +193,10 @@ static void usbd_event_handler(uint8_t busid, uint8_t event)
 static struct usbd_interface intf0;
 static struct usbd_interface intf1;
 
+/** @brief Register and initialize the CDC ECM device.
+ * @param[in] busid USB device-controller index.
+ * @param[in] reg_base USB controller register base.
+ */
 static void cdc_ecm_init(uint8_t busid, uintptr_t reg_base)
 {
     usbd_desc_register(busid, &cdc_ecm_descriptor);
@@ -169,14 +206,21 @@ static void cdc_ecm_init(uint8_t busid, uintptr_t reg_base)
 }
 
 /************************* ECM_IN <-> EMAC_RX Sub-state machine *******************************/
+/** @name EMAC receive to ECM IN state identifiers
+ * @{ */
 #define ECM_IN_STA_STOP         0
 #define ECM_IN_STA_START        1
 #define ECM_IN_STA_WAIT_EMAC_RX 2
 #define ECM_IN_STA_WAIT_USBD_IN 3
+/** @} */
 static volatile uint8_t usbd_ecm_in_status = ECM_IN_STA_STOP;
 
 static volatile bool usbd_ecm_in_busy_flag = false;
 
+/** @brief Complete an ECM IN frame transfer and wake the bridge task.
+ * @param[in] len Number of bytes transmitted.
+ * @note Runs in USB transfer-completion context.
+ */
 void usbd_cdc_ecm_data_send_done(uint32_t len)
 {
     // LOG_I("ecm IN send done, len:%d\r\n", len);
@@ -185,6 +229,10 @@ void usbd_cdc_ecm_data_send_done(uint32_t len)
     usbd_ecm_emac_event_trig();
 }
 
+/** @brief Advance the EMAC receive to ECM IN sub-state machine.
+ * @retval 0 State processing completed.
+ * @note A received EMAC descriptor is retained until USB IN completes.
+ */
 static int usbd_ecm_in_emac_rx_polling(void)
 {
     int ret = 0;
@@ -232,15 +280,22 @@ polling_continue:
 }
 
 /************************* ECM_OUT <-> EMAC_TX Sub-state machine *******************************/
+/** @name ECM OUT to EMAC transmit state identifiers
+ * @{ */
 #define ECM_OUT_STA_STOP          0
 #define ECM_OUT_STA_START         1
 #define ECM_OUT_STA_WAIT_EMAC_TX  2
 #define ECM_OUT_STA_WAIT_USBD_OUT 3
+/** @} */
 static volatile uint8_t usbd_ecm_out_status = ECM_OUT_STA_STOP;
 
 static volatile bool usbd_ecm_out_busy_flag = false;
 static volatile uint16_t usbd_ecm_out_done_len = 0;
 
+/** @brief Complete an ECM OUT frame transfer and wake the bridge task.
+ * @param[in] len Number of bytes received.
+ * @note Runs in USB transfer-completion context.
+ */
 void usbd_cdc_ecm_data_recv_done(uint32_t len)
 {
     // LOG_I("ecm OUT recv done, len:%d\r\n", len);
@@ -250,6 +305,10 @@ void usbd_cdc_ecm_data_recv_done(uint32_t len)
     usbd_ecm_emac_event_trig();
 }
 
+/** @brief Advance the ECM OUT to EMAC transmit sub-state machine.
+ * @retval 0 State processing completed.
+ * @note The acquired EMAC transmit buffer is owned until submitted to EMAC.
+ */
 static int usbd_ecm_out_emac_tx_polling(void)
 {
     int ret = 0;
@@ -298,13 +357,19 @@ polling_continue:
 }
 
 /************************* ECM-EMAC state machine *******************************/
+/** @name ECM-to-EMAC bridge state identifiers
+ * @{ */
 #define ECM_EMAC_STA_STOP             0
 #define ECM_EMAC_STA_START            1
 #define ECM_EMAC_STA_WAIT_USBD_CFG    2
 #define ECM_EMAC_STA_WAIT_EPHY_LINKUP 3
 #define ECM_EMAC_STA_DATA_POLLING     4
+/** @} */
 static volatile uint32_t usbd_ecm_emac_sta = ECM_EMAC_STA_STOP;
 
+/** @brief Advance USB readiness, PHY link, and frame bridge state machines.
+ * @retval 0 State processing completed.
+ */
 static int usbd_ecm_emac_polling(void)
 {
     static uint32_t status_time_ms = 0;
@@ -378,7 +443,7 @@ static int usbd_ecm_emac_polling(void)
             /* info dump */
             if (time_ms - info_dump_time_ms > 5000) {
                 info_dump_time_ms = time_ms;
-                eth_eamc_info_dump();
+                eth_emac_info_dump();
             }
             /* emac link check */
             if (time_ms - status_time_ms > 100) {
@@ -405,6 +470,7 @@ static int usbd_ecm_emac_polling(void)
 static TaskHandle_t usbd_ecm_emac_handle = NULL;
 
 /* usbd_ecm_emac event trigger */
+/** @brief Notify the ECM bridge task from task or interrupt context. */
 static void usbd_ecm_emac_event_trig(void)
 {
     if (usbd_ecm_emac_handle) {
@@ -422,18 +488,29 @@ static void usbd_ecm_emac_event_trig(void)
 }
 
 /* usbd_ecm_emac event wait */
+/** @brief Wait for an ECM bridge event.
+ * @param[in] timeout Maximum wait in FreeRTOS ticks.
+ */
 static void usbd_ecm_emac_event_wait(uint32_t timeout)
 {
     ulTaskNotifyTake(pdTRUE, timeout);
 }
 
 /* usbd_emac_event_cb */
+/** @brief Wake the bridge task for an EMAC completion event.
+ * @param[in] event EMAC interrupt event identifier; unused.
+ * @note Invoked from EMAC interrupt context.
+ */
 static void usbd_emac_event_cb(uint32_t event)
 {
     usbd_ecm_emac_event_trig();
 }
 
 /* usbd_ecm_emac_task */
+/** @brief Run the CDC ECM-to-EMAC bridge state machine.
+ * @param[in] param Unused FreeRTOS task parameter.
+ * @note This task runs indefinitely.
+ */
 static void usbd_ecm_emac_task(void *param)
 {
     usbd_ecm_emac_sta = ECM_EMAC_STA_START;
@@ -447,6 +524,7 @@ static void usbd_ecm_emac_task(void *param)
 }
 
 /* usbd_ecm_emac init */
+/** @brief Initialize USB ECM, EMAC, PHY pins, and the bridge task. */
 void usbd_ecm_emac_init(void)
 {
     /* usb init */
@@ -463,6 +541,7 @@ void usbd_ecm_emac_init(void)
     xTaskCreate(usbd_ecm_emac_task, (char *)"usbd_ecm_emac", 1024, NULL, 15, &usbd_ecm_emac_handle);
 }
 
+/** @brief Stop the bridge task and deinitialize EMAC and USB. */
 void usbd_ecm_emac_deinit(void)
 {
     if (usbd_ecm_emac_handle) {

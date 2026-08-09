@@ -7,6 +7,19 @@
 #include "bl616cl_pm.h"
 
 uint32_t wakeup_count;
+static PM_LOWPOWER_CFG_Type app_lowpower_cfg;
+
+static int app_lowpower_mode_load(uint8_t mode)
+{
+    const PM_LOWPOWER_CFG_Type *mode_cfg = pm_power_mode_cfg_get(mode);
+
+    if (mode_cfg == NULL) {
+        return -1;
+    }
+
+    app_lowpower_cfg = *mode_cfg;
+    return 0;
+}
 
 HBN_BOD_CFG_Type bod_cfg = {
     .enableBod = ENABLE,               /*!< Enable BOD or not */
@@ -28,6 +41,11 @@ void pm_irq_callback(uint32_t event)
 int main(void)
 {
     board_init();
+    if (app_lowpower_mode_load(PM_LDO13_LDO07_PDSLDO07) != 0) {
+        printf("load default power mode failed\r\n");
+        while (1) {
+        }
+    }
     HBN_32K_Sel(HBN_32K_RC);
 
     while (1) {
@@ -40,7 +58,7 @@ int main(void)
         PDS_Mask_All_Wakeup_Src();
         HBN_Pin_WakeUp_Mask(0xF);
         PDS_Set_Wakeup_Src_IntMask(PDS_WAKEUP_BY_HBN_IRQ_OUT, UNMASK);
-        pm_pds_mode_enter(PM_PDS_LEVEL_15, 0);
+        pm_pds_mode_enter(PM_PDS_LEVEL_15, 0, &app_lowpower_cfg);
         bflb_mtimer_delay_ms(1000);
     }
 }

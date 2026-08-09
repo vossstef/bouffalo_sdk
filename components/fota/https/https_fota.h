@@ -61,6 +61,7 @@ typedef void (*pfn_https_fota_t)(void *arg, https_fota_status_t event);
 struct https_fota_config {
     pfn_https_fota_t callback; /**< Status callback function */
     void *user_arg;            /**< User context passed to callback */
+    bool reboot;               /**< Reboot after a successful automatic update */
 
     const char *ca_pem;          /**< SSL server CA certificate in PEM format (for server verification) */
     size_t ca_len;               /**< Length of CA certificate */

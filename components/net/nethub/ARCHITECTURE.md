@@ -218,7 +218,13 @@ Current USB device-side behavior:
 - data-path is exposed through `USB CDC ECM`
 - virtual-channel transport is exposed through `USB CDC ACM`
 - the public control facade uses the `AT` virtual channel
-- the backend is selected through `CONFIG_NETHUB_PROFILE_USB`
+- the backend is selected through `CONFIG_NETHUB_PROFILE_USB`, or included
+  with SDIO by the BL616/BL618DG `CONFIG_NETHUB_PROFILE_DUAL` boot-only profile
+- in dual profile, NetHub remains probing until the first effective SDIO or
+  USB host candidate is ready; after that lock, it does not reselect
+- after a dual-profile boot selects USB, USB disconnect/reconfigured handling
+  follows the same backend flow as the USB-only profile; the selector does not
+  switch to SDIO
 
 What is not yet finished end-to-end:
 

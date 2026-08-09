@@ -457,27 +457,23 @@ void net_al_input(net_al_rx_t net_buf, void *payload,
                   uint16_t length,
                   uint8_t offset,
                   uint8_t skip_after_eth_hdr,
-		  net_buf_free_fn free_fn)
+                  net_buf_free_fn free_fn)
 {
-        if (skip_after_eth_hdr != 0) {
-            memcpy((char*)payload + skip_after_eth_hdr, payload, sizeof(struct mac_eth_hdr));
-        }
-        /* Drop my broadcast message forwarded by AP. */
-        uint8_t from_us = 1;
-        uint8_t *mac_eth_hdr = (uint8_t *)payload + offset;
-        const uint8_t *src_addr = net_if_get_mac_addr(net_if);
-        for (int i = 0; i < 6; i++) {
-            if (mac_eth_hdr[6 + i] != src_addr[i]) {
-                from_us = 0;
-                break;
-            }
-        }
-        if (from_us) {
-            fhost_rx_buf_push(net_buf);
-            return;
-        }
-        net_if_input(net_buf, net_if, (char*)payload + offset + skip_after_eth_hdr,
-                     length - skip_after_eth_hdr, free_fn);
+    struct mac_eth_hdr *eth_hdr = (struct mac_eth_hdr *)((uint8_t *)payload + offset);
+
+    if (skip_after_eth_hdr != 0) {
+        memcpy((char *)payload + skip_after_eth_hdr, payload, sizeof(struct mac_eth_hdr));
+    }
+
+    if (is_sta_netif(net_if) &&
+        (length >= sizeof(*eth_hdr)) &&
+        !memcmp(&eth_hdr->sa, net_if_get_mac_addr(net_if), sizeof(eth_hdr->sa))) {
+        free_fn(net_buf);
+        return;
+    }
+
+    net_if_input(net_buf, net_if, (char *)payload + offset + skip_after_eth_hdr,
+                 length - skip_after_eth_hdr, free_fn);
 }
 
 void *net_if_vif_info(net_al_if_t net_if)

@@ -13,6 +13,20 @@
 
 #define PDS_RTC_WAKEUP_TIME (5*1000*1000/32)
 
+static PM_LOWPOWER_CFG_Type app_lowpower_cfg;
+
+static int app_lowpower_mode_load(uint8_t mode)
+{
+    const PM_LOWPOWER_CFG_Type *mode_cfg = pm_power_mode_cfg_get(mode);
+
+    if (mode_cfg == NULL) {
+        return -1;
+    }
+
+    app_lowpower_cfg = *mode_cfg;
+    return 0;
+}
+
 void HBN_OUT0_IRQ_Handler(void)
 {
     printf("HBN_OUT0_IRQ_Handler\r\n");
@@ -48,6 +62,11 @@ int main(void)
     uint32_t rtc_val_h = 0;
 
     board_init();
+    if (app_lowpower_mode_load(PM_LDO13_LDO07_PDSLDO07) != 0) {
+        printf("load default power mode failed\r\n");
+        while (1) {
+        }
+    }
 
     HBN_32K_Sel(HBN_32K_RC);
 
@@ -80,27 +99,27 @@ int main(void)
             pm_pds_irq_register();
             printf("enter pds1 mode\r\n");
             arch_delay_ms(10);  /* Wait for log output */
-            bl_lp_pds_enter_with_restore(PM_PDS_LEVEL_1, 0);
+            bl_lp_pds_enter_with_restore(PM_PDS_LEVEL_1, 0, &app_lowpower_cfg);
             printf("pds1 wakeup\r\n");
         } else if (num == 1) {
             printf("enter pds2 mode\r\n");
             arch_delay_ms(10);  /* Wait for log output */
-            bl_lp_pds_enter_with_restore(PM_PDS_LEVEL_2, 0);
+            bl_lp_pds_enter_with_restore(PM_PDS_LEVEL_2, 0, &app_lowpower_cfg);
             printf("pds2 wakeup\r\n");
         } else if (num == 2) {
             printf("enter pds3 mode\r\n");
             arch_delay_ms(10);  /* Wait for log output */
-            bl_lp_pds_enter_with_restore(PM_PDS_LEVEL_3, 0);
+            bl_lp_pds_enter_with_restore(PM_PDS_LEVEL_3, 0, &app_lowpower_cfg);
             printf("pds3 wakeup\r\n");
         } else if (num == 3) {
             printf("enter pds7 mode\r\n");
             arch_delay_ms(10);  /* Wait for log output */
-            bl_lp_pds_enter_with_restore(PM_PDS_LEVEL_7, 0);
+            bl_lp_pds_enter_with_restore(PM_PDS_LEVEL_7, 0, &app_lowpower_cfg);
             printf("pds7 wakeup\r\n");
         } else if (num == 4) {
             printf("enter pds15 mode\r\n");
             arch_delay_ms(10);  /* Wait for log output */
-            bl_lp_pds_enter_with_restore(PM_PDS_LEVEL_15, 0);
+            bl_lp_pds_enter_with_restore(PM_PDS_LEVEL_15, 0, &app_lowpower_cfg);
             printf("pds15 wakeup\r\n");
         } else {
             printf("SUCCESS\r\n");

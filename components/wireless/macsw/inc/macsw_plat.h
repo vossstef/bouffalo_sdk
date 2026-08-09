@@ -36,7 +36,7 @@
         }                                                                             \
     } while (0);
 
-#if MACSW_WFA
+#ifdef CONFIG_HIGH_ISR_STACK
 extern volatile int GLOBAL_INT_DISABLE_has_lock;
 extern volatile uint32_t critical_nesting_level;
 //extern volatile void *GLOBAL_INT_task_handle;
@@ -59,7 +59,7 @@ extern int32_t TrapNetCounter; /* Someone actually called 'GLOBAL_INT_DISABLE' i
 #define GLOBAL_INT_DISABLE() GLOBAL_INT_DISABLE_LONG_TIME()
 #endif
 
-#if MACSW_WFA
+#ifdef CONFIG_HIGH_ISR_STACK
 #define GLOBAL_INT_RESTORE()                                                        \
         if(!TrapNetCounter) {                                                       \
         critical_nesting_level--;                                                   \
