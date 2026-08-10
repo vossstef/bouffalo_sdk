@@ -1,5 +1,108 @@
 # CHANGELOG
 
+## v2.3.31 — since v2.3.30 (2026-07-27 → 2026-08-10)
+
+### New Features
+
+- **OTA / FOTA**
+  - HTTP/HTTPS/TCP OTA commands now support a reboot option, allowing the current firmware to keep running after a successful update
+  - Active OTA partition is marked immediately, so multiple updates can be installed before rebooting
+  - Fast OTA mode can now be enabled or disabled at build time
+
+- **USB**
+  - Updated USB protocol stack to v1.6.1
+  - Expanded USB CLI demo with device/host templates, Ethernet adapters, and documentation
+  - Added USB port unregister support
+
+- **Camera / Display**
+  - Added 720P GC2145 camera to MIPI DSI LCD example
+  - Added GC0308 camera with ST77926 LCD support to camera/LCD example
+
+- **Networking**
+  - Nethub on BL616/BL618DG now automatically selects the SDIO or USB interface
+
+- **Power**
+  - Added runtime power mode configuration for BL616CL, including matching LPFW voltage parameter updates
+
+- **BL618DG**
+  - Added SPDT switch control support
+  - Added BLE LP firmware (LPFW) API
+
+- **System / RTOS**
+  - Added a configurable threshold to flag tasks that remain in ready state for too long
+
+- **Flash**
+  - Added IS25LP01GJ flash support for BL618DG
+
+### Bug Fixes
+
+- **OTA / FOTA**
+  - OTA start now rejects duplicate invocations
+  - Serialized SHA mode switching during OTA
+  - Fixed BL602 OTA stability by reworking RAM layout and keeping SHA link descriptors in OCRAM
+
+- **WiFi**
+  - Fixed BL618DG WFA memory overlap by isolating Wi-Fi buffers in dedicated RAM with linker checks
+  - Disabled high ISR stack for BL618DG WFA builds
+  - Fixed reflected station packets being processed after deaggregation
+  - Fixed BL616 iperf assert and TCP RX resource lifetime issue
+  - Fixed retry attempts when the virtual interface is disabled or disconnected
+  - Fixed scan adding entries from the wrong PHY channel
+
+- **BL616CL**
+  - Fixed MFG temperature sensor and PDS API issues
+  - Fixed MFG SDIO/USB compile errors
+  - Fixed MFG Wi-Fi TX and RF temperature calibration loop
+  - Fixed temperature sensor offset values on BL616CL and BL618DG
+  - Fixed temperature sensor issues in ADC v2/v3 examples
+
+- **BL618DG**
+  - Disabled Wi-Fi PLL fine-tuning on B0 silicon
+  - Fixed CPU PLL clock calculation using floating-point
+  - Fixed EMAC clock invert bit
+  - Fixed channel data leftover handling
+
+- **Bluetooth**
+  - BLE stack now uses runtime local ATT MTU for GATT exchange
+
+- **Zigbee / 802.15.4**
+  - Fixed TCLK callback being invoked while erasing TCLK
+  - Corrected BL702 monitor timeout calculation
+
+- **USB**
+  - Updated USB descriptor API usage in AT module
+  - Removed redundant USB host serial source
+
+- **Demo / Examples**
+  - Enabled EasyFlash support in nethub demo
+
+### Improvements
+
+- **WiFi / Networking**
+  - Optimized nethub Wi-Fi throughput with hot-code placement and build tuning
+  - Updated Wi-Fi MAC default configuration for BL618DG
+  - Gated nested IRQ handling on high ISR stack
+  - Tuned combo memory usage to free more RAM for other components
+  - Updated Wi-Fi MAC integration for the new ADC temperature sensor API on BL616CL
+
+- **Bluetooth**
+  - Allowed external control of BLE simple logging on BL702L
+  - BLE now tracks whether the next wake is for event programming
+  - Resolved BLE stack symbol name conflicts
+
+- **RF**
+  - Updated RF PHY libraries for BL616 and BL616CL
+
+- **BL618DG**
+  - Unified PDS and jump app paths in low-power firmware example
+
+- **System**
+  - Moved small read-only data to TCM to reduce RAM usage
+
+- **Tools**
+  - Added support for Zephyr toolchain
+  - Updated firmware post-processing tool to v1.4.4
+
 ## v2.3.30 — since v2.3.29 (2026-07-15 → 2026-07-27)
 
 ### New Features
