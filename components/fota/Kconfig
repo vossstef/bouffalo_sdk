@@ -1,0 +1,28 @@
+#
+# FOTA components
+#
+
+menu "Firmware Update"
+
+config FOTA
+    bool "FOTA"
+    default n
+    help
+      Build the firmware over-the-air update component.
+
+config FOTA_NO_SHELL
+    bool "Disable FOTA shell commands"
+    default n
+    depends on FOTA
+    help
+      Build FOTA without the shell command frontend.
+
+config OTA_VERSION_CHECK
+    bool "OTA version check"
+    default n
+    depends on FOTA
+    help
+      Compare the OTA image version against the running firmware before
+      applying an update.
+
+endmenu

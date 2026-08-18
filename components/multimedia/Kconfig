@@ -1,0 +1,205 @@
+#
+# Multimedia components
+#
+
+menu "Multimedia"
+
+config MULTIMEDIA
+    bool "Multimedia framework"
+    default n
+    help
+      Build the multimedia framework and its codec backends.
+
+if MULTIMEDIA
+
+config AACDEC
+    bool "AAC decoder"
+    default n
+    help
+      Build the AAC audio decoder.
+
+config AMRNB
+    bool "AMR-NB codec"
+    default n
+    help
+      Build the AMR narrowband codec.
+
+config AMRWB
+    bool "AMR-WB codec"
+    default n
+    help
+      Build the AMR wideband codec.
+
+config PVMP3DEC
+    bool "MP3 decoder"
+    default n
+    help
+      Build the MP3 audio decoder.
+
+config OPUS
+    bool "Opus codec"
+    default n
+    help
+      Build the Opus audio codec.
+
+config SPEEX
+    bool "Speex codec"
+    default n
+    help
+      Build the Speex audio codec.
+
+config SPEEXDSP
+    bool "SpeexDSP"
+    default n
+    help
+      Build the Speex DSP library.
+
+config VORBIS
+    bool "Vorbis codec"
+    default n
+    help
+      Build the Vorbis audio decoder.
+
+config OGG
+    bool "Ogg container"
+    default n
+    help
+      Build the Ogg container demuxer.
+
+config SONIC
+    bool "Sonic audio resampler"
+    default n
+    help
+      Build the Sonic speed/pitch audio resampler.
+
+config MINIALSA
+    bool "Mini ALSA"
+    default n
+    help
+      Build the mini ALSA userspace library.
+
+config LIBFVAD
+    bool "libfvad voice activity detection"
+    default n
+    help
+      Build the libfvad voice activity detector.
+
+config USERVICE
+    bool "UService audio service"
+    default n
+    help
+      Build the UService based audio service.
+
+config AUIDIO_FLOWCTRL_BRIDGE
+    bool "Audio flow-control bridge"
+    default n
+    help
+      Build the audio flow-control bridge component.
+
+config BL616_IMPLS
+    bool "BL616 audio implementations"
+    default n
+    help
+      Build BL616 specific multimedia implementations.
+
+config DRV_SND_BL616
+    bool "BL616 sound driver"
+    default n
+    help
+      Build the BL616 sound device driver.
+
+config SMART_AUDIO_BL616
+    bool "BL616 smart audio"
+    default n
+    help
+      Build the BL616 smart audio solution.
+
+config AV
+    bool "Audio/video framework"
+    default n
+    help
+      Build the audio/video framework.
+
+config XCODEC
+    bool "X codec"
+    default n
+    help
+      Build the X codec framework.
+
+config XPORT
+    bool "X port"
+    default n
+    help
+      Build the X multimedia port layer.
+
+config XUTILS
+    bool "X utils"
+    default n
+    help
+      Build the X multimedia utility library.
+
+config XRECORD
+    bool "X record"
+    default n
+    help
+      Build the X audio recording component.
+
+config XWEBSOCKET
+    bool "X WebSocket"
+    default n
+    help
+      Build the X multimedia WebSocket component.
+
+config CODEC_ENABLE_HFP
+    bool "Codec HFP mode"
+    default n
+    help
+      Build codec support for the hands-free profile.
+
+config CODEC_USE_I2S
+    bool "Codec I2S interface"
+    default n
+    help
+      Route the codec through the I2S interface.
+
+config CODEC_USE_I2S_RX
+    bool "Codec I2S receive"
+    default n
+    depends on CODEC_USE_I2S
+    help
+      Enable I2S receive direction for the codec.
+
+config CODEC_USE_I2S_TX
+    bool "Codec I2S transmit"
+    default n
+    depends on CODEC_USE_I2S
+    help
+      Enable I2S transmit direction for the codec.
+
+config CODEC_USE_ES8388
+    bool "ES8388 codec"
+    default n
+    help
+      Use the ES8388 external codec in the multimedia port.
+
+config MSP_USE_CODEC_ONLY
+    bool "MSP codec only mode"
+    default n
+    help
+      Build the multimedia service pipeline with codec support only.
+
+config MSP_USE_STATIC_RAM
+    bool "MSP static RAM"
+    default n
+    help
+      Allocate multimedia service buffers from static RAM.
+
+config XCODEC_OUTPUT_CACHE
+    bool "X codec output cache"
+    default n
+    help
+      Cache decoded audio output in the X codec pipeline.
+
+endif # CONFIG_MULTIMEDIA
+
+endmenu

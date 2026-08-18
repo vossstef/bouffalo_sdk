@@ -1,0 +1,424 @@
+#
+# BSP, SoC drivers and firmware image options
+#
+
+menu "SoC Drivers"
+
+config RF
+    bool "Radio frequency (RF) driver"
+    default n
+    help
+      Build the RF parameter and PHY RF driver for the selected chip.
+
+config PHY_LPFW
+    bool "PHY low-power firmware"
+    default n
+    help
+      Build the PHY low-power firmware image.
+
+config INCLUDE_PHYRF_HEADER
+    bool "Include PHY RF header"
+    default n
+    help
+      Force-include the chip PHY RF configuration header in PHYRF sources.
+
+config PHY_CLI
+    bool "PHY RF CLI commands"
+    default n
+    help
+      Enable PHY RF debug and calibration commands in the shell.
+
+config RFPHY_CLI
+    bool "RFPHY CLI commands"
+    default n
+    help
+      Enable RFPHY test commands for chips that ship a standalone PHY RF lib.
+
+config RFPARAM_TLV_FIXED_ADDRESS
+    bool "RF parameter TLV fixed address"
+    default n
+    help
+      Store RF parameters at a fixed TLV flash address instead of the
+      auto-detected location.
+
+config MFG_SDIO
+    bool "Manufacturing SDIO mode"
+    default n
+    help
+      Build PHY RF support for SDIO-hosted manufacturing firmware.
+
+config MFG_USB
+    bool "Manufacturing USB mode"
+    default n
+    help
+      Build PHY RF support for USB-hosted manufacturing firmware.
+
+config MULTIMEDIA_VIDEO
+    bool "Multimedia video driver"
+    default n
+    help
+      Enable video related LHAL drivers such as DVP, CSI and JPEG.
+
+config PEC_V2
+    bool "PEC v2 peripheral controller"
+    default n
+    help
+      Enable the PEC v2 peripheral expansion controller drivers.
+
+config PMP_NOT_INIT
+    bool "Do not initialize PMP"
+    default n
+    help
+      Skip RISC-V physical memory protection initialization at startup.
+
+config PMP_NO_INIT
+    bool "Disable PMP initialization (legacy alias)"
+    default n
+    help
+      Legacy alias for CONFIG_PMP_NOT_INIT, kept for compatibility.
+
+config USB_DISABLED
+    bool "Disable USB"
+    default n
+    help
+      Exclude USB device controller support from the startup and board code.
+
+config LHAL_BOOTROM_ROMDRIVER
+    bool "LHAL bootrom ROM driver"
+    default n
+    help
+      Use bootrom-resident ROM drivers through LHAL.
+
+config STD_BOOTROM_ROMDRIVER
+    bool "SoC std bootrom ROM driver"
+    default n
+    help
+      Use bootrom-resident ROM drivers in the SoC standard library.
+
+endmenu
+
+menu "Board Support Package"
+
+config PSRAM
+    bool "PSRAM"
+    default n
+    help
+      Enable the external PSRAM driver and map it into the application heap.
+
+config AUDIO_MIC_PDM_MODE
+    bool "Audio microphone PDM mode"
+    default n
+    help
+      Use PDM microphones instead of analog microphones on the board.
+
+config CUSTOMIZE_BOARD_DIR
+    bool "Custom board directory"
+    default n
+    help
+      Allow the application to replace the default board directory.
+
+config CUSTOM_LINKSCRIPT
+    bool "Custom linker script"
+    default n
+    help
+      Use a custom linker script provided by the application.
+
+config PM
+    bool "Power management"
+    default n
+    help
+      Enable board power management support such as sleep and wakeup.
+
+config AUDIO_CODEC_JY6316_ENABLE
+    bool "JY6316 audio codec"
+    default n
+    depends on BSP_AUDIO_CODEC
+    help
+      Enable the JY6316 external audio codec driver.
+
+config BSP_ADC_KEY
+    bool "ADC key driver"
+    default n
+    help
+      Enable the ADC-key matrix driver in the BSP layer.
+
+config BSP_AUDIO_CODEC
+    bool "Audio codec"
+    default n
+    help
+      Enable the BSP audio codec framework and external codec drivers.
+
+config BSP_AUDIO_CODEC_BL_ENABLE
+    bool "Bouffalo built-in audio codec"
+    default n
+    depends on BSP_AUDIO_CODEC
+    help
+      Enable the on-chip Bouffalo audio codec backend.
+
+config BSP_AUDIO_PLAYER
+    bool "Audio player"
+    default n
+    help
+      Enable the BSP audio player framework.
+
+config BSP_CSI
+    bool "CSI camera"
+    default n
+    help
+      Enable the CSI camera sensor support in the BSP layer.
+
+config BSP_ETH_PHY
+    bool "Ethernet PHY"
+    default n
+    help
+      Enable the Ethernet PHY driver and MDIO access.
+
+config BSP_IMAGE_SENSOR
+    bool "Image sensor"
+    default n
+    help
+      Enable the image sensor drivers used by camera applications.
+
+config BSP_LWIP_NETIF_EMAC
+    bool "lwIP EMAC netif"
+    default n
+    help
+      Enable the lwIP network interface for the EMAC peripheral.
+
+config BSP_MR
+    bool "Message router"
+    default n
+    help
+      Enable the BSP message router framework for SDIO/USB host links.
+
+if BSP_MR
+
+config MR_MSG_CTRL_SDIO
+    bool "SDIO message control channel"
+    default n
+    help
+      Use SDIO as the message router control channel.
+
+config MR_NETDEV
+    bool "Net device support"
+    default n
+    help
+      Expose the message router as a network device.
+
+config MR_NETDEV_EMAC
+    bool "EMAC net device"
+    default n
+    depends on MR_NETDEV
+    help
+      Route EMAC traffic through the message router network device.
+
+config MR_NETLINK
+    bool "Netlink interface"
+    default n
+    help
+      Enable the netlink user/kernel interface for the message router.
+
+config MR_NETLINK_CLI
+    bool "Netlink CLI commands"
+    default n
+    depends on MR_NETLINK
+    help
+      Enable netlink debug commands in the shell.
+
+config MR_SDIO_DRIVER
+    bool "SDIO host driver"
+    default n
+    help
+      Enable the SDIO host driver used by the message router.
+
+config MR_SDIO_QUEUE_DEPTH
+    int "SDIO queue depth"
+    default 0
+    help
+      Depth of the SDIO transmit/receive queues.
+
+config MR_SPEED_TEST
+    bool "Message router speed test"
+    default n
+    help
+      Enable the throughput measurement mode for the message router.
+
+config MR_SPEED_TEST_START
+    bool "Auto-start speed test"
+    default n
+    depends on MR_SPEED_TEST
+    help
+      Start the message router speed test automatically at boot.
+
+config MR_TTY
+    bool "TTY channel"
+    default n
+    help
+      Enable the TTY virtual channel of the message router.
+
+config MR_TTY_CLI
+    bool "TTY CLI commands"
+    default n
+    depends on MR_TTY
+    help
+      Enable TTY channel debug commands in the shell.
+
+config MR_VIRTUALCHAN
+    bool "Virtual channel"
+    default n
+    help
+      Enable the virtual channel multiplexing of the message router.
+
+endif # CONFIG_BSP_MR
+
+config BSP_SDH_OSAL_POLLING_MODE
+    bool "SDH polling mode"
+    default n
+    help
+      Run the SD host controller in polling mode instead of using interrupts.
+
+config BSP_SDH_SD
+    bool "SD card support"
+    default n
+    help
+      Enable SD card media support on the SD host controller.
+
+config BSP_SDH_SDIO
+    bool "SDIO device support"
+    default n
+    help
+      Enable SDIO device support on the SD host controller.
+
+config BSP_SPI_SDCARD
+    bool "SPI SD card"
+    default n
+    help
+      Enable SD card support over an SPI interface.
+
+config BSP_TOUCH
+    bool "Touch controller"
+    default n
+    help
+      Enable the touch panel controller driver.
+
+endmenu
+
+menu "Build and Image"
+
+config OTA_VERSION_PREFIX
+    string "OTA version prefix"
+    default ""
+    help
+      Prefix string written into the OTA firmware version header.
+
+config OTA_HEADER_USE_SDK_VERSION
+    bool "Use SDK version in OTA header"
+    default n
+    help
+      Fill the OTA header version field from the SDK version instead of the
+      application version.
+
+config OVERRIDE_BOOT2FILE
+    string "Override boot2 image file"
+    default ""
+    help
+      Replace the default boot2 image used by the image packing tool.
+
+config OVERRIDE_DTSFILE
+    string "Override device tree file"
+    default ""
+    help
+      Replace the default device tree source used by the image tools.
+
+config OVERRIDE_MFGFILE
+    string "Override manufacturing file"
+    default ""
+    help
+      Replace the default manufacturing configuration file.
+
+config OVERRIDE_PTFILE
+    string "Override partition table file"
+    default ""
+    help
+      Replace the default partition table file used by the image tools.
+
+config POST_BUILDS
+    string "Post build steps"
+    default ""
+    help
+      Extra post-build processing steps passed to the firmware packing tool.
+
+config POST_BUILDS_CONCAT_WITH_LP_FW
+    bool "Concat with low-power firmware"
+    default n
+    help
+      Concatenate the main image with the low-power firmware image.
+
+config POST_BUILDS_GENERATE_LITTLEFS
+    bool "Generate LittleFS image"
+    default n
+    help
+      Generate a LittleFS filesystem image during post build.
+
+config POST_BUILDS_GENERATE_ROMFS
+    bool "Generate ROMFS image"
+    default n
+    help
+      Generate a ROMFS filesystem image during post build.
+
+config POST_BUILDS_LITTLEFS_SIZE
+    hex "LittleFS image size"
+    default 0x0
+    help
+      Size of the generated LittleFS image in bytes.
+
+config DUALCORE_NP_IMAGE
+    bool "Build dual-core NP image"
+    default n
+    help
+      Pack the non-processor core image together with the main image.
+
+config THIRDCORE_LP_IMAGE
+    bool "Build third-core LP image"
+    default n
+    help
+      Pack the third (low-power) core image together with the main image.
+
+config NO_SHORT_ENUMS
+    bool "Disable short enums"
+    default n
+    help
+      Compile with -fno-short-enums for ABI compatibility with libraries.
+
+config PRIVATE_KEY
+    string "Firmware private key"
+    default ""
+    help
+      Path to the private key used to sign the firmware image.
+
+config PUBLIC_KEY
+    string "Firmware public key"
+    default ""
+    help
+      Path to the public key used to verify the firmware image.
+
+config AES_KEY
+    string "Image AES key"
+    default ""
+    help
+      AES key used to encrypt the firmware image.
+
+config AES_IV
+    string "Image AES IV"
+    default ""
+    help
+      AES initialization vector used to encrypt the firmware image.
+
+config FW_POST_PROC_CUSTOM
+    string "Custom firmware post processing"
+    default ""
+    help
+      Custom step executed by the firmware packing tool after the default
+      post processing.
+
+endmenu

@@ -1,0 +1,25 @@
+#
+# Memory management components
+#
+
+menu "Memory Management"
+
+config MEM_TLSF_EN
+    bool "TLSF allocator"
+    default y
+    help
+      Enable the TLSF dynamic memory allocator.
+
+config MEM_HEAP5_EN
+    bool "Heap5 allocator"
+    default n
+    help
+      Enable the FreeRTOS heap5 allocator as an additional memory region.
+
+config TLSF
+    bool "TLSF compatibility flag"
+    default y
+    help
+      Legacy switch kept for compatibility with older configurations.
+
+endmenu
