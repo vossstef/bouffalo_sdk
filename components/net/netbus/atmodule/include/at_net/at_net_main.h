@@ -15,6 +15,9 @@ extern "C" {
 #endif
 
 #include "lwip/ip_addr.h"
+#if defined(CONFIG_AT_MDNS_ENABLE) && CONFIG_AT_MDNS_ENABLE
+#include "lwip/apps/mdns.h"
+#endif
 
 #define AT_NET_CLIENT_HANDLE_MAX 5
 #define AT_NET_SERVER_HANDLE_MAX 1

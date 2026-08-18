@@ -21,21 +21,15 @@ set(LVGL_DEMO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/demos)
 file(GLOB_RECURSE lvgl_demo_sources "${LVGL_DEMO_DIR}/*.c")
 sdk_add_include_directories(${LVGL_DEMO_DIR})
 
-# SquareLine UI: one folder per panel resolution (same symbol names in each, so
-# only ONE may be compiled or the linker sees duplicate ui_init/ui_Screen1/...).
-# Pick the folder that matches the panel selected in lcd_conf_user.h, drop both
-# from the GLOB above, and add only the chosen one. main.c includes "ui.h"
-# (no folder prefix), resolved via the include dir added below, so it never
-# needs to know which resolution is active.
-#
-# DPI standard (800x480) uses UICODE800, a native-landscape SquareLine UI (no
-# 270-degree rotation, unlike the portrait DSI panels).
 set(UI_DIR_172 ${LVGL_DEMO_DIR}/UICODE172)
+set(UI_DIR_320 ${LVGL_DEMO_DIR}/UICODE320x320)
 set(UI_DIR_480 ${LVGL_DEMO_DIR}/UICODE480)
+set(UI_DIR_480x480 ${LVGL_DEMO_DIR}/UICODE480x480)
 set(UI_DIR_720 ${LVGL_DEMO_DIR}/UICODE720)
 set(UI_DIR_800 ${LVGL_DEMO_DIR}/UICODE800)
 set(UI_DIR_854 ${LVGL_DEMO_DIR}/UICODE854)
-list(FILTER lvgl_demo_sources EXCLUDE REGEX "/UICODE172/|/UICODE480/|/UICODE720/|/UICODE800/|/UICODE854/")
+set(UI_DIR_1024 ${LVGL_DEMO_DIR}/UICODE1024)
+list(FILTER lvgl_demo_sources EXCLUDE REGEX "/UICODE172/|/UICODE320x320/|/UICODE480/|/UICODE480x480/|/UICODE720/|/UICODE800/|/UICODE854/|/UICODE1024/")
 
 file(READ ${CMAKE_CURRENT_SOURCE_DIR}/lcd_conf_user.h _lcd_conf)
 # DPI panels mux SDH DAT2/DAT3 (IO43/44) onto the panel's R7/R6, so the SD card
@@ -47,17 +41,25 @@ if(NOT CONFIG_LVGL_V9_WITH_OSD_USB_VIDEO AND _lcd_conf MATCHES "\n[ \t]*#define[
 endif()
 # match an ACTIVE (non-commented) panel define
 if(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DPI_STANDARD")
-    set(UI_DIR ${UI_DIR_800}) # standard 800x480 DPI, native-landscape SquareLine UI
+    if(_lcd_conf MATCHES "#define[ \t]+STANDARD_DPI_W[ \t]+1024")
+        set(UI_DIR ${UI_DIR_1024}) # 1024x600
+    else()
+        set(UI_DIR ${UI_DIR_800}) # 800x480 (default)
+    endif()
+elseif(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DPI_ST7701P")
+    set(UI_DIR ${UI_DIR_480x480}) # ST7701P 480x480
 elseif(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DPI_JD9165BA")
-    set(UI_DIR "") # 1024x600 DPI: no matching SquareLine UI, run built-in benchmark
+    set(UI_DIR ${UI_DIR_1024}) # JD9165BA 1024x600
 elseif(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DSI_AXS15231B_HS035")
-    set(UI_DIR ${UI_DIR_172}) # AXS15231B 172x640 DSI
+    set(UI_DIR ${UI_DIR_172}) # AXS15231B 172x640
 elseif(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DSI_ILI9806E_KD050FWFIA019")
     set(UI_DIR ${UI_DIR_854}) # KD050FWFIA019 480x854 (ILI9806E)
 elseif(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DSI_ILI9881C_")
     set(UI_DIR ${UI_DIR_720}) # KD050HDFIA020 (4-lane) / KD050HDFIA023_W4 (2-lane), both 720x1280
 elseif(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DSI_ST7102_YH494")
     set(UI_DIR ${UI_DIR_480}) # YH-494BSAC002N1 480x960
+elseif(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DSI_ST7102_KD027HVF")
+    set(UI_DIR ${UI_DIR_320}) # KD027HVFID009 320x320
 else()
     message(FATAL_ERROR "lcd_conf_user.h: no UI mapping for the selected panel; add a mapping in CMakeLists.txt")
 endif()

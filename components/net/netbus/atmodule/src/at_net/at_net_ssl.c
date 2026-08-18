@@ -687,7 +687,7 @@ int mbedtls_ssl_verify_credential(const char *data, int len)
 #ifdef CONFIG_MBEDTLS_V2
     if (mbedtls_pk_parse_key(&pk, (const unsigned char *)data, (size_t)len, NULL, 0) == 0) {
 #else
-    if (mbedtls_pk_parse_key(&pk, (const unsigned char *)data, (size_t)len, NULL, 0, NULL, NULL) == 0) {
+    if (mbedtls_pk_parse_key(&pk, (const unsigned char *)data, (size_t)len, NULL, 0, ssl_random, NULL) == 0) {
 #endif
         mbedtls_pk_free(&pk);
         return 0;
@@ -713,7 +713,7 @@ int mbedtls_ssl_verify_cert_key_match(const char *cert_data, int cert_len, const
 #ifdef CONFIG_MBEDTLS_V2
     if (mbedtls_pk_parse_key(&pk, (const unsigned char *)key_data, (size_t)key_len, NULL, 0) != 0) {
 #else
-    if (mbedtls_pk_parse_key(&pk, (const unsigned char *)key_data, (size_t)key_len, NULL, 0, NULL, NULL) != 0) {
+    if (mbedtls_pk_parse_key(&pk, (const unsigned char *)key_data, (size_t)key_len, NULL, 0, ssl_random, NULL) != 0) {
 #endif
         goto exit;
     }
@@ -721,7 +721,7 @@ int mbedtls_ssl_verify_cert_key_match(const char *cert_data, int cert_len, const
 #ifdef CONFIG_MBEDTLS_V2
     if (mbedtls_pk_check_pair(&crt.pk, &pk) == 0) {
 #else
-    if (mbedtls_pk_check_pair(&crt.pk, &pk, NULL, NULL) == 0) {
+    if (mbedtls_pk_check_pair(&crt.pk, &pk, ssl_random, NULL) == 0) {
 #endif
         ret = 0;
     }

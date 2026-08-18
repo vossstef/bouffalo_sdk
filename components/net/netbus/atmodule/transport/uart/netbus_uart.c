@@ -245,7 +245,17 @@ int netbus_uart_send(netbus_uart_ctx_t *pctx, const uint8_t *p_data, uint32_t le
 
 int netbus_uart_receive(netbus_uart_ctx_t *pctx, uint8_t *p_buffer, uint32_t buf_len, uint32_t timeout)
 {
+	pctx->task = xTaskGetCurrentTaskHandle();
 	return xStreamBufferReceive(pctx->rxbuf, p_buffer, buf_len, timeout);
+}
+
+int netbus_uart_wakeup(netbus_uart_ctx_t *pctx)
+{
+	if (pctx == NULL || pctx->task == NULL) {
+		return -1;
+	}
+
+	return xTaskAbortDelay(pctx->task) == pdPASS ? 0 : -1;
 }
 
 int netbus_uart_deinit(netbus_uart_ctx_t *ctx)

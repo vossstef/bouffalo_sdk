@@ -2,13 +2,18 @@
 #include <stdio.h>
 #include <reent.h>
 
-#ifdef CONFIG_CONSOLE_WO
+#include "console_output.h"
+
+#ifdef CONFIG_BSP_CONSOLE_USB_CDC
+#include "usb_console.h"
+#elif defined(CONFIG_CONSOLE_WO)
 #include "bflb_wo.h"
 #else
 #include "bflb_uart.h"
 #endif
 
 struct bflb_device_s *console = NULL;
+static char console_previous_char;
 
 #ifdef CONFIG_CONSOLE_WO
 void bflb_wo_set_console(struct bflb_device_s *dev)
@@ -19,23 +24,60 @@ void bflb_uart_set_console(struct bflb_device_s *dev)
     console = dev;
 }
 
-#ifdef CONFIG_CONSOLE_WO
-    #define CONSOLE_PUTCHAR(console, x) bflb_wo_uart_putchar(console, x)
+static ssize_t console_backend_write(const void *data, size_t size)
+{
+#ifdef CONFIG_BSP_CONSOLE_USB_CDC
+    return usb_console_write(data, size);
+#elif defined(CONFIG_CONSOLE_WO)
+    bflb_wo_uart_put(console, (uint8_t *)data, (uint32_t)size);
 #else
-    #define CONSOLE_PUTCHAR(console, x) bflb_uart_putchar(console, x)
+    (void)bflb_uart_put(console, (uint8_t *)data, (uint32_t)size);
 #endif
+    return (ssize_t)size;
+}
+
+ssize_t bflb_console_write(const void *data, size_t size)
+{
+    const char *bytes = data;
+    size_t start = 0U;
+
+    if (size == 0U) {
+        return 0;
+    }
+    if (data == NULL) {
+        return -1;
+    }
+
+#ifndef CONFIG_BSP_CONSOLE_USB_CDC
+    if (console == NULL) {
+        return -1;
+    }
+#endif
+
+    for (size_t i = 0U; i < size; i++) {
+        if ((bytes[i] == '\n') && (console_previous_char != '\r')) {
+            if ((i > start) && (console_backend_write(&bytes[start], i - start) < 0)) {
+                return -1;
+            }
+            if (console_backend_write("\r", 1U) < 0) {
+                return -1;
+            }
+            start = i;
+        }
+        console_previous_char = bytes[i];
+    }
+
+    if ((start < size) && (console_backend_write(&bytes[start], size - start) < 0)) {
+        return -1;
+    }
+
+    return (ssize_t)size;
+}
 
 ssize_t _console_write_r(struct _reent *reent, int fd, const void *ptr, size_t size)
 {
-    const char* cptr = (const char*) ptr;
     if (fd == STDOUT_FILENO || fd == STDERR_FILENO) {
-        for (size_t i = 0; i < size; ++i) {
-            if (cptr[i] == '\n') {
-                CONSOLE_PUTCHAR(console, '\r');
-            }
-            CONSOLE_PUTCHAR(console, cptr[i]);
-        }
-        return size;
+        return bflb_console_write(ptr, size);
     }
     return -1;
 }
@@ -43,6 +85,12 @@ ssize_t _console_write_r(struct _reent *reent, int fd, const void *ptr, size_t s
 #ifndef CONFIG_CONSOLE_WO
 ssize_t _console_read_r(struct _reent *reent, int fd, void *ptr, size_t size)
 {
+#ifdef CONFIG_BSP_CONSOLE_USB_CDC
+    (void)reent;
+    (void)ptr;
+    (void)size;
+    return -1;
+#else
     char* cptr = (char*) ptr;
     if (fd == STDIN_FILENO) {
         size_t recv_num;
@@ -56,6 +104,7 @@ ssize_t _console_read_r(struct _reent *reent, int fd, void *ptr, size_t size)
         return recv_num;
     }
     return -1;
+#endif
 }
 #endif
 

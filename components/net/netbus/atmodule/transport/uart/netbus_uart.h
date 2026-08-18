@@ -76,6 +76,7 @@ int netbus_uart_init(netbus_uart_ctx_t *pctx, const netbus_uart_config_t *hwcfg,
 int netbus_uart_recovery(void);
 int netbus_uart_send(netbus_uart_ctx_t *pctx, const uint8_t *p_data, uint32_t len, uint32_t timeout);
 int netbus_uart_receive(netbus_uart_ctx_t *pctx, uint8_t *p_buffer, uint32_t buf_len, uint32_t timeout);
+int netbus_uart_wakeup(netbus_uart_ctx_t *pctx);
 int netbus_uart_deinit(netbus_uart_ctx_t *ctx);
 
 #endif

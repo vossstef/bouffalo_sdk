@@ -901,4 +901,6 @@ then it does disconnected flow once more. This will cause hardfault issue becaus
 #define BFLB_BLE_PATCH_HANDLE_EXISTED_CONN_ERROR_CODE
 //http://jira.bouffalolab.com/browse/BS-1273
 #define BFLB_BLE_PATCH_FILTER_CONN_INFO_CONNECTED_LE
+//http://jira.bouffalolab.com/browse/BL616-410
+#define BFLB_BREDR_PATCH_EXTENDED_INQUIRY_RESULT_CALLBACK
 #endif /* BLE_CONFIG_H */

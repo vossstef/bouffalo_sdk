@@ -2,7 +2,9 @@
 /* Use board_overlay.c instead of this file */
 #else
 
-#ifdef CONFIG_CONSOLE_WO
+#ifdef CONFIG_BSP_CONSOLE_USB_CDC
+#include "usb_console.h"
+#elif defined(CONFIG_CONSOLE_WO)
 #include "bflb_wo.h"
 #else
 #include "bflb_uart.h"
@@ -39,12 +41,6 @@ extern uint32_t __psram_noinit_data_end__;
 
 extern uint32_t _heap_wifi_start;
 extern uint32_t _heap_wifi_size;
-
-#ifdef CONFIG_CONSOLE_WO
-static struct bflb_device_s *wo;
-#else
-static struct bflb_device_s *uart0;
-#endif
 
 #if (defined(CONFIG_LUA) || defined(CONFIG_BFLB_LOG) || defined(CONFIG_FATFS))
 static struct bflb_device_s *rtc;
@@ -300,20 +296,26 @@ void bl_show_chipinfo(void)
     printf("version          A%d\r\n", device_info.version);
 }
 
-#ifdef CONFIG_CONSOLE_WO
+#if defined(CONFIG_BSP_CONSOLE_USB_CDC)
+/* USB console is initialized after interrupts are restored. */
+#elif defined(CONFIG_CONSOLE_WO)
 extern void bflb_wo_set_console(struct bflb_device_s *dev);
-#else
-extern void bflb_uart_set_console(struct bflb_device_s *dev);
-#endif
 
 static void console_init()
 {
-#ifdef CONFIG_CONSOLE_WO
+    struct bflb_device_s *wo;
+
     wo = bflb_device_get_by_name("wo");
     bflb_wo_uart_init(wo, CONFIG_CONSOLE_UART_BAUDRATE, GPIO_PIN_21);
     bflb_wo_set_console(wo);
+}
 #else
+extern void bflb_uart_set_console(struct bflb_device_s *dev);
+
+static void console_init()
+{
     struct bflb_device_s *gpio;
+    struct bflb_device_s *uart0;
 
     gpio = bflb_device_get_by_name("gpio");
     bflb_gpio_uart_init(gpio, GPIO_PIN_21, GPIO_UART_FUNC_UART0_TX);
@@ -333,8 +335,8 @@ static void console_init()
 
     bflb_uart_init(uart0, &cfg);
     bflb_uart_set_console(uart0);
-#endif
 }
+#endif
 
 #ifdef LP_APP
 void board_recovery(void)
@@ -345,7 +347,9 @@ void board_recovery(void)
 
     system_clock_init();
     peripheral_clock_init_lp();
+#ifndef CONFIG_BSP_CONSOLE_USB_CDC
     console_init();
+#endif
 }
 #endif
 
@@ -445,8 +449,9 @@ void board_init(void)
     bflb_wfa_init();
 #endif
 
-    /* console init (uart or wo) */
+#ifndef CONFIG_BSP_CONSOLE_USB_CDC
     console_init();
+#endif
 
     /* ram and heap init (including psram) */
     ram_heap_init();
@@ -485,6 +490,10 @@ void board_init(void)
 
     /* unlock */
     bflb_irq_restore(flag);
+
+#ifdef CONFIG_BSP_CONSOLE_USB_CDC
+    usb_console_init();
+#endif
 
     printf("board init done\r\n");
     printf("===========================\r\n");

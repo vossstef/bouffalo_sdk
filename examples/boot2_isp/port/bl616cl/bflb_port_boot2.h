@@ -44,6 +44,7 @@
 #define BL_SYS_CLK_PLL                        GLB_SYS_CLK_PLL160M
 #define BL_SFLASH_CLK                         GLB_SFLASH_CLK_80M
 #define HAL_PLL_CFG_MAGICCODE                 "PCFG"
+#define HAL_BOOT2_BOOTROM_VERSION BL_RD_WORD(0x90018800)
 
 #define HAL_BOOT2_PK_HASH_SIZE_LEN192         192 / 8
 #define HAL_BOOT2_PK_HASH_SIZE                256 / 8

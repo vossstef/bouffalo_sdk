@@ -59,7 +59,7 @@ static const mipi_dsi_v2_timing_t ili9881c_kd050023w4_timing = {
     .esc_clk_sel     = 0,
     .esc_clk_div     = 0,
     .display_clk_sel = GLB_DP_CLK_WIFIPLL_240M,
-    .display_clk_div = 3,
+    .display_clk_div = 5,
     .dsi_hs_clock    = 850 * 1000 * 1000,
 
     // .pll_cfg         = &dsipllCfg_400M[GLB_XTAL_40M],

@@ -3,6 +3,7 @@
 .cache
 .clangd
 .config
+.config.old
 .config.cmake
 cscope*
 compile_commands.*

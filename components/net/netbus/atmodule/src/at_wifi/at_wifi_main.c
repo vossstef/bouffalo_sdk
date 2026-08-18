@@ -36,10 +36,9 @@
 #include "at_wifi_main.h"
 #include "at_net_main.h"
 #include "at_wifi_mgmr.h"
+#include "wifi_mgmr_ext.h"
 #include "dhcp_server.h"
 
-/* Function declarations */
-extern struct netif *at_wifi_netif_get(uint8_t vif_idx);
 /* dns_getserver declared in lwip/dns.h */
 #if defined(CONFIG_ATMODULE_NETWORK) && (CONFIG_ATMODULE_NETWORK)
 #include "at_net_config.h"
@@ -127,13 +126,9 @@ void wifiopt_sta_connect(void)
 {
 
 #if defined(CONFIG_ATMODULE_NETWORK) && (CONFIG_ATMODULE_NETWORK)
-    ip_addr_t ip_zero;
-    ip_addr_set_zero(&ip_zero);
-
-
-    dns_setserver(0, &ip_zero);
-    dns_setserver(1, &ip_zero);
-    dns_setserver(2, &ip_zero);
+    dns_setserver(0, NULL);
+    dns_setserver(1, NULL);
+    dns_setserver(2, NULL);
 #endif
     if (!at_wifi_config) {
         AT_WIFI_MAIN_PRINTF("[WIFI_MAIN] Error: at_wifi_config is NULL\r\n");

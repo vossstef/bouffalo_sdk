@@ -65,7 +65,8 @@ struct lwip_emac_debug_info_s {
         uint32_t push_cnt;
         uint32_t success_cnt;
         uint32_t error_cnt;
-        uint32_t busy_cnt;
+        uint32_t eamc_busy_cnt;
+        uint32_t pbuf_busy_cnt;
         uint64_t total_size;
     } rx;
 };
@@ -181,7 +182,7 @@ static int emac_low_level_init(struct netif *netif)
 
     /* create the task that handles the ETH_MAC */
     LOG_I("[OS] Starting emac rx task...\r\n");
-    xTaskCreate(ethernetif_input, (char *)"emac_rx_task", CONFIG_BSP_LWIP_EMAC_RX_STACK_SIZE, netif, osPriorityHigh, &emac_rx_handle);
+    xTaskCreate(ethernetif_input, (char *)"emac_rx_task", CONFIG_BSP_LWIP_EMAC_RX_STACK_SIZE, netif, TCPIP_THREAD_PRIO, &emac_rx_handle);
 
     /* Keep EMAC running across PHY link changes. Stopping the controller resets
      * its BD traversal position and requires a complete descriptor rebuild. */
@@ -200,7 +201,7 @@ static void lwip_emac_irq_cb(void *arg, uint32_t irq_event, struct bflb_emac_tra
         case EMAC_IRQ_EVENT_RX_BUSY:
             LOG_W("rx busy\r\n");
             /* debug */
-            emac_debug_info.rx.busy_cnt++;
+            emac_debug_info.rx.eamc_busy_cnt++;
             break;
 
         case EMAC_IRQ_EVENT_RX_CTRL_FRAME:
@@ -330,24 +331,22 @@ static void ethernetif_input(void *argument)
 #endif
 
         if (p != NULL) {
-            if (pbuf_take(p, trans_desc.buff_addr, trans_desc.data_len) != ERR_OK ||
-                netif->input(p, netif) != ERR_OK) {
+            err_t copy_error = pbuf_take(p, trans_desc.buff_addr, trans_desc.data_len);
+
+            /* The DMA buffer is no longer needed after pbuf_take(). */
+            emac_debug_info.rx.push_cnt += 1;
+            bflb_emac_queue_rx_push(emacx, &trans_desc);
+
+            if (copy_error != ERR_OK || netif->input(p, netif) != ERR_OK) {
                 pbuf_free(p);
             }
+        } else {
+            emac_debug_info.rx.pbuf_busy_cnt++;
+            emac_debug_info.rx.push_cnt += 1;
+            bflb_emac_queue_rx_push(emacx, &trans_desc);
         }
-
-        emac_debug_info.rx.push_cnt += 1;
-        bflb_emac_queue_rx_push(emacx, &trans_desc);
     }
 }
-/**
-  * @brief Should allocate a pbuf and transfer the bytes of the incoming
-  * packet from the interface into the pbuf.
-  *
-  * @param netif the lwip network interface structure for this ethernetif
-  * @return a pbuf filled with the received packet (including MAC header)
-  *         NULL on memory error
-  */
 
 /**
   * @brief Should be called at the beginning of the program to set up the
@@ -497,8 +496,11 @@ int lwip_emac_info_cmd(int argc, char **argv)
 
     LOG_I("RX: success cnt:%d, error cnt:%d, total size:%lldByte\r\n",
           emac_debug_info.rx.success_cnt, emac_debug_info.rx.error_cnt, emac_debug_info.rx.total_size);
-    LOG_I("    push_cnt:%d, rx_db available:%d, rx_bd_ptr:%d, busy cnt:%d\r\n",
-          emac_debug_info.rx.push_cnt, rx_db_avail, bflb_emac_feature_control(emacx, EMAC_CMD_GET_RX_BD_PTR, 0), emac_debug_info.rx.busy_cnt);
+    LOG_I("    push_cnt:%d, rx_db available:%d, rx_bd_ptr:%d\r\n",
+          emac_debug_info.rx.push_cnt, rx_db_avail, bflb_emac_feature_control(emacx, EMAC_CMD_GET_RX_BD_PTR, 0));
+    LOG_I("    emac busy cnt:%d, pbuf busy cnt:%d\r\n",
+          emac_debug_info.rx.eamc_busy_cnt, emac_debug_info.rx.pbuf_busy_cnt);
+
     LOG_RI("\r\n");
 
     return 0;

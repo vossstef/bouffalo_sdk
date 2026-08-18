@@ -9,19 +9,6 @@ CONFIG_MBEDTLS_SHA512_USE_HW =y
 
 CONFIG_WIFI_IPERF=y
 # CONFIG_WIFI_GATEWAY=y
-CONFIG_WIFI_TCP_HIGH_PERF ?= n
-
-ifeq ($(CHIP),bl602)
-    override CONFIG_WIFI_TCP_HIGH_PERF = n
-endif
-
-ifeq ($(CONFIG_WIFI_TCP_HIGH_PERF),y)
-ifneq ($(CHIP),bl602)
-    CONFIG_MACSW_SELECT = tcp_bench
-    CONFIG_WIFI_TCP_HIGH_PERF_SND_BUF_MSS ?= 232
-    CONFIG_WIFI_TCP_HIGH_PERF_HEAP_KB ?= 116
-endif
-endif
 
 ifeq ($(CHIP),bl618dg)
     CONFIG_ROMAPI             =n

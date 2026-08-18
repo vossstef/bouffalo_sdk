@@ -10,6 +10,10 @@ CONFIG_ATMODULE_MQTT      =y
 CONFIG_ATMODULE_FS        =y
 endif
 
+ifeq ($(CONFIG_AT_MDNS_ENABLE),y)
+CONFIG_MDNS =y
+endif
+
 -include $(BL_SDK_BASE)/examples/wifi/defconfig
 
 -include $(BL_SDK_BASE)/examples/wifi/at_defconfig

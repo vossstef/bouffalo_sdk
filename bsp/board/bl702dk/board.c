@@ -383,6 +383,15 @@ void board_dac_gpio_init()
     bflb_gpio_init(gpio, GPIO_PIN_17, GPIO_ANALOG | GPIO_SMT_EN | GPIO_DRV_0);
 }
 
+void board_dac_ref_gpio_init()
+{
+    struct bflb_device_s *gpio;
+
+    gpio = bflb_device_get_by_name("gpio");
+    /* DAC_REF */
+    bflb_gpio_init(gpio, GPIO_PIN_7, GPIO_ANALOG | GPIO_SMT_EN | GPIO_DRV_0);
+}
+
 void board_emac_rmii_gpio_init(uint8_t port)
 {
     struct bflb_device_s *gpio;

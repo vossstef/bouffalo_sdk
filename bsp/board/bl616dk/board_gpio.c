@@ -102,6 +102,15 @@ void board_dac_gpio_init(void)
     bflb_gpio_init(gpio, GPIO_PIN_2, GPIO_ANALOG | GPIO_SMT_EN | GPIO_DRV_0);
 }
 
+void board_dac_ref_gpio_init(void)
+{
+    struct bflb_device_s *gpio;
+
+    gpio = bflb_device_get_by_name("gpio");
+    /* DAC_REF */
+    bflb_gpio_init(gpio, GPIO_PIN_28, GPIO_ANALOG | GPIO_SMT_EN | GPIO_DRV_0);
+}
+
 void board_auadc_gpio_init(void)
 {
     struct bflb_device_s *gpio;

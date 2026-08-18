@@ -26,7 +26,7 @@
 
 #include "wl80211.h"
 
-#include "async_event.h"
+#include "wl80211_async_event.h"
 
 extern int mfg_media_read_macaddr_with_lock(uint8_t mac[6], uint8_t reload);
 
@@ -226,6 +226,11 @@ void rtos_start_evt_task(void (*handler)(void))
 void wl80211_post_event(int code1, int code2)
 {
     async_post_event(EV_WL80211, code1, code2);
+}
+
+void wl80211_post_event_with_mac(int code1, int code2, const uint8_t mac[6])
+{
+    async_post_event_with_mac(EV_WL80211, code1, code2, mac);
 }
 
 // platform feature set index

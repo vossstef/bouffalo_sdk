@@ -1,4 +1,11 @@
 # Changes
+## 2026-08-12
+1. [BR/EDR] Add per-device Extended Inquiry Result callback support under BFLB_BREDR_PATCH_EXTENDED_INQUIRY_RESULT_CALLBACK, with CLI test output for address, class of device, RSSI, and EIR name.
+
+## 2026-08-05
+fix: support HCI monitor output on IoT SDK.
+feat: add SPP MTU query and A2DP stream controls.
+
 ## 2026-07-31
 1. [blestack] Fix GATT MTU exchange to use the runtime local ATT MTU instead of the compile-time BT_ATT_MTU value.
 

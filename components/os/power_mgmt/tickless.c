@@ -45,7 +45,10 @@ int debug_abort_tickless = 0;
 
 static inline TickType_t rtc_diff_to_tick(uint64_t before, uint64_t after)
 {
-    return ((after - before) * 1000 / 32768);
+    /* (after - before) is the 32.768 kHz RTC counter delta; convert to FreeRTOS
+     * ticks (1 ms each). Keep the whole product in uint64_t so it cannot
+     * overflow before the TickType_t ceiling (~49.7 days at a 1 kHz tick). */
+    return (TickType_t)(((after - before) * 1000ULL) / 32768ULL);
 }
 
 #define HW2CPU(ptr) ((void *)(((uint32_t)(ptr))))
@@ -174,7 +177,7 @@ static bool check_system_ready_for_LowPower(uint32_t connected)
 void vApplicationSleep(TickType_t xExpectedIdleTime)
 {
     eSleepModeStatus eSleepStatus;
-    int32_t real_rtc_tick = 0;
+    TickType_t real_rtc_tick = 0;
     int connected, wake_reason;
     bool wifi_connected;
     bool is_ready = true;
@@ -232,11 +235,11 @@ void vApplicationSleep(TickType_t xExpectedIdleTime)
             lpfw_cfg.rtc_timeout_us = 0;
         } else {
             lpfw_cfg.tim_wakeup_en = 0;
-            lpfw_cfg.rtc_timeout_us = (60 * 1000 - pds_wakeup_overhead) * 1000;
+            lpfw_cfg.rtc_timeout_us = (60 * 1000 - pds_wakeup_overhead) * 1000ULL;
         }
     } else {
         lpfw_cfg.rtc_wakeup_cmp_cnt = 0;
-        lpfw_cfg.rtc_timeout_us = (xExpectedIdleTime - pds_wakeup_overhead) * 1000;
+        lpfw_cfg.rtc_timeout_us = (xExpectedIdleTime - pds_wakeup_overhead) * 1000ULL;
     }
 
 
@@ -275,12 +278,11 @@ void vApplicationSleep(TickType_t xExpectedIdleTime)
     }
 
     ulLowPowerTimeAfterSleep = bflb_rtc_get_time(NULL);
-    real_rtc_tick = (int32_t)rtc_diff_to_tick(ulLowPowerTimeEnterFunction, ulLowPowerTimeAfterSleep);
+    real_rtc_tick = rtc_diff_to_tick(ulLowPowerTimeEnterFunction, ulLowPowerTimeAfterSleep);
     wake_reason = bl_lp_get_wake_reason();
 
     if (likely(wake_reason & LPFW_WAKEUP_TIME_OUT)) {
-        int32_t real_tick_delta = real_rtc_tick - (lpfw_cfg.rtc_timeout_us / 1000);
-        pds_wakeup_overhead = real_tick_delta;
+        pds_wakeup_overhead = (int32_t)((int64_t)real_rtc_tick - (int64_t)(lpfw_cfg.rtc_timeout_us / 1000ULL));
         vTaskStepTick(xExpectedIdleTime);
     } else {
         vTaskStepTick(likely(real_rtc_tick <= xExpectedIdleTime) ? real_rtc_tick : xExpectedIdleTime);

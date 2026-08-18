@@ -6,7 +6,7 @@
 #endif
 
 /* Max JPEG size per frame (720x1280 source frames are ~22KB; 64KB is safe) */
-#define JPG_BUFFER_SIZE (64 * 1024)
+#define JPG_BUFFER_SIZE (128 * 1024)
 #define BUFFER_COUNT    2
 
 /* Upper bound on frame number (pNNNN.jpg). Used as the cap for the frame-count

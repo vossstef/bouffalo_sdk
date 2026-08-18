@@ -40,11 +40,7 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <stddef.h>
-#ifdef CONFIG_CONSOLE_WO
-#include "bflb_wo.h"
-#else
-#include "bflb_uart.h"
-#endif
+#include "console_output.h"
 
 // 'ntoa' conversion buffer size, this must be big enough to hold one converted
 // numeric number including padded zeros (dynamically created on stack)
@@ -223,24 +219,13 @@ static inline void out_buffer(char character, void* buffer, size_t idx, size_t m
   }
 }
 
-// uart device output
-extern struct bflb_device_s *console;
+// console device output
 static inline void out_console(char character, void* buffer, size_t idx, size_t maxlen)
 {
-  static char last_char = 0;
-#ifdef CONFIG_CONSOLE_WO
-  if(character == '\n' && last_char != '\r') {
-    bflb_wo_uart_putchar(console, '\r');
-  }
-  bflb_wo_uart_putchar(console, character);
-  last_char = character;
-#else
-  if(character == '\n' && last_char != '\r') {
-    bflb_uart_putchar(console, '\r');
-  }
-  bflb_uart_putchar(console, character);
-  last_char = character;
-#endif
+  (void)buffer;
+  (void)idx;
+  (void)maxlen;
+  (void)bflb_console_write(&character, 1);
 }
 
 

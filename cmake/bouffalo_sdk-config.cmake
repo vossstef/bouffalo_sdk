@@ -18,6 +18,14 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 
 include(${CMAKE_CURRENT_BINARY_DIR}/generated/defconfig.cmake)
 
+# menuconfig output has the highest priority: it overrides the Make variables
+# exported above.  Register it as a configure dependency so saving a new
+# configuration triggers a CMake re-run even though the file is optional.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${SDK_DEMO_PATH}/.config.cmake")
+if(EXISTS "${SDK_DEMO_PATH}/.config.cmake")
+    include("${SDK_DEMO_PATH}/.config.cmake")
+endif()
+
 add_library(sdk_intf_lib INTERFACE)
 add_library(app STATIC)
 target_link_libraries(app sdk_intf_lib)

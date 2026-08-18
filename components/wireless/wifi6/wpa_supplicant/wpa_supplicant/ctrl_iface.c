@@ -10115,7 +10115,6 @@ static int wpas_ctrl_iface_send_twt_teardown(struct wpa_supplicant *wpa_s,
 #endif /* CONFIG_TESTING_OPTIONS */
 
 
-#ifndef CONFIG_MACSW
 static int wpas_ctrl_vendor_elem_add(struct wpa_supplicant *wpa_s, char *cmd)
 {
 	char *pos = cmd;
@@ -10254,6 +10253,7 @@ static int wpas_ctrl_vendor_elem_remove(struct wpa_supplicant *wpa_s, char *cmd)
 }
 
 
+#ifndef CONFIG_MACSW
 static void wpas_ctrl_neighbor_rep_cb(void *ctx, struct wpabuf *neighbor_rep)
 {
 	struct wpa_supplicant *wpa_s = ctx;
@@ -12685,6 +12685,15 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 #endif /* CONFIG_AP */
 	} else if (os_strncmp(buf, "STA_AUTOCONNECT ", 16) == 0) {
 		wpa_s->auto_reconnect_disabled = atoi(buf + 16) == 0;
+	} else if (os_strncmp(buf, "VENDOR_ELEM_ADD ", 16) == 0) {
+		if (wpas_ctrl_vendor_elem_add(wpa_s, buf + 16) < 0)
+			reply_len = -1;
+	} else if (os_strncmp(buf, "VENDOR_ELEM_GET ", 16) == 0) {
+		reply_len = wpas_ctrl_vendor_elem_get(wpa_s, buf + 16, reply,
+						      reply_size);
+	} else if (os_strncmp(buf, "VENDOR_ELEM_REMOVE ", 19) == 0) {
+		if (wpas_ctrl_vendor_elem_remove(wpa_s, buf + 19) < 0)
+			reply_len = -1;
 #ifdef CONFIG_P2P
 	} else if (os_strncmp(buf, "P2P_FIND ", 9) == 0) {
 		if (p2p_ctrl_find(wpa_s, buf + 8))

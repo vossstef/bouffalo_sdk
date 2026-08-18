@@ -162,10 +162,11 @@ int bl_mipi_dpi_v2_screen_switch(void *screen_buffer)
         bflb_l1c_dcache_clean_range(screen_buffer, LCD_W * LCD_H * (LCD_COLOR_DEPTH / 8));
     }
 
-    next_disp_buffer = screen_buffer;
-
     /* Re-point the OSD0 blend overlay (the LVGL canvas) at the new buffer. */
     bflb_osd_blend_set_layer_buffer(osd_dev, (uint32_t)screen_buffer);
+
+    /* Publish after programming hardware so an intervening SEOF can only delay completion. */
+    next_disp_buffer = screen_buffer;
 
     return 0;
 }

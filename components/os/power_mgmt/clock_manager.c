@@ -41,9 +41,9 @@ static bool clock_source_xtal_supported(void)
     return true;
 #else
     return false;
-#endif
+#endif //defined(BL616)
 }
-#endif
+#endif //  #if !defined(CONFIG_CLOCK_SOURCE_EF_PARAM) || !CONFIG_CLOCK_SOURCE_EF_PARAM
 
 #if defined(BL616CL) || defined(BL618DG)
 #define RC32K_PPM_THRESHOLD              (200)
@@ -56,6 +56,7 @@ static bool clock_source_xtal_supported(void)
 #define RC32K_MAX_STEP                   (5)
 #define RC32K_MIN_SIGNIFICANT_STEP_PPM   (400)
 #define RC32K_R_CODE_MAX                 (0x3ff)
+#define RC32K_HALF_MSB_FLAG              (RC32K_R_CODE_MAX + 1U)
 #define RC32K_DIVERGENCE_ENABLE_PPM      (1000)
 
 static struct bflb_device_s *rtc;
@@ -104,7 +105,7 @@ static void rc32k_get_trim_code(uint32_t *c_code, uint32_t *r_code)
 
     tmp_val = BL_RD_REG(HBN_BASE, HBN_RC32K_CTRL0);
     *r_code = BL_GET_REG_BITS_VAL(tmp_val, HBN_RC32K_CODE_FR_EXT);
-#endif
+#endif //defined(BL616CL)
 }
 
 static void rc32k_print_efuse_trim(void)
@@ -123,7 +124,7 @@ static void rc32k_print_efuse_trim(void)
     bflb_ef_ctrl_read_common_trim(NULL, "rc32k_cap", &trim, 1);
 #elif defined(BL618DG)
     bflb_ef_ctrl_read_common_trim(NULL, "rc32k", &trim, 1);
-#endif
+#endif //defined(BL616CL)
     parity_calc = bflb_ef_ctrl_get_trim_parity(trim.value, 4);
 
     printf("rc32k_trim_efuse: en=%u, empty=%u, value=%u, parity=%u, parity_calc=%u, c_code_before=%u, r_code_before=%u\r\n",
@@ -149,6 +150,11 @@ static uint32_t rc32k_clamp_r_code(int code)
     return (uint32_t)code;
 }
 
+static void rc32k_calibration_set_half_msb(bool enabled)
+{
+    HBN_Set_RC32K_Half_MSB(enabled);
+}
+
 static uint32_t rc32k_coarse_calibration(uint32_t cali_val)
 {
     uint32_t retry_cnt = 0;
@@ -171,7 +177,13 @@ static uint32_t rc32k_coarse_calibration(uint32_t cali_val)
     int best_error_ppm = 0;
     uint32_t best_code = 0;
     int has_best = 0;
+    bool is_first_measurement = true;
+    const int predictive_ppm_per_code = 400;
+#if CONFIG_RC32K_CAL_ENABLE_HALF_MSB
+    bool half_msb_second_pass = false;
+#endif
 
+    rc32k_calibration_set_half_msb(false);
     rc32k_print_efuse_trim();
     HBN_Trim_RC32K();
     rc32k_get_trim_code(&c_code, &r_code);
@@ -186,14 +198,39 @@ static uint32_t rc32k_coarse_calibration(uint32_t cali_val)
     rtc = bflb_device_get_by_name("rtc");
     bflb_rtc_set_time(rtc, 0);
 
+    /* Reuse a persisted R code without running a new calibration cycle. */
+    if (cali_val != 0U) {
+        /* rc_cal stores the 10-bit R code in bits 0..9 and half-MSB in bit 10. */
+        if ((cali_val & ~(RC32K_R_CODE_MAX | RC32K_HALF_MSB_FLAG)) != 0U) {
+            rc32k_code = RC32K_R_CODE_MAX;
+            rc32k_calibration_set_half_msb(false);
+        } else {
+            rc32k_code = cali_val & RC32K_R_CODE_MAX;
+#if CONFIG_RC32K_CAL_ENABLE_HALF_MSB
+            rc32k_calibration_set_half_msb((cali_val & RC32K_HALF_MSB_FLAG) != 0U);
+#endif
+        }
+
+        HBN_Set_RC32K_R_Code(rc32k_code);
+        vTaskDelay(pdMS_TO_TICKS(RC32K_SETTLE_DELAY_MS));
+        bl_lp_rc32k_save_code(rc32k_code);
+
+        return rc32k_code;
+    }
+
     printf("rc32k_coarse_trim task enable, freq_mtimer must be 1MHz!\r\n");
     timeout_start = bflb_mtimer_get_time_us();
 
-    vTaskDelay(RC32K_START_DELAY_MS);
+    vTaskDelay(pdMS_TO_TICKS(RC32K_START_DELAY_MS));
 
+#if CONFIG_RC32K_CAL_ENABLE_HALF_MSB
+calibration_pass:
+#endif
     while (retry_cnt < RC32K_MAX_RETRY_CNT) {
         int diff_code;
         int is_diverging = 0;
+        int64_t error_abs_ppm;
+        int64_t best_error_abs_ppm;
 
         retry_cnt++;
 
@@ -204,7 +241,7 @@ static uint32_t rc32k_coarse_calibration(uint32_t cali_val)
 
         rtc_record_us = BL_PDS_CNT_TO_US(rtc_cnt);
 
-        vTaskDelay(RC32K_MEASURE_DELAY_MS);
+        vTaskDelay(pdMS_TO_TICKS(RC32K_MEASURE_DELAY_MS));
 
         __disable_irq();
         mtimer_now_us = bflb_mtimer_get_time_us();
@@ -222,6 +259,21 @@ static uint32_t rc32k_coarse_calibration(uint32_t cali_val)
         ret = rc32k_check_accuracy(error_ppm, RC32K_PPM_THRESHOLD);
         rc32k_get_trim_code(&c_code, &r_code);
         rc32k_code = r_code;
+        error_abs_ppm = error_ppm < 0 ? -(int64_t)error_ppm : error_ppm;
+
+        /* Keep the code with the smallest absolute frequency error. */
+        if (!has_best) {
+            best_error_ppm = error_ppm;
+            best_code = rc32k_code;
+            has_best = 1;
+        }
+
+        best_error_abs_ppm = best_error_ppm < 0 ? -(int64_t)best_error_ppm : best_error_ppm;
+        if (error_abs_ppm < best_error_abs_ppm) {
+            best_error_ppm = error_ppm;
+            best_code = rc32k_code;
+            best_error_abs_ppm = error_abs_ppm;
+        }
         printf("rc32k_coarse_trim: retry_cnt:%d, ppm:%d, r_code=%d", retry_cnt, error_ppm, r_code);
 
         if (ret) {
@@ -229,19 +281,36 @@ static uint32_t rc32k_coarse_calibration(uint32_t cali_val)
             break;
         }
 
-        if (abs(error_ppm) <= RC32K_ADJUST_TRIGGER_PPM) {
+        if (is_first_measurement) {
+            /* Predict the coarse correction before entering the fine-tuning loop. */
+            diff_code = error_ppm > 0 ?
+                            (int)(((int64_t)error_ppm + predictive_ppm_per_code / 2) / predictive_ppm_per_code) :
+                            (int)(((int64_t)error_ppm - predictive_ppm_per_code / 2) / predictive_ppm_per_code);
+            rc32k_code = rc32k_clamp_r_code((int)rc32k_code + diff_code);
+            HBN_Set_RC32K_R_Code(rc32k_code);
+
+            printf(" (blind jump code=%u, diff=%d, ppm_per_code=%d)\r\n",
+                   rc32k_code, diff_code, predictive_ppm_per_code);
+
+            vTaskDelay(pdMS_TO_TICKS(RC32K_SETTLE_DELAY_MS));
+            is_first_measurement = false;
+            continue;
+        }
+
+        if (error_abs_ppm <= RC32K_ADJUST_TRIGGER_PPM) {
             printf("\r\n");
             break;
         }
 
         if (has_best &&
-            abs(best_error_ppm) <= RC32K_DIVERGENCE_ENABLE_PPM &&
-            abs(error_ppm) > abs(best_error_ppm) &&
-            abs(best_error_ppm) > 1) {
+            best_error_abs_ppm <= RC32K_DIVERGENCE_ENABLE_PPM &&
+            error_abs_ppm > best_error_abs_ppm &&
+            best_error_abs_ppm > 1) {
             is_diverging = 1;
         }
 
         if (is_diverging) {
+            /* Return toward the best sample when a fine-tune step worsens the error. */
             printf(" (diverging, rollback)\r\n");
 
             diff_code = (best_error_ppm < 0) ? -1 : 1;
@@ -250,14 +319,8 @@ static uint32_t rc32k_coarse_calibration(uint32_t cali_val)
 
             printf("rc32k_coarse_trim: adjust code=%u (diff=%d)\r\n", rc32k_code, diff_code);
 
-            vTaskDelay(RC32K_SETTLE_DELAY_MS);
+            vTaskDelay(pdMS_TO_TICKS(RC32K_SETTLE_DELAY_MS));
             continue;
-        }
-
-        if (!has_best || abs(error_ppm) < abs(best_error_ppm)) {
-            best_error_ppm = error_ppm;
-            best_code = rc32k_code;
-            has_best = 1;
         }
 
         diff_code = error_ppm / RC32K_STEP_PPM;
@@ -269,33 +332,66 @@ static uint32_t rc32k_coarse_calibration(uint32_t cali_val)
             diff_code = -RC32K_MAX_STEP;
         }
 
-        if (diff_code == 0 && abs(error_ppm) > RC32K_MIN_SIGNIFICANT_STEP_PPM) {
+        if (diff_code == 0 && error_abs_ppm > RC32K_MIN_SIGNIFICANT_STEP_PPM) {
             diff_code = (error_ppm > 0) ? 1 : -1;
         }
 
-        rc32k_code = HBN_Get_RC32K_R_Code();
         rc32k_code = rc32k_clamp_r_code((int)rc32k_code + diff_code);
         HBN_Set_RC32K_R_Code(rc32k_code);
 
         printf(" (adjust code=%u, diff=%d)\r\n", rc32k_code, diff_code);
         printf(" (best code=%u, best diff=%d)\r\n", best_code, best_error_ppm);
 
-        vTaskDelay(RC32K_SETTLE_DELAY_MS);
+        vTaskDelay(pdMS_TO_TICKS(RC32K_SETTLE_DELAY_MS));
     }
 
     if (retry_cnt >= RC32K_MAX_RETRY_CNT) {
         printf("rc32k_coarse_trim: timeout!\r\n");
     }
 
+#if CONFIG_RC32K_CAL_ENABLE_HALF_MSB
+    if (!half_msb_second_pass &&
+        ((best_code & 0x7fU) <= 32U || (best_code & 0x7fU) >= 95U)) {
+        uint32_t first_best_code = best_code;
+
+        printf("rc32k_coarse_trim:unsalf,need enable half msb\r\n");
+
+        /* Unsafe seven-bit codes get one fresh fine-tuning pass with half-MSB enabled. */
+        rc32k_calibration_set_half_msb(true);
+        /* Wrap the half-MSB offset in the 10-bit R-code range. */
+        rc32k_code = (first_best_code + 64U) % (RC32K_R_CODE_MAX + 1U);
+        HBN_Set_RC32K_R_Code(rc32k_code);
+        vTaskDelay(pdMS_TO_TICKS(RC32K_SETTLE_DELAY_MS));
+
+        retry_cnt = 0;
+        best_error_ppm = 0;
+        best_code = 0;
+        has_best = 0;
+        is_first_measurement = false;
+        half_msb_second_pass = true;
+        goto calibration_pass;
+    }
+#endif
+
     printf("rc32k coarse trim success!, total time:%dms\r\n",
            (int)(bflb_mtimer_get_time_us() - timeout_start) / 1000);
 
-    bl_lp_rc32k_save_code(rc32k_code);
+    /* Do not leave hardware on the final speculative adjustment. */
+    HBN_Set_RC32K_R_Code(best_code);
+    vTaskDelay(pdMS_TO_TICKS(RC32K_SETTLE_DELAY_MS));
+    bl_lp_rc32k_save_code(best_code);
 
-    return rc32k_code;
+#if CONFIG_RC32K_CAL_ENABLE_HALF_MSB
+    if (half_msb_second_pass) {
+        /* Packed return value: bits [9:0] are the R-code, and bit 10 is half-MSB. */
+        return best_code | RC32K_HALF_MSB_FLAG;
+    }
+#endif
+
+    return best_code;
 }
 
-#else
+#else // #if defined(BL616CL) || defined(BL618DG)
 static uint32_t rc32k_coarse_calibration(uint32_t cali_val)
 {
     uint32_t retry_cnt = 0;
@@ -367,7 +463,7 @@ static uint32_t rc32k_coarse_calibration(uint32_t cali_val)
 
     return cali_result;
 }
-#endif
+#endif // #if defined(BL616CL) || defined(BL618DG)
 
 static int xtal32k_check(int crystal_flag)
 {

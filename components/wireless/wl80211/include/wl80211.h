@@ -371,6 +371,7 @@ enum {
 
 // post wifi event in async
 void wl80211_post_event(int code1, int code2);
+void wl80211_post_event_with_mac(int code1, int code2, const uint8_t mac[6]);
 
 // wl80211 control command
 enum {

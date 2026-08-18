@@ -8,6 +8,7 @@ void board_i2c0_gpio_init();
 void board_spi0_gpio_init();
 void board_adc_gpio_init();
 void board_dac_gpio_init();
+void board_dac_ref_gpio_init();
 void board_emac_gpio_init();
 void board_pwm_gpio_init();
 void board_ir_gpio_init();

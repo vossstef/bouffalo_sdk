@@ -13,6 +13,7 @@ void board_spi0_gpio_init(void);
 void board_pwm_gpio_init(void);
 void board_adc_gpio_init(void);
 void board_dac_gpio_init(void);
+void board_dac_ref_gpio_init(void);
 void board_auadc_gpio_init(void);
 void board_audac_gpio_init(void);
 void board_emac_rmii_gpio_init(uint8_t port);

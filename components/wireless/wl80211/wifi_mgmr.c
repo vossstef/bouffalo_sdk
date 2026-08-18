@@ -16,7 +16,7 @@
 #include "wl80211_mac.h"
 
 #if !defined(__NuttX__)
-#include "async_event.h"
+#include "wl80211_async_event.h"
 #endif
 
 static struct {
@@ -79,6 +79,24 @@ extern void _wifi_mgmr_ip_got_dump(void);
 extern void _wifi_mgmr_ap_start_dhcpd(bool use_ipcfg, bool use_dhcpd, int start, int limit, uint32_t ap_ipaddr,
                                       uint32_t ap_mask);
 extern void _wifi_mgmr_ap_stop_dhcpd(void);
+extern void _wifi_mgmr_ap_release_dhcp_lease(const uint8_t mac[6]);
+
+int async_post_event_with_mac(uintptr_t type, uint16_t code, unsigned long value, const uint8_t mac[6])
+{
+    struct async_input_event_mac event = { 0 };
+
+    if (mac == NULL) {
+        return -1;
+    }
+
+    event.event.size = sizeof(event);
+    event.event.type = type;
+    event.event.code = code;
+    event.event.value = value;
+    memcpy(event.mac, mac, sizeof(event.mac));
+
+    return async_post_general_event(&event.event);
+}
 
 static void wifi_mgmr_ap_netif_cfg_set_defaults(struct wifi_mgmr_ap_netif_cfg *config)
 {
@@ -359,8 +377,10 @@ static void wl80211_event_handler(async_input_event_t ev, void *priv)
             async_post_event(EV_WIFI, CODE_WIFI_ON_AP_STA_ADD, ev->value);
             break;
 
-        case WL80211_EVT_AP_STA_DEL:
-            async_post_event(EV_WIFI, CODE_WIFI_ON_AP_STA_DEL, ev->value);
+        case WL80211_EVT_AP_STA_DEL: {
+            const uint8_t *mac = ((async_input_event_mac_t)ev)->mac;
+            async_post_event_with_mac(EV_WIFI, CODE_WIFI_ON_AP_STA_DEL, ev->value, mac);
+            }
             break;
     }
 
@@ -424,7 +444,13 @@ static void wifi_mgmr_event_handler(async_input_event_t ev, void *priv)
             wl80211_printf("[APP] [EVT] [AP] [ADD] %ld\r\n", rtos_now(0));
         } break;
         case CODE_WIFI_ON_AP_STA_DEL: {
-            wl80211_printf("[APP] [EVT] [AP] [DEL] %ld\r\n", rtos_now(0));
+            const uint8_t *mac = ((async_input_event_mac_t)ev)->mac;
+
+            if (mac) {
+                wl80211_printf("[APP] [EVT] [AP] [DEL] %02X:%02X:%02X:%02X:%02X:%02X %ld\r\n", mac[0],
+                               mac[1], mac[2], mac[3], mac[4], mac[5], rtos_now(0));
+                _wifi_mgmr_ap_release_dhcp_lease(mac);
+            }
         } break;
         default: {
             wl80211_printf("[APP] [EVT] Unknown code %u \r\n", ev->code);

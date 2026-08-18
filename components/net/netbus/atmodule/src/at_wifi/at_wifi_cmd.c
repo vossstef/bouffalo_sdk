@@ -39,6 +39,7 @@ extern uint32_t rtos_now(bool isr);
 #include "at_port.h"
 
 #include "at_net_main.h"
+#include "at_net_config.h"
 #include "at_config.h"
 #include "at_utils_crypto.h"
 
@@ -331,10 +332,10 @@ static int at_query_cmd_cipsta(int argc, const char **argv)
         for (uint32_t i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++) {
             const ip6_addr_t * ip6addr = netif_ip6_addr(nif, i);
             if (ip6_addr_isvalid(netif_ip6_addr_state(nif, i)) && ip6_addr_islinklocal(ip6addr)) {
-                at_response_string("+CIPSTA:%s:\"%s\"\r\n", "ip6ll", ipaddr_ntoa(ip6addr));
+                at_response_string("+CIPSTA:%s:\"%s\"\r\n", "ip6ll", ip6addr_ntoa(ip6addr));
             }
             if (ip6_addr_isvalid(netif_ip6_addr_state(nif, i)) && ip6_addr_isglobal(ip6addr)) {
-                at_response_string("+CIPSTA:%s:\"%s\"\r\n", "ip6gl", ipaddr_ntoa(ip6addr));
+                at_response_string("+CIPSTA:%s:\"%s\"\r\n", "ip6gl", ip6addr_ntoa(ip6addr));
             }
         }
     }
@@ -953,7 +954,7 @@ static int at_query_cmd_cipap(int argc, const char **argv)
         for (uint32_t i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++) {
             const ip6_addr_t * ip6addr = netif_ip6_addr(nif, i);
             if (ip6_addr_isvalid(netif_ip6_addr_state(nif, i)) && ip6_addr_islinklocal(ip6addr)) {
-                at_response_string("+CIPAP:%s:\"%s\"\r\n", "ip6ll", ipaddr_ntoa(ip6addr));
+                at_response_string("+CIPAP:%s:\"%s\"\r\n", "ip6ll", ip6addr_ntoa(ip6addr));
             }
         }
     }
@@ -1149,7 +1150,7 @@ static int at_query_cmd_cwstate(int argc, const char **argv)
         return AT_RESULT_WITH_SUB_CODE(AT_SUB_CMD_EXEC_FAIL);
     }
     at_wifi_mgmr_connect_ind_stat_info_t info = {0};
-    int state = at_wifi_mgmr_sta_state_get();
+    int state = at_wifi_mgmr_state_get();
     ip4_addr_t ipaddr = {0};
     at_wifi_sta_ip4_addr_get(&ipaddr.addr, NULL, NULL, NULL);
 

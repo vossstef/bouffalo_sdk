@@ -173,11 +173,6 @@ static void wifi_start_firmware_task(void *pvParameters)
     (void)pvParameters;
     LOG_I("Starting wifi ...\r\n");
 
-    /* set ble controller EM Size */
-#ifdef CFG_BLE_ENABLE
-    GLB_Set_EM_Sel(GLB_WRAM160KB_EM0KB);
-#endif
-
     if (0 != rfparam_init(0, NULL, 0)) {
         LOG_I("PHY RF init failed!\r\n");
         vTaskDelete(NULL);

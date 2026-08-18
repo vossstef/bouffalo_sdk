@@ -1,5 +1,98 @@
 # CHANGELOG
 
+## v2.3.32 — since v2.3.31 (2026-08-10 → 2026-08-17)
+
+### New Features
+
+- **Build / Configuration**
+  - Integrated menuconfig and added component configuration menus for file system, graphics, multimedia, and AT module
+
+- **Peripherals / Drivers**
+  - Added DAC reference voltage configuration API
+  - Added PEC infrared (IR) receiver support
+
+- **USB**
+  - Added USB console logging for cases where the serial TX/RX is occupied
+
+- **Networking**
+  - Added mDNS configuration to the uart_wifi example
+  - Reconstructed iperf with TCP/UDP raw and socket backends and updated documentation
+
+- **Bluetooth**
+  - Added per-device BR/EDR inquiry result callback
+  - Enhanced BR/EDR diagnostics and media control
+
+- **Clock / Power**
+  - Added predictive coarse calibration with half-MSB support for RC32K, with half-MSB state restored on low-power wakeup
+
+- **Display**
+  - Updated LVGL OSD example and added ST77922, ST7701P, and ST7102 LCD drivers
+
+- **MFG**
+  - Added BL618DG RF calibration flash, OTP, and eFuse operations
+
+- **Flash**
+  - Added IS25LP01GJ flash support for BL616
+
+### Bug Fixes
+
+- **WiFi**
+  - Fixed rate control time integer wrap-around
+  - Rejected duplicate Block ACK frames before upload
+  - Exported channel switch state
+  - Fixed TX stalls after channel scans
+  - Extra information elements are now propagated for scan and association
+  - Firmware status is now checked before TX
+  - Fixed AP DHCPD client release when a station disconnects
+  - Fixed SDU RX indication triggering a heavy load loop
+
+- **Networking**
+  - Fixed multiple DHCPD issues in lwIP
+
+- **System / RTOS**
+  - Fixed tick compensation overflow during long RTC sleep
+  - boot2 ISP now uses chip-specific bootrom versions
+
+- **Power**
+  - Removed invalid BLE EM override in the low-power example
+  - Adapted the RTC driver for BL616CL
+
+- **BL618DG**
+  - Fixed SDH timeout judgment
+  - Fixed MFG SPDT configuration
+
+- **Zigbee / 802.15.4**
+  - Fixed BL702L private rate hardware ACK reception issue
+
+- **Flash**
+  - Added support for large-capacity JEDEC IDs
+  - Normalized flash pin configuration for BL616CL/BL618DG
+
+- **Linux Driver**
+  - Fixed ioctl path handling on newer kernels
+  - Fixed MFG TCAL setting and USB/SDIO PID debug
+
+- **MFG**
+  - Fixed BL616CL temperature calibration USB PID
+
+### Improvements
+
+- **WiFi / Networking**
+  - Added a high-performance TCP demo
+  - Increased TCP benchmark RX buffers
+
+- **Bluetooth**
+  - Updated Nimble throughput handling for BL618DG
+
+- **Drivers**
+  - Unified the UART driver into a single runtime-configurable driver
+
+- **SDH**
+  - Removed the workaround for the SDH hardware issue
+
+- **MFG**
+  - BL616CL MFG build now supports an autoboot flag
+
 ## v2.3.31 — since v2.3.30 (2026-07-27 → 2026-08-10)
 
 ### New Features

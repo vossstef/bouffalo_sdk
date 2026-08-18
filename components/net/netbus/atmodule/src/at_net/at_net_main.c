@@ -913,6 +913,10 @@ static void net_unlock(void)
 
 static int net_is_active(void)
 {
+    if (!at_wifi_config) {
+        return 0;
+    }
+
     if (at_wifi_config->wifi_mode == WIFI_STATION_MODE || at_wifi_config->wifi_mode == WIFI_AP_STA_MODE) {
         uint32_t addr = 0;
     	at_wifi_sta_ip4_addr_get(&addr, NULL, NULL, NULL);
@@ -2652,6 +2656,7 @@ int at_net_mdns_query(const char *service, const char *proto, int timeout_ms,
     at_net_mdns_search_t ctx;
     struct netif *netif;
     uint8_t request_id;
+    int elapsed_ms = 0;
     err_t err;
     int ret;
 
@@ -2690,18 +2695,30 @@ int at_net_mdns_query(const char *service, const char *proto, int timeout_ms,
             return ret;
         }
     }
-    err = mdns_search_service(NULL, service, mdns_proto, netif,
-                              at_net_mdns_search_result, &ctx, &request_id);
     UNLOCK_TCPIP_CORE();
-    if (err != ERR_OK) {
-        vSemaphoreDelete(ctx.done);
-        return at_net_mdns_err_to_sub_code(err);
-    }
 
-    xSemaphoreTake(ctx.done, pdMS_TO_TICKS(timeout_ms));
-    LOCK_TCPIP_CORE();
-    mdns_search_stop(request_id);
-    UNLOCK_TCPIP_CORE();
+    while (elapsed_ms < timeout_ms) {
+        int wait_ms = LWIP_MIN(1000, timeout_ms - elapsed_ms);
+
+        LOCK_TCPIP_CORE();
+        err = mdns_search_service(NULL, service, mdns_proto, netif,
+                                  at_net_mdns_search_result, &ctx, &request_id);
+        UNLOCK_TCPIP_CORE();
+        if (err != ERR_OK) {
+            vSemaphoreDelete(ctx.done);
+            return at_net_mdns_err_to_sub_code(err);
+        }
+
+        BaseType_t query_done = xSemaphoreTake(ctx.done, pdMS_TO_TICKS(wait_ms));
+        LOCK_TCPIP_CORE();
+        mdns_search_stop(request_id);
+        UNLOCK_TCPIP_CORE();
+        if (query_done == pdTRUE) {
+            break;
+        }
+
+        elapsed_ms += wait_ms;
+    }
     vSemaphoreDelete(ctx.done);
 
     at_net_mdns_finish_current_result(&ctx);

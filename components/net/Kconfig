@@ -1,12 +1,198 @@
 #
-# Kconfig for net
+# Network components
 #
+
 menu "Network"
 
-config NET_ENABLE
-    bool "Enable net"
+config LWIP
+    bool "lwIP"
     default n
     help
-      Enable or disable compilation of the net component.
+      Build the lwIP TCP/IP stack.
+
+if LWIP
+
+config IPV6
+    bool "IPv6"
+    default n
+    help
+      Enable IPv6 support in the lwIP stack.
+
+config DHCPD
+    bool "DHCP server"
+    default n
+    help
+      Build the lwIP DHCP server application.
+
+config MDNS
+    bool "mDNS responder"
+    default n
+    help
+      Build the lwIP mDNS responder application.
+
+config PING
+    bool "Ping application"
+    default n
+    help
+      Build the lwIP ping CLI application.
+
+endif # CONFIG_LWIP
+
+config NETBUS
+    bool "Netbus"
+    default n
+    help
+      Build the Netbus host/device communication framework.
+
+if NETBUS
+
+config NETIFD_NANO
+    bool "netifd nano"
+    default n
+    help
+      Build the nano network interface daemon for Netbus devices.
+
+config DHCP_IN_EMB
+    bool "Embedded DHCP client"
+    default n
+    help
+      Enable the embedded DHCP client used by host router devices.
+
+config CPU_E907
+    bool "E907 CPU target"
+    default n
+    help
+      Build Netbus device manager for the E907 CPU core.
+
+config ATMODULE
+    bool "AT module"
+    default n
+    help
+      Build the AT command module.
+
+config SPISYNC
+    bool "AT module SPI sync transport"
+    default n
+    help
+      Enable the SPI synchronous transport for the AT module.
+
+config NXSPI_NET
+    bool "NX SPI network transport"
+    default n
+    help
+      Enable the NX SPI network transport for Netbus devices.
+
+endif # CONFIG_NETBUS
+
+config NETHUB
+    bool "Nethub"
+    default n
+    help
+      Build the Nethub networking hub component.
+
+if NETHUB
+
+choice
+    prompt "Nethub host profile"
+    default NETHUB_PROFILE_SDIO
+    help
+      Physical transport used to connect the Nethub host.
+
+config NETHUB_PROFILE_SDIO
+    bool "SDIO"
+    help
+      Connect the Nethub host over SDIO.
+
+config NETHUB_PROFILE_USB
+    bool "USB"
+    help
+      Connect the Nethub host over USB.
+
+config NETHUB_PROFILE_SPI
+    bool "SPI"
+    help
+      Connect the Nethub host over SPI.
+
+endchoice
+
+config NETHUB_PROFILE_DUAL
+    bool "Dual profile"
+    default n
+    help
+      Build both SDIO and USB Nethub host profiles.
+
+config NETHUB_CTRLCHANNEL_USE_ATMODULE
+    bool "Use AT module control channel"
+    default n
+    help
+      Route Nethub control messages through the AT module.
+
+config NETHUB_LOWPOWER_ENABLE
+    bool "Nethub low power"
+    default n
+    help
+      Enable low-power handling in the Nethub transport.
+
+endif # CONFIG_NETHUB
+
+config HTTP
+    bool "HTTP"
+    default n
+    help
+      Build the HTTP protocol library.
+
+if HTTP
+
+config HTTP_CLIENT
+    bool "HTTP client"
+    default y
+    help
+      Build the HTTP client implementation.
+
+config HTTP_SERVER
+    bool "HTTP server"
+    default n
+    help
+      Build the HTTP server implementation.
+
+config HTTP_PARSER_STRICT
+    bool "Strict HTTP parser"
+    default n
+    help
+      Enable strict RFC compliance checks in the HTTP parser.
+
+config WEBSOCKET
+    bool "WebSocket"
+    default n
+    help
+      Build the WebSocket upgrade and framing support.
+
+endif # CONFIG_HTTP
+
+config MQTT
+    bool "MQTT"
+    default n
+    help
+      Build the MQTT client library.
+
+config RTSP
+    bool "RTSP"
+    default n
+    help
+      Build the RTSP client library.
+
+config LIBPEER
+    bool "libpeer"
+    default n
+    help
+      Build the peer-to-peer networking library.
+
+config SRTP
+    bool "SRTP"
+    default n
+    help
+      Build the Secure RTP library.
+
+source "$BL_SDK_BASE/components/net/netbus/atmodule/Kconfig"
 
 endmenu

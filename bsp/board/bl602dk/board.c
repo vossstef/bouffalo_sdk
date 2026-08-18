@@ -293,13 +293,22 @@ void board_adc_gpio_init()
 
 void board_dac_gpio_init()
 {
-    // struct bflb_device_s *gpio;
+    struct bflb_device_s *gpio;
 
-    // gpio = bflb_device_get_by_name("gpio");
+    gpio = bflb_device_get_by_name("gpio");
     /* DAC_CHA */
-    // bflb_gpio_init(gpio, GPIO_PIN_11, GPIO_ANALOG | GPIO_SMT_EN | GPIO_DRV_0);
-    // /* DAC_CHB */
-    // bflb_gpio_init(gpio, GPIO_PIN_17, GPIO_ANALOG | GPIO_SMT_EN | GPIO_DRV_0);
+    bflb_gpio_init(gpio, GPIO_PIN_13, GPIO_ANALOG | GPIO_SMT_EN | GPIO_DRV_0);
+    /* DAC_CHB */
+    bflb_gpio_init(gpio, GPIO_PIN_14, GPIO_ANALOG | GPIO_SMT_EN | GPIO_DRV_0);
+}
+
+void board_dac_ref_gpio_init()
+{
+    struct bflb_device_s *gpio;
+
+    gpio = bflb_device_get_by_name("gpio");
+    /* DAC_REF */
+    bflb_gpio_init(gpio, GPIO_PIN_12, GPIO_ANALOG | GPIO_SMT_EN | GPIO_DRV_0);
 }
 
 #ifdef CONFIG_SHELL

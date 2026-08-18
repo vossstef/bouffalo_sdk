@@ -175,7 +175,11 @@ void *sdh_osal_task_create(const char *name,
     }
     return (void *)handle;
 #else
-    (void)name; (void)entry; (void)arg; (void)stack_size; (void)priority;
+    (void)name;
+    (void)entry;
+    (void)arg;
+    (void)stack_size;
+    (void)priority;
     return NULL;
 #endif
 }

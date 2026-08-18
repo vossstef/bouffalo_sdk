@@ -38,6 +38,7 @@
 #include "nethub_vchan.h"
 #ifdef CONFIG_SHELL
 #include "shell.h"
+#include <stdlib.h>
 #endif
 #else
 #include "filesystem_reader.h"
@@ -228,15 +229,13 @@ int main(void)
 #endif
 
 #if (LCD_INTERFACE_TYPE == LCD_INTERFACE_DPI)
-    {
-        /* DPI pixel clock */
-        GLB_Set_Display_CLK(1, GLB_DP_CLK_WIFIPLL_96M, 3); //1024x600 div=1
-        
-    }
+    /* DPI pixel clock */
+    GLB_Set_Display_CLK(1, GLB_DP_CLK_WIFIPLL_160M, 2); //1024x600 div=1
+    
     LOG_I("DPI(standard RGB) + LVGL OSD: %s video background + LVGL benchmark overlay\r\n",
           CONFIG_LVGL_V9_WITH_OSD_USB_VIDEO ? "USB-ACM" : "SD");
 #else
-    LOG_I("DSI(LCD framework) + LVGL OSD: %s video background + LVGL benchmark overlay\r\n",
+    LOG_I("DSI(LCD framework) + LVGL OSD: %s video background + LVGL UI overlay\r\n",
           CONFIG_LVGL_V9_WITH_OSD_USB_VIDEO ? "USB-ACM" : "SD");
 #endif
     LOG_I("PSRAM physical size: %lu MB (AP budget %lu MB)\r\n",

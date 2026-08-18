@@ -414,6 +414,16 @@ void _wifi_mgmr_ap_stop_dhcpd(void)
     g_wl80211_ap_dhcpd_running = 0;
 }
 
+void _wifi_mgmr_ap_release_dhcp_lease(const uint8_t mac[6])
+{
+    if (!g_wl80211_ap_dhcpd_running || mac == NULL) {
+        return;
+    }
+
+    // maybe loss in mailbox max
+    dhcpd_release_client_by_mac(&vif2netif[WL80211_VIF_AP], mac);
+}
+
 void _wifi_mgmr_ap_start_dhcpd(bool use_ipcfg, bool use_dhcpd, int start, int limit, uint32_t ap_ipaddr,
                                uint32_t ap_mask)
 {

@@ -1,8 +1,103 @@
 #
-# Kconfig for crypto
+# Crypto components
 #
-menu "crypto"
 
-source "$BL_SDK_BASE/components/crypto/mbedtls/Kconfig"
+menu "Crypto"
+
+config MBEDTLS
+    bool "mbedTLS"
+    default n
+    help
+      Build the mbedTLS cryptography library.
+
+if MBEDTLS
+
+config MBEDTLS_V2
+    bool "Use mbedTLS v2"
+    default n
+    help
+      Link against the prebuilt mbedTLS v2 library instead of v3.
+
+config MBEDTLS_CFG_FILE
+    string "mbedTLS configuration file"
+    default "config-tls-generic.h"
+    help
+      Name of the mbedTLS configuration header used by the build.
+
+config MBEDTLS_DEBUG
+    bool "mbedTLS debug output"
+    default n
+    help
+      Enable mbedTLS debug logging output.
+
+config MBEDTLS_DEBUG_LEVEL
+    int "mbedTLS debug level"
+    default 0
+    depends on MBEDTLS_DEBUG
+    help
+      mbedTLS debug threshold: 0 off, 1 error, 2 state, 3 io, 4 verbose.
+
+config MBEDTLS_DEBUG_STRIP_NEWLINE
+    bool "Strip newlines from mbedTLS debug output"
+    default n
+    depends on MBEDTLS_DEBUG
+    help
+      Remove trailing newlines from mbedTLS debug messages.
+
+config MBEDTLS_DEBUG_EXTRACT_BASENAME_AT_RUNTIME
+    bool "Extract mbedTLS debug basename at runtime"
+    default n
+    depends on MBEDTLS_DEBUG
+    help
+      Strip path prefixes from mbedTLS source names at runtime instead of
+      at compile time.
+
+config MBEDTLS_SELF_TEST
+    bool "mbedTLS self tests"
+    default n
+    help
+      Build the mbedTLS self test entry points.
+
+menu "mbedTLS hardware acceleration"
+
+config MBEDTLS_AES_USE_HW
+    bool "AES hardware acceleration"
+    default n
+    help
+      Use the chip AES engine for mbedTLS AES operations.
+
+config MBEDTLS_SHA1_USE_HW
+    bool "SHA1 hardware acceleration"
+    default n
+    help
+      Use the chip hash engine for mbedTLS SHA1 operations.
+
+config MBEDTLS_SHA256_USE_HW
+    bool "SHA256 hardware acceleration"
+    default n
+    help
+      Use the chip hash engine for mbedTLS SHA256 operations.
+
+config MBEDTLS_SHA512_USE_HW
+    bool "SHA512 hardware acceleration"
+    default n
+    help
+      Use the chip hash engine for mbedTLS SHA512 operations.
+
+config MBEDTLS_ECC_USE_HW
+    bool "ECC hardware acceleration"
+    default n
+    help
+      Use the chip PKA engine for mbedTLS elliptic curve operations.
+
+config MBEDTLS_BIGNUM_USE_HW
+    bool "Bignum hardware acceleration"
+    default n
+    help
+      Use the chip PKA engine for mbedTLS bignum operations.
+
+endmenu
+
+endif # CONFIG_MBEDTLS
 
 endmenu

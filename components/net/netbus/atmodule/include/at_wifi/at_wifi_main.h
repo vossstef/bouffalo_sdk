@@ -15,6 +15,7 @@ extern "C" {
 #endif
 
 #include "at_wifi_config.h"
+#include <lwip/netif.h>
 #include "async_event.h"
 
 #ifndef WIFI_MGMR_SCAN_ITEMS_MAX
@@ -70,6 +71,8 @@ typedef enum {
 } at_wifi_mode_t;
 
 int at_wifi_start(void);
+
+struct netif *at_wifi_netif_get(uint8_t vif_idx);
 
 int at_wifi_stop(void);
 

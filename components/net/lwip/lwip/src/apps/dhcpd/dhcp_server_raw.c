@@ -59,9 +59,10 @@
 #define DHCP_MAX_HLEN               6
 /** dhcp default live time */
 #define DHCP_DEFAULT_LIVE_TIME      86400
+#define DHCP_LEASE_TIME_MSECS       (DHCP_DEFAULT_LIVE_TIME * 1000UL)
 
 /** Minimum length for request before packet is parsed */
-#define DHCP_MIN_REQUEST_LEN        44
+#define DHCP_MIN_REQUEST_LEN        (DHCP_OPTIONS_OFS + 3U)
 
 #define LWIP_NETIF_LOCK(...)
 #define LWIP_NETIF_UNLOCK(...)
@@ -99,7 +100,7 @@ struct dhcp_server_arg {
     ip4_addr_t end;
 };
 
-static u8_t *dhcp_server_option_find(u8_t *buf, u16_t len, u8_t option);
+static u8_t *dhcp_server_option_find(u8_t *buf, u16_t len, u8_t option, u8_t option_len);
 
 /**
 * The dhcp server struct list.
@@ -159,6 +160,60 @@ dhcp_client_find_by_ip(struct dhcp_server *dhcpserver, const uint8_t *ip)
     return NULL;
 }
 
+static int
+dhcp_client_remove_by_mac(struct dhcp_server *dhcpserver, const u8_t *chaddr,
+                          ip4_addr_t *released_ip)
+{
+    struct dhcp_client_node *node = dhcpserver->node_list;
+    struct dhcp_client_node *prev = NULL;
+
+    while (node != NULL) {
+        if (memcmp(node->chaddr, chaddr, DHCP_MAX_HLEN) == 0) {
+            if (released_ip != NULL) {
+                *released_ip = node->ipaddr;
+            }
+            if (prev == NULL) {
+                dhcpserver->node_list = node->next;
+            } else {
+                prev->next = node->next;
+            }
+            mem_free(node);
+            return 1;
+        }
+        prev = node;
+        node = node->next;
+    }
+
+    return 0;
+}
+
+static void
+dhcp_server_remove_expired_leases(struct dhcp_server *dhcpserver)
+{
+    struct dhcp_client_node *node = dhcpserver->node_list;
+    struct dhcp_client_node *prev = NULL;
+    u32_t now = sys_now();
+
+    while (node != NULL) {
+        struct dhcp_client_node *next = node->next;
+
+        if ((s32_t)(now - node->lease_end) >= 0) {
+            DEBUG_PRINTF("[%c%c] EXPIRE freed %d.%d.%d.%d " MACSTR "\r\n",
+                         dhcpserver->netif->name[0], dhcpserver->netif->name[1],
+                         IP4STR(&node->ipaddr), MAC2STR(node->chaddr));
+            if (prev == NULL) {
+                dhcpserver->node_list = next;
+            } else {
+                prev->next = next;
+            }
+            mem_free(node);
+        } else {
+            prev = node;
+        }
+        node = next;
+    }
+}
+
 /**
 * Find a dhcp client node by ip address
 *
@@ -181,7 +236,7 @@ dhcp_client_find(struct dhcp_server *dhcpserver, struct dhcp_msg *msg,
         return node;
     }
 
-    opt = dhcp_server_option_find(opt_buf, len, DHCP_OPTION_REQUESTED_IP);
+    opt = dhcp_server_option_find(opt_buf, len, DHCP_OPTION_REQUESTED_IP, 4);
     if (opt != NULL)
     {
         node = dhcp_client_find_by_ip(dhcpserver, &opt[2]);
@@ -212,7 +267,11 @@ dhcp_client_alloc(struct dhcp_server *dhcpserver, struct dhcp_msg *msg,
                   u8_t *opt_buf, u16_t len)
 {
     u8_t *opt;
-    u32_t ipaddr;
+    u32_t attempt;
+    u32_t current;
+    u32_t end;
+    u32_t pool_size;
+    u32_t start;
     struct dhcp_client_node *node;
 
     node = dhcp_client_find_by_mac(dhcpserver, msg->chaddr, msg->hlen);
@@ -221,7 +280,7 @@ dhcp_client_alloc(struct dhcp_server *dhcpserver, struct dhcp_msg *msg,
         return node;
     }
 
-    opt = dhcp_server_option_find(opt_buf, len, DHCP_OPTION_REQUESTED_IP);
+    opt = dhcp_server_option_find(opt_buf, len, DHCP_OPTION_REQUESTED_IP, 4);
     if (opt != NULL)
     {
         node = dhcp_client_find_by_ip(dhcpserver, &opt[2]);
@@ -234,28 +293,49 @@ dhcp_client_alloc(struct dhcp_server *dhcpserver, struct dhcp_msg *msg,
         }
     }
 
-dhcp_alloc_again:
-    node = dhcp_client_find_by_ip(dhcpserver, (uint8_t*)&dhcpserver->current);
-    if (node != NULL)
-    {
-        ipaddr = (ntohl(dhcpserver->current.addr) + 1);
-        if (ipaddr > ntohl(dhcpserver->end.addr))
-        {
-            ipaddr = ntohl(dhcpserver->start.addr);
-        }
-        dhcpserver->current.addr = htonl(ipaddr);
-        goto dhcp_alloc_again;
+    start = ntohl(dhcpserver->start.addr);
+    end = ntohl(dhcpserver->end.addr);
+    if (start > end) {
+        return NULL;
     }
+
+    pool_size = end - start + 1U;
+    current = ntohl(dhcpserver->current.addr);
+    if ((current < start) || (current > end)) {
+        current = start;
+    }
+
+    for (attempt = 0; attempt < pool_size; attempt++) {
+        dhcpserver->current.addr = htonl(current);
+        node = dhcp_client_find_by_ip(dhcpserver, (uint8_t *)&dhcpserver->current);
+        if (node == NULL) {
+            break;
+        }
+        current = (current == end) ? start : current + 1U;
+    }
+
+    if (attempt == pool_size) {
+        DEBUG_PRINTF("[%c%c] address pool exhausted (%lu leases)\r\n",
+                     dhcpserver->netif->name[0], dhcpserver->netif->name[1],
+                     (unsigned long)pool_size);
+        return NULL;
+    }
+
     node = (struct dhcp_client_node *)mem_malloc(sizeof(struct dhcp_client_node));
     if (node == NULL)
     {
         return NULL;
     }
+    memset(node, 0, sizeof(*node));
     SMEMCPY(node->chaddr, msg->chaddr, msg->hlen);
     node->ipaddr = dhcpserver->current;
+    node->lease_end = sys_now() + DHCP_LEASE_TIME_MSECS;
 
     node->next = dhcpserver->node_list;
     dhcpserver->node_list = node;
+
+    current = (current == end) ? start : current + 1U;
+    dhcpserver->current.addr = htonl(current);
 
     return node;
 }
@@ -269,16 +349,34 @@ dhcp_alloc_again:
 * @return dhcp option buffer
 */
 static u8_t *
-dhcp_server_option_find(u8_t *buf, u16_t len, u8_t option)
+dhcp_server_option_find(u8_t *buf, u16_t len, u8_t option, u8_t option_len)
 {
-    u8_t *end = buf + len;
-    while ((buf < end) && (*buf != DHCP_OPTION_END))
-    {
-        if (*buf == option)
-        {
+    while (len > 0U) {
+        u8_t code = buf[0];
+        u8_t len_value;
+
+        if (code == DHCP_OPTION_END) {
+            return NULL;
+        }
+        if (code == DHCP_OPTION_PAD) {
+            buf++;
+            len--;
+            continue;
+        }
+        if (len < 2U) {
+            return NULL;
+        }
+
+        len_value = buf[1];
+        if ((u16_t)len_value > (u16_t)(len - 2U)) {
+            return NULL;
+        }
+        if ((code == option) && (len_value == option_len)) {
             return buf;
         }
-        buf += (buf[1] + 2);
+
+        buf += (u16_t)len_value + 2U;
+        len -= (u16_t)len_value + 2U;
     }
     return NULL;
 }
@@ -297,6 +395,8 @@ dhcp_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t
     struct dhcp_client_node *node;
     u8_t msg_type;
     u16_t length;
+    u16_t packet_len;
+    u16_t work_len;
     ip_addr_t addr = *recv_addr;
     u32_t tmp;
 
@@ -306,28 +406,36 @@ dhcp_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t
     LWIP_UNUSED_ARG(addr);
     LWIP_UNUSED_ARG(port);
 
-    if (p->len < DHCP_MIN_REQUEST_LEN)
+    packet_len = p->tot_len;
+    if (packet_len < DHCP_MIN_REQUEST_LEN)
     {
         LWIP_DEBUGF(DHCP_DEBUG | LWIP_DBG_TRACE | LWIP_DBG_LEVEL_WARNING, ("DHCP request message or pbuf too short\n"));
         pbuf_free(p);
         return;
     }
 
-    q = pbuf_alloc(PBUF_TRANSPORT, 1500, PBUF_RAM);
+    work_len = packet_len > sizeof(struct dhcp_msg) ? packet_len : sizeof(struct dhcp_msg);
+    q = pbuf_alloc(PBUF_TRANSPORT, work_len, PBUF_RAM);
     if (q == NULL)
     {
         LWIP_DEBUGF(DHCP_DEBUG | LWIP_DBG_TRACE | LWIP_DBG_LEVEL_WARNING, ("pbuf_alloc dhcp_msg failed!\n"));
         pbuf_free(p);
         return;
     }
-    if (q->tot_len < p->tot_len)
+    if (q->tot_len < packet_len)
     {
         LWIP_DEBUGF(DHCP_DEBUG | LWIP_DBG_TRACE | LWIP_DBG_LEVEL_WARNING, ("pbuf_alloc dhcp_msg too small %d:%d\n", q->tot_len, p->tot_len));
+        pbuf_free(q);
         pbuf_free(p);
         return;
     }
 
-    pbuf_copy(q, p);
+    memset(q->payload, 0, q->len);
+    if (pbuf_copy(q, p) != ERR_OK) {
+        pbuf_free(q);
+        pbuf_free(p);
+        return;
+    }
     pbuf_free(p);
 
     msg = (struct dhcp_msg *)q->payload;
@@ -343,14 +451,16 @@ dhcp_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t
         goto free_pbuf_and_return;
     }
 
-    if (msg->hlen > DHCP_MAX_HLEN)
+    if (msg->hlen != DHCP_MAX_HLEN)
     {
         goto free_pbuf_and_return;
     }
 
+    dhcp_server_remove_expired_leases(dhcp_server);
+
     opt_buf = (u8_t *)msg + DHCP_OPTIONS_OFS;
-    length = q->tot_len - DHCP_OPTIONS_OFS;
-    opt = dhcp_server_option_find(opt_buf, length, DHCP_OPTION_MESSAGE_TYPE);
+    length = packet_len - DHCP_OPTIONS_OFS;
+    opt = dhcp_server_option_find(opt_buf, length, DHCP_OPTION_MESSAGE_TYPE, 1);
     if (opt)
     {
         msg_type = *(opt + 2);
@@ -363,7 +473,7 @@ dhcp_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t
             {
                 goto free_pbuf_and_return;
             }
-            node->lease_end = DHCP_DEFAULT_LIVE_TIME;
+            node->lease_end = sys_now() + DHCP_LEASE_TIME_MSECS;
             DEBUG_PRINTF("[%c%c] ALLOC %d.%d.%d.%d to " MACSTR "\r\n",
                 dhcp_server->netif->name[0], dhcp_server->netif->name[1],
                 IP4STR(&node->ipaddr), MAC2STR(msg->chaddr));
@@ -472,7 +582,7 @@ dhcp_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t
 
                     /* RFC 2131 §4.3.2: if REQUEST contains a server_id that isn't us,
                      * it's for another server — silently ignore, do not ACK or NAK */
-                    opt = dhcp_server_option_find(opt_buf, length, DHCP_OPTION_SERVER_ID);
+                    opt = dhcp_server_option_find(opt_buf, length, DHCP_OPTION_SERVER_ID, 4);
                     if ((opt != NULL) && (memcmp(&opt[2], &(dhcp_server->netif->ip_addr), 4) != 0))
                     {
                         DEBUG_PRINTF("[%c%c] IGNORE REQUEST from " MACSTR " (server_id mismatch)\r\n",
@@ -484,7 +594,7 @@ dhcp_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t
                     if (node != NULL)
                     {
                         /* Send ack */
-                        node->lease_end = DHCP_DEFAULT_LIVE_TIME;
+                        node->lease_end = sys_now() + DHCP_LEASE_TIME_MSECS;
                         /* create dhcp offer and send */
                         msg->op = DHCP_BOOTREPLY;
                         msg->hops = 0;
@@ -624,40 +734,28 @@ dhcp_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t
                 }
                 else if (msg_type == DHCP_RELEASE)
                 {
-                    struct dhcp_client_node *node_prev = NULL;
+                    ip4_addr_t released_ip;
 
                     DEBUG_PRINTF("[%c%c] RECV RELEASE from " MACSTR "\r\n",
                         dhcp_server->netif->name[0], dhcp_server->netif->name[1], MAC2STR(msg->chaddr));
 
-                    for (node = dhcp_server->node_list; node != NULL; node = node->next)
-                    {
-                        if (memcmp(node->chaddr, msg->chaddr, msg->hlen) == 0)
-                        {
-                            if (node == dhcp_server->node_list)
-                            {
-                                dhcp_server->node_list = node->next;
-                            }
-                            else
-                            {
-                                node_prev->next = node->next;
-                            }
-                            break;
-                        }
-                        node_prev = node;
-                    }
-
-                    if (node != NULL)
-                    {
+                    if (dhcp_client_remove_by_mac(dhcp_server, msg->chaddr, &released_ip)) {
                         DEBUG_PRINTF("[%c%c] RELEASE freed %d.%d.%d.%d " MACSTR "\r\n",
                             dhcp_server->netif->name[0], dhcp_server->netif->name[1],
-                            IP4STR(&node->ipaddr), MAC2STR(msg->chaddr));
-                        mem_free(node);
+                            IP4STR(&released_ip), MAC2STR(msg->chaddr));
                     }
                 }
                 else if (msg_type ==  DHCP_DECLINE)
                 {
+                    ip4_addr_t declined_ip;
+
                     DEBUG_PRINTF("[%c%c] RECV DECLINE from " MACSTR "\r\n",
                         dhcp_server->netif->name[0], dhcp_server->netif->name[1], MAC2STR(msg->chaddr));
+                    if (dhcp_client_remove_by_mac(dhcp_server, msg->chaddr, &declined_ip)) {
+                        DEBUG_PRINTF("[%c%c] DECLINE freed %d.%d.%d.%d " MACSTR "\r\n",
+                            dhcp_server->netif->name[0], dhcp_server->netif->name[1],
+                            IP4STR(&declined_ip), MAC2STR(msg->chaddr));
+                    }
                 }
                 else if (msg_type == DHCP_INFORM)
                 {
@@ -689,6 +787,7 @@ dhcp_server_start(void *ctx)
     struct dhcp_server_arg *arg = (struct dhcp_server_arg *)ctx;
     ip4_addr_t start = arg->start, end = arg->end;
     struct netif *netif = arg->netif;
+    err_t err;
     free(ctx);
 
     /* If this netif alreday use the dhcp server. */
@@ -696,6 +795,27 @@ dhcp_server_start(void *ctx)
     {
         if (dhcp_server->netif == netif)
         {
+            struct dhcp_client_node *node = dhcp_server->node_list;
+            struct dhcp_client_node *prev = NULL;
+            u32_t start_addr = ntohl(start.addr);
+            u32_t end_addr = ntohl(end.addr);
+
+            while (node != NULL) {
+                struct dhcp_client_node *next = node->next;
+                u32_t node_addr = ntohl(node->ipaddr.addr);
+
+                if ((node_addr < start_addr) || (node_addr > end_addr)) {
+                    if (prev == NULL) {
+                        dhcp_server->node_list = next;
+                    } else {
+                        prev->next = next;
+                    }
+                    mem_free(node);
+                } else {
+                    prev = node;
+                }
+                node = next;
+            }
             dhcp_server->start = start;
             dhcp_server->end = end;
             dhcp_server->current = start;
@@ -715,9 +835,6 @@ dhcp_server_start(void *ctx)
     /* clear data structure */
     memset(dhcp_server, 0, sizeof(struct dhcp_server));
 
-    /* store this dhcp server to list */
-    dhcp_server->next = lw_dhcp_server;
-    lw_dhcp_server = dhcp_server;
     dhcp_server->netif = netif;
     dhcp_server->node_list = NULL;
     dhcp_server->start = start;
@@ -729,30 +846,44 @@ dhcp_server_start(void *ctx)
     if (dhcp_server->pcb == NULL)
     {
         LWIP_DEBUGF(DHCP_DEBUG  | LWIP_DBG_TRACE, ("dhcp_server_start(): could not obtain pcb\n"));
+        mem_free(dhcp_server);
         return ERR_MEM;
     }
 
     ip_set_option(dhcp_server->pcb, SOF_BROADCAST);
     /* set up local and remote port for the pcb */
-    udp_bind(dhcp_server->pcb, IP_ADDR_ANY, DHCP_SERVER_PORT);
+    err = udp_bind(dhcp_server->pcb, IP_ADDR_ANY, DHCP_SERVER_PORT);
+    if (err != ERR_OK) {
+        LWIP_DEBUGF(DHCP_DEBUG | LWIP_DBG_TRACE,
+                    ("dhcp_server_start(): udp_bind failed: %d\n", err));
+        udp_remove(dhcp_server->pcb);
+        mem_free(dhcp_server);
+        return err;
+    }
     //udp_connect(dhcp_server->pcb, IP_ADDR_ANY, DHCP_CLIENT_PORT);
     /* set up the recv callback and argument */
     udp_recv(dhcp_server->pcb, dhcp_server_recv, dhcp_server);
+
+    /* Store only a fully initialized server. */
+    dhcp_server->next = lw_dhcp_server;
+    lw_dhcp_server = dhcp_server;
     LWIP_DEBUGF(DHCP_DEBUG | LWIP_DBG_TRACE, ("dhcp_server_start(): starting DHCP server\n"));
 
     return ERR_OK;
 }
 
-//FIXME thread safe??
-err_t dhcp_server_stop(struct netif *netif)
+static err_t
+dhcp_server_stop_internal(struct netif *netif)
 {
     struct dhcp_server *dhcp_server;
+    struct dhcp_server *dhcp_server_prev = NULL;
 
     /* If this netif is in the dhcp server list. */
     for (dhcp_server = lw_dhcp_server; dhcp_server != NULL; dhcp_server = dhcp_server->next) {
         if (dhcp_server->netif == netif) {
             break;
         }
+        dhcp_server_prev = dhcp_server;
     }
 
     if (NULL == dhcp_server) {
@@ -777,11 +908,30 @@ err_t dhcp_server_stop(struct netif *netif)
     }
 
     /*clean linked list*/
-    //FIXME no linked list, just one pointer
-    lw_dhcp_server = NULL;
+    if (dhcp_server_prev == NULL) {
+        lw_dhcp_server = dhcp_server->next;
+    } else {
+        dhcp_server_prev->next = dhcp_server->next;
+    }
     mem_free(dhcp_server);
 
     return ERR_OK;
+}
+
+static void
+dhcp_server_stop_callback(void *ctx)
+{
+    (void)dhcp_server_stop_internal((struct netif *)ctx);
+}
+
+err_t
+dhcp_server_stop(struct netif *netif)
+{
+    if (netif == NULL) {
+        return ERR_ARG;
+    }
+
+    return tcpip_callback(dhcp_server_stop_callback, netif);
 }
 
 static err_t dhcp_server_op_dns_server(void* netif, const ip_addr_t *dnsserver, int reset)
@@ -920,6 +1070,10 @@ void dhcpd_start(struct netif *netif, int start, int limit)
         DEBUG_PRINTF("ip_end: [%s]\r\n", str_tmp);
 
         arg = (struct dhcp_server_arg *)malloc(sizeof(struct dhcp_server_arg));
+        if (arg == NULL) {
+            DEBUG_PRINTF("dhcp server start context allocation failed.\r\n");
+            goto _exit;
+        }
         arg->netif = netif;
         arg->start = ip_start;
         arg->end = ip_end;
@@ -975,7 +1129,7 @@ void dhcpd_stop(const char *netif_name)
 
     dhcp_server_clear_dns_server();
     DEBUG_PRINTF("[%c%c] STOP\r\n", netif->name[0], netif->name[1]);
-    dhcp_server_stop(netif);
+    (void)dhcp_server_stop_internal(netif);
 
 _exit:
     LWIP_NETIF_UNLOCK();
@@ -984,16 +1138,13 @@ _exit:
 
 void dhcpd_stop_with_netif(const struct netif *netif)
 {
-    int res;
-    static char netif_name[3] = {0};
+    err_t res;
 
     if (!netif) {
         return;
     }
 
-    netif_name[0] = netif->name[0];
-    netif_name[1] = netif->name[1];
-    res = tcpip_callback((tcpip_callback_fn)dhcpd_stop, netif_name);
+    res = dhcp_server_stop((struct netif *)netif);
     if (res != ERR_OK) {
         DEBUG_PRINTF("dhcp_server_stop res: %d.\r\n", res);
     }
@@ -1044,6 +1195,7 @@ _exit:
 void dhcpd_release_client_by_mac(const struct netif *netif, const uint8_t *mac)
 {
     struct dhcp_release_client_arg *arg;
+    err_t err;
 
     if (!netif || !mac) {
         return;
@@ -1055,7 +1207,10 @@ void dhcpd_release_client_by_mac(const struct netif *netif, const uint8_t *mac)
     }
     arg->netif = (struct netif *)netif;
     memcpy(arg->mac, mac, DHCP_MAX_HLEN);
-    tcpip_callback((tcpip_callback_fn)dhcp_server_release_client_by_mac, arg);
+    err = tcpip_try_callback((tcpip_callback_fn)dhcp_server_release_client_by_mac, arg);
+    if (err != ERR_OK) {
+        free(arg);
+    }
 }
 
 static void dhcp_server_alive_client_by_mac(void *ctx)

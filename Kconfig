@@ -6,7 +6,7 @@ mainmenu "Bouffalo SDK Configuration"
 
 menu "Build Options"
 
-config CONFIG_STRICT
+config STRICT
     bool "Strict compilation (treat warnings as errors)"
     default n
     help
@@ -14,10 +14,59 @@ config CONFIG_STRICT
       -Wall is always enabled; this option additionally makes
       any warning a hard build failure.
 
+config GCC_OPTIMISE_LEVEL
+    string "Optimization level"
+    default "-Os"
+    help
+      GCC optimization level used for the whole SDK, e.g. -O0, -Og, -Os, -O2.
+
+config DEBUG
+    bool "Enable debug build"
+    default y
+    help
+      Enable debug information and debug-oriented runtime behavior.
+
+config ROMAPI
+    bool "Use ROM API"
+    default y
+    help
+      Link against the ROM resident API of the selected chip.
+
+config CONSOLE_UART_BAUDRATE
+    int "Console UART baudrate"
+    default 2000000
+    help
+      Baudrate of the default console UART.
+
+config COMX
+    string "Console serial port"
+    default "COM5"
+    help
+      Host serial port used by flash/download tools.
+
+config XTAL_POWER_TYPE_ACTIVE
+    bool "Use active crystal power mode"
+    default n
+    help
+      Enable active crystal power type for the external oscillator.
+
+config ANTI_ROLLBACK
+    bool "Enable anti-rollback"
+    default n
+    help
+      Enable firmware anti-rollback support.
+
+config APP_ANTI_ROLLBACK_VER
+    int "Application anti-rollback version"
+    default 0
+    depends on ANTI_ROLLBACK
+    help
+      Minimum allowed application version for anti-rollback checking.
+
 endmenu
 
 #
 # Include all other component Kconfigs
 #
 source "$BL_SDK_BASE/components/Kconfig"
-
+source "$BL_SDK_BASE/bsp/Kconfig"

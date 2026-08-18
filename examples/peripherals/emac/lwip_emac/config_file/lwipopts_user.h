@@ -64,24 +64,25 @@
 /* This application must not place lwIP pools in the Wi-Fi RAM region. */
 #define LWIP_DECLARE_MEMORY_ALIGNED(variable_name, size) u8_t variable_name[LWIP_MEM_ALIGN_BUFFER(size)]
 
-#define MEMP_NUM_NETBUF                                  32
+#define MEMP_NUM_NETBUF                                  64
 #define MEMP_NUM_NETCONN                                 16
 #define MEMP_NUM_UDP_PCB                                 16
 #define MEMP_NUM_TCP_PCB                                 8
 #define MEMP_NUM_TCP_PCB_LISTEN                          8
-#define MEMP_NUM_TCPIP_MSG_API                           16
+#define MEMP_NUM_TCPIP_MSG_API                           64
+#define MEMP_NUM_TCPIP_MSG_INPKT                         64
 
 /* Limit the IPv4 reassembly resources used by lwIP. */
-#define IP_REASS_MAX_PBUFS                               12
+#define IP_REASS_MAX_PBUFS                               10
 #define MEMP_NUM_REASSDATA                               LWIP_MIN(IP_REASS_MAX_PBUFS, 5)
 
 /* High-throughput TCP settings. */
 #define TCP_MSS                                          (1500 - 40)
 #define TCP_WND                                          (16 * TCP_MSS)
 #define TCP_SND_BUF                                      (16 * TCP_MSS)
-#define TCP_SND_QUEUELEN                                 ((3 * TCP_SND_BUF) / TCP_MSS)
+#define TCP_SND_QUEUELEN                                 (4 * (TCP_SND_BUF / TCP_MSS))
 #define MEMP_NUM_TCP_SEG                                 TCP_SND_QUEUELEN
-#define MEMP_NUM_PBUF                                    ((TCP_SND_BUF / TCP_MSS) + 8)
+#define MEMP_NUM_PBUF                                    (MEMP_NUM_TCP_SEG + 16)
 
 #define TCP_QUEUE_OOSEQ                                  1
 #define TCP_OOSEQ_MAX_PBUFS                              10
@@ -153,7 +154,7 @@
 #define TCPIP_MBOX_SIZE                                  64
 #define DEFAULT_THREAD_STACKSIZE                         1024
 #define DEFAULT_THREAD_PRIO                              1
-#define DEFAULT_RAW_RECVMBOX_SIZE                        32
+#define DEFAULT_RAW_RECVMBOX_SIZE                        64
 #define DEFAULT_UDP_RECVMBOX_SIZE                        64
 #define DEFAULT_TCP_RECVMBOX_SIZE                        64
 #define DEFAULT_ACCEPTMBOX_SIZE                          32

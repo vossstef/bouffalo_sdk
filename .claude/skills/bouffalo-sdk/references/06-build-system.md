@@ -393,13 +393,17 @@ make combine
 ### 配置文件生成流程
 
 ```
+defconfig / boards/defconfig (Make 变量)
+   ↓ cmake_config
+build/generated/defconfig.cmake
+   ↓ CMake 配置
+CONFIG_* CMake 变量
+
 menuconfig (.config)
-   ↓
-kconfig2cmake
-   ↓
-.config.cmake
-   ↓
-CMake (CMakeCache.txt)
+   ↓ kconfig2cmake
+.config.cmake（覆盖 defconfig.cmake 中的同名变量）
+   ↓ CMake 配置
+build/generated/autoconf.h → -include 注入所有编译单元
 ```
 
 ### 依赖管理
@@ -418,8 +422,9 @@ config CONFIG_BLE
 ### 配置变量传递
 
 ```makefile
-# Kconfig → .config → .config.cmake → CMake
-CONFIG_DEBUG=y  →  set(CONFIG_DEBUG TRUE)  →  add_definitions(-DDEBUG=y)
+# Kconfig → .config → .config.cmake → CMake → autoconf.h
+CONFIG_DEBUG=y  →  set(CONFIG_DEBUG y)  →  #define CONFIG_DEBUG 1
+CONFIG_DEBUG=n  →  set(CONFIG_DEBUG n)  →  #undef CONFIG_DEBUG
 ```
 
 ## 组件构建
@@ -523,14 +528,17 @@ undefined reference to `xxx'
 # 总是使用menuconfig配置
 make menuconfig
 
-# 保存配置
-make .config.cmake
+# 保存为板级默认配置（可选）
+make savedefconfig
+
+# 查看当前配置
+make config-show
 ```
 
 ### 2. 清理构建
 
 ```bash
-# 配置改变后总是清理
+# 修改配置后通常无需清理，CMake 会自动重新配置
 make clean
 
 # 或删除构建目录
@@ -548,7 +556,7 @@ make ninja CHIP=bl616 BOARD=bl616dk
 
 ```bash
 # 查看当前配置
-cat .config
+make config-show
 
 # 查看CMake配置
 cat build/CMakeCache.txt

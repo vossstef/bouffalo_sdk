@@ -23,23 +23,6 @@ make CHIP=bl616 BOARD=bl616dk
 For BL616/BL618/BL618DG, the default build uses a balanced TCP profile:
 `TCP_SND_BUF=96*TCP_MSS`, `LWIP_HEAP_SIZE=64K`, and no-copy TCP TX pbufs.
 BL602 keeps the original low-memory profile.
-A high performance benchmark profile can be enabled explicitly for
-BL616/BL618/BL618DG:
-
-```bash
-make CHIP=<chipname> BOARD=<boardname> CONFIG_WIFI_TCP_HIGH_PERF=y
-```
-
-This profile selects `tcp_bench`, `TCP_SND_BUF=232*TCP_MSS`,
-`LWIP_HEAP_SIZE=116K`, and no-copy TCP TX pbufs. It uses more Wi-Fi RAM and
-reduces RX/fhost margin, so use the default profile for normal SDK behavior.
-
-Optional local overrides:
-
-```bash
-make CHIP=<chipname> BOARD=<boardname> CONFIG_WIFI_TCP_HIGH_PERF=y \
-    CONFIG_WIFI_TCP_HIGH_PERF_SND_BUF_MSS=192 CONFIG_WIFI_TCP_HIGH_PERF_HEAP_KB=96
-```
 
 - BL618DG
 

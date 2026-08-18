@@ -139,10 +139,12 @@ static void shell_task(void *pvParameters)
     uint8_t data;
     uint32_t len;
 
-    bflb_uart_feature_control(uart_shell, UART_CMD_CLR_RX_FIFO, 0);
-    bflb_uart_rxint_mask(uart_shell, false);
-    bflb_irq_attach(uart_shell->irq_num, uart_shell_isr, NULL);
-    bflb_irq_enable(uart_shell->irq_num);
+    if (uart_shell != NULL) {
+        bflb_uart_feature_control(uart_shell, UART_CMD_CLR_RX_FIFO, 0);
+        bflb_uart_rxint_mask(uart_shell, false);
+        bflb_irq_attach(uart_shell->irq_num, uart_shell_isr, NULL);
+        bflb_irq_enable(uart_shell->irq_num);
+    }
 
     while (1) {
         if (xSemaphoreTake(sem_shell, portMAX_DELAY) == pdTRUE) {
@@ -157,6 +159,10 @@ static void shell_task(void *pvParameters)
 
 void shell_init_with_task(struct bflb_device_s *shell)
 {
+    if (shell_handle != NULL) {
+        return;
+    }
+
     vSemaphoreCreateBinary(sem_shell);
     uart_shell = shell;
 

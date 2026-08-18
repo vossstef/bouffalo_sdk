@@ -83,32 +83,20 @@
 #define TCP_WND                       (2 * MAC_RXQ_DEPTH * TCP_MSS)
 #endif
 
-#ifndef CONFIG_WIFI_TCP_HIGH_PERF
-#define CONFIG_WIFI_TCP_HIGH_PERF     0
-#endif
-#ifndef CONFIG_WIFI_TCP_HIGH_PERF_SND_BUF_MSS
-#define CONFIG_WIFI_TCP_HIGH_PERF_SND_BUF_MSS 232
-#endif
-#ifndef CONFIG_WIFI_TCP_HIGH_PERF_HEAP_KB
-#define CONFIG_WIFI_TCP_HIGH_PERF_HEAP_KB     116
-#endif
-
-#if CONFIG_WIFI_TCP_HIGH_PERF
-#define TCP_SND_BUF                   (CONFIG_WIFI_TCP_HIGH_PERF_SND_BUF_MSS * TCP_MSS)
-#elif defined(BL602)
+#if defined(BL602)
 #define TCP_SND_BUF                   (4 * TCP_MSS)
 #else
 #define TCP_SND_BUF                   (96 * TCP_MSS)
 #endif
 
-#if (!CONFIG_WIFI_TCP_HIGH_PERF && defined(BL602))
+#if defined(BL602)
 #define TCP_SND_QUEUELEN              ((4 * (TCP_SND_BUF) + (TCP_MSS - 1)) / (TCP_MSS))
 #else
 #define TCP_SND_QUEUELEN              ((2 * TCP_SND_BUF) / TCP_MSS)
 #endif
 
 #define TCP_QUEUE_OOSEQ               1
-#if (!CONFIG_WIFI_TCP_HIGH_PERF && defined(BL602))
+#if defined(BL602)
 #define MEMP_NUM_TCP_SEG              TCP_SND_QUEUELEN
 #define MEMP_NUM_PBUF                 (TCP_SND_BUF / TCP_MSS)
 #else
@@ -118,7 +106,7 @@
 #define PBUF_POOL_SIZE                0
 #define LWIP_WND_SCALE                1
 #define TCP_RCV_SCALE                 2
-#if (!CONFIG_WIFI_TCP_HIGH_PERF && defined(BL602))
+#if defined(BL602)
 #define TCP_SNDLOWAT                  LWIP_MIN(LWIP_MAX(((TCP_SND_BUF) / 4), (2 * TCP_MSS) + 1), (TCP_SND_BUF)-1)
 #else
 #define TCP_SNDLOWAT                  LWIP_MIN((16 * TCP_MSS), ((TCP_SND_BUF) / 2))
@@ -128,9 +116,7 @@
 #define MEM_MIN                       MEM_MIN_TCP
 #define MEM_ALIGNMENT                 4
 
-#if CONFIG_WIFI_TCP_HIGH_PERF
-#define LWIP_HEAP_SIZE (CONFIG_WIFI_TCP_HIGH_PERF_HEAP_KB * 1024)
-#elif defined(BL602)
+#if defined(BL602)
 #define LWIP_HEAP_SIZE (14 * 1024)
 #else
 #define LWIP_HEAP_SIZE (64 * 1024)

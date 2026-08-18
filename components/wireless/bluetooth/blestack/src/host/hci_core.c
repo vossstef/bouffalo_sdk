@@ -146,6 +146,9 @@ u8_t* get_pub_key()
 
 #if defined(CONFIG_BT_BREDR)
 static bt_br_discovery_cb_t *discovery_cb;
+#if defined(BFLB_BREDR_PATCH_EXTENDED_INQUIRY_RESULT_CALLBACK)
+static bt_br_discovery_result_cb_t *discovery_result_cb;
+#endif /* BFLB_BREDR_PATCH_EXTENDED_INQUIRY_RESULT_CALLBACK */
 struct bt_br_discovery_result *discovery_results;
 static size_t discovery_results_size;
 static size_t discovery_results_count;
@@ -3202,6 +3205,12 @@ static void extended_inquiry_result(struct net_buf *buf)
 	result->rssi = evt->rssi;
 	memcpy(result->cod, evt->cod, 3);
 	memcpy(result->eir, evt->eir, sizeof(result->eir));
+
+#if defined(BFLB_BREDR_PATCH_EXTENDED_INQUIRY_RESULT_CALLBACK)
+	if (discovery_result_cb) {
+		discovery_result_cb(result);
+	}
+#endif /* BFLB_BREDR_PATCH_EXTENDED_INQUIRY_RESULT_CALLBACK */
 }
 
 static void remote_name_request_complete(struct net_buf *buf)
@@ -8508,6 +8517,13 @@ static bool valid_br_discov_param(const struct bt_br_discovery_param *param,
 
 	return true;
 }
+
+#if defined(BFLB_BREDR_PATCH_EXTENDED_INQUIRY_RESULT_CALLBACK)
+void bt_br_discovery_result_cb_register(bt_br_discovery_result_cb_t cb)
+{
+	discovery_result_cb = cb;
+}
+#endif /* BFLB_BREDR_PATCH_EXTENDED_INQUIRY_RESULT_CALLBACK */
 
 int bt_br_discovery_start(const struct bt_br_discovery_param *param,
 			  struct bt_br_discovery_result *results, size_t cnt,

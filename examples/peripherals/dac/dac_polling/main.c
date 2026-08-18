@@ -2,6 +2,8 @@
 #include "bflb_mtimer.h"
 #include "board.h"
 
+#define DAC_USE_EXTERNAL_REF 0
+
 struct bflb_device_s *dac;
 
 uint16_t SIN_LIST[] = {
@@ -45,6 +47,10 @@ int main(void)
 
     /* 512K / 16 = 32K */
     bflb_dac_init(dac, DAC_CLK_DIV_16);
+#if DAC_USE_EXTERNAL_REF
+    board_dac_ref_gpio_init();
+    bflb_dac_set_reference(dac, DAC_VREF_EXTERNAL);
+#endif
     bflb_dac_channel_enable(dac, DAC_CHANNEL_A);
     bflb_dac_channel_enable(dac, DAC_CHANNEL_B);
 

@@ -193,6 +193,11 @@ int at_port_netmode_get()
     return 1;
 }
 
+int at_port_schedule_work(void)
+{
+    return netbus_uart_wakeup(&at_uart);
+}
+
 static const at_device_ops spidev_ops = {
     .init_device = at_port_init,
     .deinit_device = at_port_deinit,
@@ -200,6 +205,7 @@ static const at_device_ops spidev_ops = {
     .write_data = at_port_write_data,
     .read_zero_copy = NULL,
     .read_buffer_release = NULL,
+    .schedule_work = at_port_schedule_work,
 };
 
 const at_device_ops *at_devops_get(void)

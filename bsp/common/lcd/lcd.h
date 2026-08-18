@@ -107,6 +107,17 @@
 #define LCD_COLOR_DEPTH              ST7796_DBI_COLOR_DEPTH
 #define _LCD_FUNC_DEFINE(_func, ...) st7796_dbi_##_func(__VA_ARGS__)
 
+#elif defined LCD_DBI_ST77922
+
+#include "mipi_dbi/st77922_dbi.h"
+#define LCD_INTERFACE_TYPE           LCD_INTERFACE_DBI
+#define LCD_W                        ST77922_DBI_W
+#define LCD_H                        ST77922_DBI_H
+#define LCD_PIXEL_ALIGN_X            ST77922_DBI_PIXEL_ALIGN
+#define LCD_PIXEL_ALIGN_Y            ST77922_DBI_PIXEL_ALIGN
+#define LCD_COLOR_DEPTH              ST77922_DBI_COLOR_DEPTH
+#define _LCD_FUNC_DEFINE(_func, ...) st77922_dbi_##_func(__VA_ARGS__)
+
 #elif defined LCD_DBI_ST77926
 
 #include "mipi_dbi/st77926_dbi_qspi.h"
@@ -155,6 +166,15 @@
 #define LCD_H                        GC9503V_DPI_H
 #define LCD_COLOR_DEPTH              GC9503V_DPI_COLOR_DEPTH
 #define _LCD_FUNC_DEFINE(_func, ...) gc9503v_dpi_##_func(__VA_ARGS__)
+
+#elif defined LCD_DPI_ST7701P
+
+#include "mipi_dpi/st7701p_dpi.h"
+#define LCD_INTERFACE_TYPE           LCD_INTERFACE_DPI
+#define LCD_W                        ST7701P_DPI_W
+#define LCD_H                        ST7701P_DPI_H
+#define LCD_COLOR_DEPTH              ST7701P_DPI_COLOR_DEPTH
+#define _LCD_FUNC_DEFINE(_func, ...) st7701p_dpi_##_func(__VA_ARGS__)
 
 #elif defined LCD_DPI_ST7701S
 
@@ -227,6 +247,15 @@
 #define LCD_H                        ST7102_YH494_DSI_H
 #define LCD_COLOR_DEPTH              ST7102_YH494_DSI_COLOR_DEPTH
 #define _LCD_FUNC_DEFINE(_func, ...) st7102_yh494_dsi_##_func(__VA_ARGS__)
+
+#elif defined LCD_DSI_ST7102_KD027HVF
+
+#include "mipi_dsi/st7102_kd027hvf_dsi.h"
+#define LCD_INTERFACE_TYPE           LCD_INTERFACE_DSI
+#define LCD_W                        ST7102_KD027HVF_DSI_W
+#define LCD_H                        ST7102_KD027HVF_DSI_H
+#define LCD_COLOR_DEPTH              ST7102_KD027HVF_DSI_COLOR_DEPTH
+#define _LCD_FUNC_DEFINE(_func, ...) st7102_kd027hvf_dsi_##_func(__VA_ARGS__)
 
 #elif defined LCD_DSI_AXS15231B_HS035
 

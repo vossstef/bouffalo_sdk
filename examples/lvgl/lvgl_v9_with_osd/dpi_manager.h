@@ -53,6 +53,10 @@ typedef struct {
 #define VIDEO_WIDTH_MCU    MJDEC_MCU_ALIGN(VIDEO_WIDTH)
 #define VIDEO_HEIGHT_MCU   MJDEC_MCU_ALIGN(VIDEO_HEIGHT)
 
+/* Panel YUV buffer layout */
+#define YUV_Y_PLANE_SIZE   LCD_PIXELS_MCU
+#define YUV_BUFFER_SIZE    (LCD_PIXELS_MCU * 2)
+
 /* VIDEO_TARGET_FPS lives in video_config.h (customer-editable). Derived from it: */
 #define VIDEO_FRAME_PERIOD_MS ((1000U + VIDEO_TARGET_FPS - 1U) / VIDEO_TARGET_FPS)
 

@@ -111,10 +111,10 @@ void ui_Screen1_screen_init(void)
                       "multi-mode wireless connection technology, audio and video processing and "
                       "artificial intelligence algorithm technology, which can fully realize the "
                       "chip research and development of single-chip integration.   ");
-    lv_obj_set_width(ui_LabelMarquee, 980); /* visible scroll length = old slider length */
+    lv_obj_set_width(ui_LabelMarquee, 1100); /* visible scroll length = old slider length */
     lv_obj_set_height(ui_LabelMarquee, LV_SIZE_CONTENT);
-    lv_obj_set_x(ui_LabelMarquee, -303); /* +x in fb = "down" in the landscape view */
-    lv_obj_set_y(ui_LabelMarquee, -1);
+    lv_obj_set_x(ui_LabelMarquee, -320); /* +x in fb = "down" in the landscape view */
+    lv_obj_set_y(ui_LabelMarquee, 0);
     lv_obj_set_align(ui_LabelMarquee, LV_ALIGN_CENTER);
     lv_obj_set_style_transform_rotation(ui_LabelMarquee, 2700, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_transform_pivot_x(ui_LabelMarquee, lv_pct(50), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -122,7 +122,7 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_style_anim_duration(ui_LabelMarquee, 128000, LV_PART_MAIN | LV_STATE_DEFAULT); /* slow scroll */
     lv_obj_set_style_text_color(ui_LabelMarquee, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_LabelMarquee, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_font(ui_LabelMarquee, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_LabelMarquee, &lv_font_montserrat_32, LV_PART_MAIN | LV_STATE_DEFAULT);
 
 
     ui_Image5 = lv_image_create(ui_Screen1);

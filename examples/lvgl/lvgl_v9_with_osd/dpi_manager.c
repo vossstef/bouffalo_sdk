@@ -109,9 +109,10 @@ volatile uint32_t pic_count = 0;
 uint8_t dpi_mjdec_isr_enable_flag = 0;
 
 /* Double-buffered panel-sized YUV background (NV12/NV16: <=2 B/px). Per buffer: Y plane
- * (LCD_PIXELS) then UV plane; the planar switch gets Y at base, UV at base+LCD_PIXELS. */
-ATTR_NOINIT_PSRAM_SECTION __attribute__((aligned(32))) static uint8_t yuv_buffer_0[LCD_WIDTH * LCD_HEIGHT * 2];
-ATTR_NOINIT_PSRAM_SECTION __attribute__((aligned(32))) static uint8_t yuv_buffer_1[LCD_WIDTH * LCD_HEIGHT * 2];
+ * (YUV_Y_PLANE_SIZE = MCU-padded, see dpi_manager.h) then UV plane; the planar switch gets
+ * Y at base, UV at base+YUV_Y_PLANE_SIZE. */
+ATTR_NOINIT_PSRAM_SECTION __attribute__((aligned(32))) static uint8_t yuv_buffer_0[YUV_BUFFER_SIZE];
+ATTR_NOINIT_PSRAM_SECTION __attribute__((aligned(32))) static uint8_t yuv_buffer_1[YUV_BUFFER_SIZE];
 static uint8_t *yuv_images[] = { yuv_buffer_0, yuv_buffer_1 };
 
 /* Strong override of the BSP's weak base-layer swap (bl_mipi_dpi_v2.c). Invoked
@@ -354,7 +355,7 @@ static int dma2d_blit_plane(const uint8_t *src, uint8_t *dst, uint32_t dst_strid
 static int compose_centered(uint8_t *yuv_dst)
 {
     uint8_t *y_dst = yuv_dst;
-    uint8_t *uv_dst = yuv_dst + LCD_PIXELS;
+    uint8_t *uv_dst = yuv_dst + YUV_Y_PLANE_SIZE;
     if (dma2d_blit_plane(y_decode, y_dst, LCD_WIDTH,
                          VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_OFFSET_X, VIDEO_OFFSET_Y) < 0)
         return -1;
@@ -412,9 +413,10 @@ int dpi_manager_init(void)
      * composite only overwrites the centered window, so the borders stay black. */
     LOG_I("[2] Clear video background framebuffers\r\n");
     for (int i = 0; i < 2; i++) {
-        memset(yuv_images[i], 0, LCD_PIXELS);              /* Y plane -> black */
-        memset(yuv_images[i] + LCD_PIXELS, 0x80, LCD_PIXELS); /* UV plane -> neutral */
-        bflb_l1c_dcache_clean_range(yuv_images[i], LCD_WIDTH * LCD_HEIGHT * 2);
+        memset(yuv_images[i], 0, YUV_Y_PLANE_SIZE);              /* Y plane -> black */
+        memset(yuv_images[i] + YUV_Y_PLANE_SIZE, 0x80,
+               YUV_BUFFER_SIZE - YUV_Y_PLANE_SIZE);              /* UV plane -> neutral */
+        bflb_l1c_dcache_clean_range(yuv_images[i], YUV_BUFFER_SIZE);
     }
 #endif
 
@@ -460,7 +462,7 @@ void image_switch_task(void *param)
         do {
             if (!dpi_mjdec_isr_enable_flag) {
                 dpi_mjdec_decode_one_frame(jpg_buffer->data, yuv_images[yuv_idx],
-                                           yuv_images[yuv_idx] + LCD_PIXELS);
+                                           yuv_images[yuv_idx] + YUV_Y_PLANE_SIZE);
             }
             /* Wait for the OSD SEOF ISR to latch the decoded frame (pic_count++).
              * vTaskDelay(1) yields to the lower-priority lvgl_task while we wait a
@@ -515,7 +517,7 @@ void image_switch_task(void *param)
         }
         /* Hand the composited panel buffer to the OSD SEOF ISR and arm the latch. */
         mjdec_config.output_bufaddr0 = (uint32_t)yuv_images[yuv_idx];
-        mjdec_config.output_bufaddr1 = (uint32_t)(yuv_images[yuv_idx] + LCD_PIXELS);
+        mjdec_config.output_bufaddr1 = (uint32_t)(yuv_images[yuv_idx] + YUV_Y_PLANE_SIZE);
         dpi_mjdec_isr_enable_flag = 1;
         /* Wait for the SEOF latch so we don't overwrite a buffer still queued. */
         uint64_t t_swap = bflb_mtimer_get_time_ms();

@@ -2,12 +2,17 @@
 #include <reent.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 #include <sys/stat.h>
+
+#include "console_output.h"
 
 #ifdef CONFIG_CONSOLE_WO
 #include "bflb_wo.h"
-#else
+#elif !defined(CONFIG_BSP_CONSOLE_USB_CDC)
 #include "bflb_uart.h"
+#else
+struct bflb_device_s;
 #endif
 
 /** @addtogroup ttyin_config
@@ -195,7 +200,7 @@ extern struct bflb_device_s *console;
 
 static TTYIN_FIFO_DEFINE(stdin_fifo, 512);
 
-#ifndef CONFIG_CONSOLE_WO
+#if !defined(CONFIG_CONSOLE_WO) && !defined(CONFIG_BSP_CONSOLE_USB_CDC)
 void console_receive_isr(int irq, void *arg)
 {
     uint32_t intstatus = bflb_uart_get_intstatus(console);
@@ -280,6 +285,9 @@ _ssize_t _read_tty_r(struct _reent *reent, int fd, void *ptr, size_t size)
     if (fd == 0x3ff) {
         return -1;
     } else if (fd == 0) {
+#ifdef CONFIG_BSP_CONSOLE_USB_CDC
+        return -1;
+#else
         int ch;
 
         for (size_t i = 0; i < size; i++) {
@@ -294,6 +302,7 @@ _ssize_t _read_tty_r(struct _reent *reent, int fd, void *ptr, size_t size)
         }
 
         return size;
+#endif
     } else if ((fd == 1) || (fd == 2)) {
         reent->_errno = EACCES;
         return -1;
@@ -321,14 +330,7 @@ _ssize_t _write_tty_r(struct _reent *reent, int fd, const void *ptr, size_t size
         reent->_errno = EACCES;
         return -1;
     } else if ((fd == 1) || (fd == 2)) {
-        for (size_t i = 0; i < size; i++) {
-#ifdef CONFIG_CONSOLE_WO
-            bflb_wo_uart_putchar(console, ((uint8_t *)ptr)[i]);
-#else
-            bflb_uart_putchar(console, ((uint8_t *)ptr)[i]);
-#endif
-        }
-        return size;
+        return bflb_console_write(ptr, size);
     } else {
         reent->_errno = EBADF;
         return -1;

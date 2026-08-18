@@ -93,10 +93,10 @@ static int at_exe_cmd_cifsr(int argc, const char **argv)
         for (uint32_t i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++) {
             const ip6_addr_t * ip6addr = netif_ip6_addr(nif, i);
             if (ip6_addr_isvalid(netif_ip6_addr_state(nif, i)) && ip6_addr_islinklocal(ip6addr)) {
-                at_response_string("+CIFSR:%s:\"%s\"\r\n", "STAIP6LL", ipaddr_ntoa(ip6addr));
+                at_response_string("+CIFSR:%s:\"%s\"\r\n", "STAIP6LL", ip6addr_ntoa(ip6addr));
             }
             if (ip6_addr_isvalid(netif_ip6_addr_state(nif, i)) && ip6_addr_isglobal(ip6addr)) {
-                at_response_string("+CIFSR:%s:\"%s\"\r\n", "STAIP6GL", ipaddr_ntoa(ip6addr));
+                at_response_string("+CIFSR:%s:\"%s\"\r\n", "STAIP6GL", ip6addr_ntoa(ip6addr));
             }
         }
     }
@@ -119,7 +119,7 @@ static int at_exe_cmd_cifsr(int argc, const char **argv)
         for (uint32_t i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++) {
             const ip6_addr_t * ip6addr = netif_ip6_addr(nif, i);
             if (ip6_addr_isvalid(netif_ip6_addr_state(nif, i)) && ip6_addr_islinklocal(ip6addr)) {
-                at_response_string("+CIFSR:%s:\"%s\"\r\n", "APIP6LL", ipaddr_ntoa(ip6addr));
+                at_response_string("+CIFSR:%s:\"%s\"\r\n", "APIP6LL", ip6addr_ntoa(ip6addr));
             }
         }
     }

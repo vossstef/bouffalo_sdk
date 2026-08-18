@@ -1,31 +1,19 @@
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdint.h>
+#include <string.h>
 
-#ifdef CONFIG_CONSOLE_WO
-#include "bflb_wo.h"
-#else
-#include "bflb_uart.h"
-#endif
+#include "console_output.h"
 
 #undef printf
 #undef puts
 #undef putchar
 
-extern struct bflb_device_s *console;
-
 int putchar(int c)
 {
-    if (console == NULL) {
-        return EOF;
-    }
+    unsigned char ch = (unsigned char)c;
 
-#ifdef CONFIG_CONSOLE_WO
-    bflb_wo_uart_putchar(console, (uint8_t)c);
-#else
-    bflb_uart_putchar(console, (uint8_t)c);
-#endif
-
-    return c;
+    return bflb_console_write(&ch, 1) == 1 ? c : EOF;
 }
 
 int puts(const char *c)
@@ -38,17 +26,7 @@ int puts(const char *c)
 
     len = strlen(c);
 
-    if (console == NULL) {
-        return 0;
-    }
-
-#ifdef CONFIG_CONSOLE_WO
-    bflb_wo_uart_put(console, (uint8_t *)c, len);
-#else
-    bflb_uart_put(console, (uint8_t *)c, len);
-#endif
-
-    return len;
+    return (int)bflb_console_write(c, (size_t)len);
 }
 
 int putstring(const char *c)
@@ -61,17 +39,7 @@ int putstring(const char *c)
 
     len = strlen(c);
 
-    if (console == NULL) {
-        return 0;
-    }
-
-#ifdef CONFIG_CONSOLE_WO
-    bflb_wo_uart_put(console, (uint8_t *)c, len);
-#else
-    bflb_uart_put(console, (uint8_t *)c, len);
-#endif
-
-    return len;
+    return (int)bflb_console_write(c, (size_t)len);
 }
 
 #if defined(CONFIG_VSNPRINTF_NANO)
@@ -81,21 +49,12 @@ int printf(const char *fmt, ...)
     int len;
     va_list ap;
 
-    if (console == NULL) {
-        return 0;
-    }
-
     va_start(ap, fmt);
     len = vsnprintf(print_buf, sizeof(print_buf), fmt, ap);
     va_end(ap);
 
     len = (len > sizeof(print_buf)) ? sizeof(print_buf) : len;
-
-#ifdef CONFIG_CONSOLE_WO
-    bflb_wo_uart_put(console, (uint8_t *)print_buf, len);
-#else
-    bflb_uart_put(console, (uint8_t *)print_buf, len);
-#endif
+    (void)bflb_console_write(print_buf, (size_t)len);
 
     return len;
 }
@@ -105,10 +64,6 @@ int printf(const char *fmt, ...)
 {
     int len;
     va_list ap;
-
-    if (console == NULL) {
-        return 0;
-    }
 
     va_start(ap, fmt);
     len = console_vsnprintf(fmt, ap);

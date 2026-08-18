@@ -5,6 +5,7 @@
 #include "bflb_osd.h"
 #include "bflb_dpi.h"
 #include "bflb_irq.h"
+#include "bflb_l1c.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -314,6 +315,9 @@ static void *dsi_v2_screen_using = NULL;
 static void (*dsi_v2_swap_callback)(void) = NULL;
 static void (*dsi_v2_cycle_callback)(void) = NULL;
 
+/* For D-cache */
+static uint32_t dsi_v2_osd_buf_size = 0;
+
 /**
  * @brief Base (DPI background) layer swap, invoked from the OSD SEOF ISR.
  *
@@ -418,6 +422,9 @@ int mipi_dsi_v2_display_init(const mipi_dsi_v2_timing_t *cfg, uint32_t osd_buf)
     /* [3] OSD SEOF interrupt -> frame callbacks (drives screen_switch reporting) */
     mipi_dsi_v2_osd_irq_init(osd);
 
+    /* Canvas byte size for the cache write-back in screen_switch() (ARGB8888). */
+    dsi_v2_osd_buf_size = (uint32_t)cfg->width * cfg->height * 4U;
+
     dsi_v2_screen_using = (void *)osd_buf;
     return 0;
 }
@@ -429,6 +436,11 @@ int mipi_dsi_v2_screen_switch(void *screen_buffer)
     }
     if (dsi_v2_osd == NULL) {
         return -2;
+    }
+
+    /* Need to clean D-cache. */
+    if (dsi_v2_osd_buf_size != 0U) {
+        bflb_l1c_dcache_clean_range(screen_buffer, dsi_v2_osd_buf_size);
     }
 
     /* Re-point the OSD blend layer at the new canvas. Non-blocking: the swap

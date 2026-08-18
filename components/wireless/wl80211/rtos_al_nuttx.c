@@ -564,6 +564,12 @@ void wl80211_post_event(int code1, int code2)
     }
 }
 
+void wl80211_post_mac_event(int code1, int code2, const uint8_t mac[6])
+{
+  (void)mac;
+  wl80211_post_event(code1, code2);
+}
+
 /**
  ****************************************************************************************
  * @brief Get MAC Address

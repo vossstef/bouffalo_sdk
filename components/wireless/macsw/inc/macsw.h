@@ -4223,9 +4223,16 @@ struct key_info_tag *mac_vif_get_key(void *macif, int key_idx);
 bool mac_vif_get_active(void *macif);
 struct co_list *mac_vif_get_sta_list(void *macif);
 void mac_vif_get_channel(void *macif, struct mac_chan_op* chan);
+int mac_vif_get_chan_ctxt_index(void *macif);
 void mac_vif_get_sta_status(void *macif, struct mac_addr *bssid, uint16_t *aid, int8_t *rssi);
 void mac_vif_get_mac_addr(void *macif, struct mac_addr *mac_addr);
 void mac_vif_get_txq_params(void *macif, uint32_t *txq_params);
+
+uint8_t mm_channel_pre_switch_ind_get_chan_index(void *param);
+uint8_t mm_channel_switch_ind_get_chan_index(void *param);
+uint8_t mm_channel_switch_ind_get_vif_index(void *param);
+bool mm_channel_switch_ind_get_roc(void *param);
+bool mm_channel_switch_ind_get_roc_tdls(void *param);
 
 void macif_rx_buf_ind(void);
 void macif_tx_data_ind(int queue_idx);

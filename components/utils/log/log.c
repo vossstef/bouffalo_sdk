@@ -1,4 +1,8 @@
-#include "bflb_uart.h"
+#ifdef CONFIG_NEWLIB
+#include <stdio.h>
+#endif
+
+#include "console_output.h"
 
 #ifdef CONFIG_BFLB_LOG
 #include "bflb_log.h"
@@ -12,13 +16,9 @@ void *__bflb_log_recorder_pointer = &__bflb_log_recorder;
 static uint8_t bflb_log_pool[CONFIG_LOG_POOL_SIZE];
 bflb_log_direct_stream_t bflb_log_direct_stream;
 
-extern struct bflb_device_s *console;
 static uint16_t console_output(void *ptr, uint16_t size)
 {
-    for (size_t i = 0; i < size; i++) {
-        bflb_uart_putchar(console, ((char *)ptr)[i]);
-    }
-    return size;
+    return bflb_console_write(ptr, size) < 0 ? 0 : size;
 }
 
 #endif

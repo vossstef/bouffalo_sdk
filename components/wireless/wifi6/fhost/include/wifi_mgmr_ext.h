@@ -202,6 +202,10 @@ typedef struct wifi_mgmr_sta_connect_params {
     uint8_t eapol_1_timeout;
     // Remaining EAPOL session timeout, in sec. 0, use default value
     uint8_t eapol_rem_timeout;
+    /// Borrowed until the connection completes.
+    const uint8_t *extra_ies;
+    // Total length of extra_ies in bytes; maximum 64 bytes.
+    uint16_t extra_ies_len;
 } wifi_mgmr_sta_connect_params_t;
 
 /// scan params
@@ -216,6 +220,10 @@ typedef struct wifi_mgmr_scan_params {
     uint32_t duration;
     /// 0: active scan; 1: Passive scan request
     bool passive;
+    /// Borrowed until the scan completes.
+    const uint8_t *extra_ies;
+    // Total length of extra_ies in bytes; maximum 64 bytes.
+    uint16_t extra_ies_len;
 } wifi_mgmr_scan_params_t;
 
 typedef struct wifi_mgmr_raw_send_params {

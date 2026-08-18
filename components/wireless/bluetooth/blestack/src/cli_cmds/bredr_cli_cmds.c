@@ -42,6 +42,7 @@
 #endif
 
 #include "bt_log.h"
+#include "work_q.h"
 
 #include "keys.h"
 
@@ -65,6 +66,9 @@ struct bt_br_discovery_result result[10] = { 0 };
 
 static void bredr_connected(struct bt_conn *conn, u8_t err);
 static void bredr_disconnected(struct bt_conn *conn, u8_t reason);
+#if defined(BFLB_BREDR_PATCH_EXTENDED_INQUIRY_RESULT_CALLBACK)
+static void bredr_discovery_result_cb(struct bt_br_discovery_result *result);
+#endif
 
 static bool init = false;
 static struct bt_conn_info conn_info;
@@ -100,6 +104,87 @@ static bool stream_pause = false;
 static void a2dp_chain(struct bt_conn *conn, uint8_t state);
 static void a2dp_stream(uint8_t state);
 
+#if defined(CONFIG_BT_A2DP_SOURCE)
+enum avrcp_stream_action {
+    AVRCP_STREAM_ACTION_NONE,
+    AVRCP_STREAM_ACTION_PLAY,
+    AVRCP_STREAM_ACTION_PAUSE,
+};
+
+static atomic_t avrcp_pending_action;
+static struct k_work avrcp_stream_work;
+
+#if defined(CONFIG_BT_AVRCP)
+#define AVRCP_PLAYBACK_STATUS_NONE (-1)
+static atomic_t avrcp_pending_playback_status;
+static struct k_work avrcp_playback_status_work;
+#endif
+
+static void avrcp_stream_work_handler(struct k_work *work)
+{
+    enum avrcp_stream_action action;
+    int ret;
+
+    (void)work;
+
+    action = atomic_set(&avrcp_pending_action,
+                        AVRCP_STREAM_ACTION_NONE);
+
+    if (!default_conn) {
+        printf("Not connected.\n");
+        return;
+    }
+
+    if (action == AVRCP_STREAM_ACTION_PLAY) {
+        ret = bt_stream_resume(default_conn);
+        if (ret) {
+            printf("A2DP resume stream failed. ret(%d)\n", ret);
+        }
+    } else if (action == AVRCP_STREAM_ACTION_PAUSE) {
+        ret = bt_stream_suspend(default_conn);
+        if (ret) {
+            printf("A2DP suspend stream failed. ret(%d)\n", ret);
+        }
+    }
+
+    if (atomic_get(&avrcp_pending_action) != AVRCP_STREAM_ACTION_NONE) {
+        k_work_submit(&avrcp_stream_work);
+    }
+}
+
+#if defined(CONFIG_BT_AVRCP)
+static void avrcp_playback_status_work_handler(struct k_work *work)
+{
+    atomic_val_t status;
+    int err;
+
+    (void)work;
+
+    status = atomic_set(&avrcp_pending_playback_status,
+                        AVRCP_PLAYBACK_STATUS_NONE);
+    if (status == AVRCP_PLAYBACK_STATUS_NONE) {
+        return;
+    }
+
+    err = avrcp_set_playback_status((uint8_t)status);
+    if (err) {
+        printf("AVRCP playback status update failed. ret(%d)\n", err);
+    }
+
+    if (atomic_get(&avrcp_pending_playback_status) !=
+        AVRCP_PLAYBACK_STATUS_NONE) {
+        k_work_submit(&avrcp_playback_status_work);
+    }
+}
+
+static void avrcp_schedule_playback_status(uint8_t status)
+{
+    atomic_set(&avrcp_pending_playback_status, status);
+    k_work_submit(&avrcp_playback_status_work);
+}
+#endif
+#endif
+
 #if defined(BFLB_BREDR_PATCH_A2DP_DISCOVERY_CALLBACK)
 static void a2dp_discovery_probe_complete(struct bt_conn *conn,
                                           uint16_t sep_count)
@@ -112,6 +197,7 @@ static void a2dp_discovery_probe_complete(struct bt_conn *conn,
 #if defined(CONFIG_BT_A2DP_SOURCE)
 struct k_thread media_transport;
 static void a2dp_start_cfm(void);
+static void a2dp_suspend_cfm(void);
 
 #define A2DP_SOURCE_TEST_TONE_SBC_FRAMES 10
 #define A2DP_SOURCE_TEST_TONE_SAMPLES_PER_FRAME 128
@@ -153,6 +239,7 @@ static struct a2dp_callback a2dp_callbacks =
     .stream = a2dp_stream,
 #if defined(CONFIG_BT_A2DP_SOURCE)
     .start_cfm = a2dp_start_cfm,
+    .suspend_cfm = a2dp_suspend_cfm,
 #endif
 };
 #endif
@@ -340,6 +427,7 @@ BT_HFP_CLI(hf_update_indicator);
 BT_SPP_CLI(send);
 BT_SPP_CLI(disconnect);
 BT_SPP_CLI(connect);
+BT_SPP_CLI(mtu);
 BT_SPP_CLI(throughput_start);
 BT_SPP_CLI(throughput_stop);
 #endif
@@ -447,6 +535,7 @@ BT_SPP_CLI(throughput_stop);
     SHELL_CMD_EXPORT_ALIAS(spp_send,spp_send,"");
     SHELL_CMD_EXPORT_ALIAS(spp_connect,spp_connect,"");
     SHELL_CMD_EXPORT_ALIAS(spp_disconnect,spp_disconnect,"");
+    SHELL_CMD_EXPORT_ALIAS(spp_mtu,spp_mtu,"");
     SHELL_CMD_EXPORT_ALIAS(spp_throughput_start,spp_tp_start,spp_tp_start Parameter:[idx|all] [len] [rate_kbps]);
     SHELL_CMD_EXPORT_ALIAS(spp_throughput_stop,spp_tp_stop,spp_tp_stop Parameter:[idx|all]);
     #endif
@@ -548,6 +637,7 @@ const struct cli_command bredr_cmd_set[] STATIC_CLI_CMD_ATTRIBUTE = {
     {"spp_send","",spp_send},
     {"spp_connect","",spp_connect},
     {"spp_disconnect","",spp_disconnect},
+    {"spp_mtu","",spp_mtu},
     {"spp_tp_start","",spp_throughput_start},
     {"spp_tp_stop","",spp_throughput_stop},
     #endif
@@ -587,6 +677,19 @@ BT_CLI(init)
     }
 
     default_conn = NULL;
+#if defined(BFLB_BREDR_PATCH_EXTENDED_INQUIRY_RESULT_CALLBACK)
+    bt_br_discovery_result_cb_register(bredr_discovery_result_cb);
+#endif
+#if defined(CONFIG_BT_A2DP_SOURCE)
+    atomic_set(&avrcp_pending_action, AVRCP_STREAM_ACTION_NONE);
+    k_work_init(&avrcp_stream_work, avrcp_stream_work_handler);
+#if defined(CONFIG_BT_AVRCP)
+    atomic_set(&avrcp_pending_playback_status,
+               AVRCP_PLAYBACK_STATUS_NONE);
+    k_work_init(&avrcp_playback_status_work,
+                avrcp_playback_status_work_handler);
+#endif
+#endif
     bt_conn_cb_register(&conn_callbacks);
 #if defined(CONFIG_BT_A2DP)
     a2dp_cb_register(&a2dp_callbacks);
@@ -983,6 +1086,25 @@ void bt_br_discv_cb(struct bt_br_discovery_result *results,
     }
 }
 
+#if defined(BFLB_BREDR_PATCH_EXTENDED_INQUIRY_RESULT_CALLBACK)
+static void bredr_discovery_result_cb(struct bt_br_discovery_result *result)
+{
+    char addr_str[BT_ADDR_STR_LEN];
+    uint32_t dev_class;
+
+    if (!result) {
+        return;
+    }
+
+    dev_class = (result->cod[0] | (result->cod[1] << 8) |
+                 (result->cod[2] << 16));
+    bt_addr_to_str(&result->addr, addr_str, sizeof(addr_str));
+    printf("extended inquiry result addr %s,class 0x%lx,rssi %d\r\n",
+           addr_str, dev_class, result->rssi);
+    bredr_parse_eir_data((u8_t *)result->eir, sizeof(result->eir));
+}
+#endif /* BFLB_BREDR_PATCH_EXTENDED_INQUIRY_RESULT_CALLBACK */
+
 BT_CLI(start_inquiry)
 {
     struct bt_br_discovery_param param;
@@ -1166,8 +1288,20 @@ static void a2dp_stream(uint8_t state)
 
     if (state == BT_A2DP_STREAM_START) {
         printf("a2dp play. \n");
+#if defined(CONFIG_BT_A2DP_SOURCE)
+        stream_pause = false;
+#if defined(CONFIG_BT_AVRCP)
+        avrcp_schedule_playback_status(PLAY_STATUS_PLAYING);
+#endif
+#endif
     } else if (state == BT_A2DP_STREAM_SUSPEND) {
         printf("a2dp stop. \n");
+#if defined(CONFIG_BT_A2DP_SOURCE)
+        stream_pause = true;
+#if defined(CONFIG_BT_AVRCP)
+        avrcp_schedule_playback_status(PLAY_STATUS_PAUSED);
+#endif
+#endif
     }
 }
 
@@ -1201,7 +1335,10 @@ static void media_thread(void *args)
 
 static void a2dp_start_cfm()
 {
-   printf("%s \n", __func__);
+   stream_pause = false;
+#if defined(CONFIG_BT_AVRCP)
+   avrcp_schedule_playback_status(PLAY_STATUS_PLAYING);
+#endif
    if (!media_task_create)
    {
       k_thread_create(&media_transport,
@@ -1216,6 +1353,14 @@ static void a2dp_start_cfm()
             );
       media_task_create = true;  
    }
+}
+
+static void a2dp_suspend_cfm(void)
+{
+    stream_pause = true;
+#if defined(CONFIG_BT_AVRCP)
+    avrcp_schedule_playback_status(PLAY_STATUS_PAUSED);
+#endif
 }
 #endif
 
@@ -1523,7 +1668,10 @@ static void avrcp_passthrough_handler(uint8_t released, u8_t option_id)
 static void avrcp_handle_play(void)
 {
     printf("%s\r\n",__func__);
-    stream_pause = false;
+#if defined(CONFIG_BT_A2DP_SOURCE)
+    atomic_set(&avrcp_pending_action, AVRCP_STREAM_ACTION_PLAY);
+    k_work_submit(&avrcp_stream_work);
+#endif
 }
 
 static void avrcp_handle_stop(void)
@@ -1534,7 +1682,10 @@ static void avrcp_handle_stop(void)
 static void avrcp_handle_pause(void)
 {
     printf("%s\r\n",__func__);
-    stream_pause = true;
+#if defined(CONFIG_BT_A2DP_SOURCE)
+    atomic_set(&avrcp_pending_action, AVRCP_STREAM_ACTION_PAUSE);
+    k_work_submit(&avrcp_stream_work);
+#endif
 }
 
 static void avrcp_handle_next(void)
@@ -2181,6 +2332,25 @@ BT_SPP_CLI(disconnect)
         printf("bt spp disconnect err:%d\r\n", err);
     else
         printf("bt spp disconnect successfully\r\n");
+}
+
+BT_SPP_CLI(mtu)
+{
+    uint16_t mtu;
+    int err;
+
+    if (!default_conn) {
+        printf("Not connected.\n");
+        return;
+    }
+
+    err = bt_spp_get_tx_mtu(default_conn, &mtu);
+    if (err) {
+        printf("bt_spp_get_tx_mtu failed: %d\r\n", err);
+        return;
+    }
+
+    printf("SPP TX MTU: %u\r\n", mtu);
 }
 
 /* spp_tp_start <idx|all> [len] [rate_kbps]

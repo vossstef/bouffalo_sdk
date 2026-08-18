@@ -21,19 +21,19 @@ static __ALIGNED(32) ATTR_NOCACHE_RAM_SECTION uint8_t internal_buffer[SDH_HOST_I
 
 #if (CONFIG_BSP_SDH_OSAL_POLLING_MODE == 0)
 
-#define SDH_WAIT_STATUS(_status_mask, _irq_mask, _timeout_log)               \
-    do {                                                                     \
-            sta = bflb_sdh_sta_get(host->sdh_dev);                           \
-            if (sta & (_status_mask)) {                                      \
-                break;                                                       \
-            }                                                                \
-            bflb_sdh_sta_int_en(host->sdh_dev, (_irq_mask), true);           \
-            ret = sdh_osal_semb_take(host->osal_semb, 0);                    \
-            if (ret != 0) {                                                  \
-                LOG_W(_timeout_log "\r\n", transfer->cmd->index);            \
-                sta = bflb_sdh_sta_get(host->sdh_dev);                       \
-                break;                                                       \
-            }                                                                \
+#define SDH_WAIT_STATUS(_status_mask, _irq_mask, _timeout_log) \
+    do {                                                       \
+        sta = bflb_sdh_sta_get(host->sdh_dev);                 \
+        if (sta & (_status_mask)) {                            \
+            break;                                             \
+        }                                                      \
+        bflb_sdh_sta_int_en(host->sdh_dev, (_irq_mask), true); \
+        ret = sdh_osal_semb_take(host->osal_semb, 0);          \
+        if (ret != 0) {                                        \
+            LOG_W(_timeout_log "\r\n", transfer->cmd->index);  \
+            sta = bflb_sdh_sta_get(host->sdh_dev);             \
+            break;                                             \
+        }                                                      \
     } while (1)
 
 static void sdh_irq(int irq, void *arg)
@@ -238,7 +238,10 @@ int sdh_host_wait_done(struct sdh_host_s *host, struct sdh_host_transfer_s *tran
 #endif
 
     /* get resp */
-    if (sta & SDH_NORMAL_STA_CMD_COMP) {
+    if (sta & SDH_ERROR_STA_CMD_TIMEOUT) {
+        ret = -1;
+        goto wait_exit;
+    } else if (sta & SDH_NORMAL_STA_CMD_COMP) {
         bflb_sdh_sta_clr(host->sdh_dev, SDH_NORMAL_STA_CMD_COMP);
         bflb_sdh_get_resp(host->sdh_dev, transfer->cmd);
     } else {
@@ -279,7 +282,9 @@ int sdh_host_wait_done(struct sdh_host_s *host, struct sdh_host_transfer_s *tran
 wait_exit:
     if (ret < 0) {
         LOG_W("CMD%d wait failed, agr: 0x%08X, sta: 0x%08X sta_en:%08x sta_int_en:%08x\r\n", transfer->cmd->index, transfer->cmd->argument, sta,
-                bflb_sdh_sta_en_get(host->sdh_dev), bflb_sdh_sta_int_en_get(host->sdh_dev));
+              bflb_sdh_sta_en_get(host->sdh_dev), bflb_sdh_sta_int_en_get(host->sdh_dev));
+    } else {
+        LOG_D("transfer CMD%d done, \r\n", transfer->cmd->index);
     }
 
     return ret;
@@ -320,16 +325,16 @@ int sdh_set_bus_clock(struct sdh_host_s *host, uint32_t freq, uint32_t *actual_f
 
     actual_freq_hz = 96000000 / div;
 
+    if (actual_freq) {
+        *actual_freq = actual_freq_hz;
+    }
+
     GLB_Set_SDH_CLK(ENABLE, GLB_SDH_CLK_WIFIPLL_96M, div - 1);
 
     host->clk_src_hz = actual_freq_hz;
-    host->sdh_div = (host->clk_src_hz + freq - 1) / freq;
+    host->sdh_div = 1;
 
-    if (actual_freq) {
-        *actual_freq = host->clk_src_hz / host->sdh_div;
-    }
-
-    bflb_sdh_feature_control(host->sdh_dev, SDH_CMD_SET_BUS_CLK_DIV, host->sdh_div - 1);
+    bflb_sdh_feature_control(host->sdh_dev, SDH_CMD_SET_BUS_CLK_DIV, 0);
 
 #elif defined(SDH_STD_V3_SMIH)
     uint32_t div = (host->clk_src_hz + freq - 1) / freq;
