@@ -412,10 +412,25 @@ int fhost_wpa_ap_sta_del(int fhost_vif_idx, uint8_t *mac_addr);
 
 /**
  ****************************************************************************************
- * @brief Start wps mode
+ * @brief Start WPS PBC enrollee mode for an optional target BSSID.
+ *
+ * A NULL BSSID selects any AP advertising an active PBC session.
+ *
+ * @param[in] bssid          Target AP BSSID, or NULL for any PBC AP
+ * @param[in] frequency      Target frequency in MHz, or 0 for all frequencies
+ * @return 0 on success and a negative value on failure
  ****************************************************************************************
  */
-int fhost_wpa_wps_pbc_start(void);
+int fhost_wpa_wps_pbc_start(const uint8_t *bssid, uint16_t frequency);
+
+/**
+ ****************************************************************************************
+ * @brief Cancel WPS PBC and remove its temporary supplicant interface.
+ *
+ * @return 0 on success and a negative value on failure
+ ****************************************************************************************
+ */
+int fhost_wpa_wps_pbc_cancel(void);
 
 /**
  * @}

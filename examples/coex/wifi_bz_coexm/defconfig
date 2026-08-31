@@ -29,7 +29,6 @@ ifeq ($(CHIP),bl618dg)
     CONFIG_BT_A2DP_SOURCE =n
     CONFIG_BT_AVRCP =y
     CONFIG_BT_HFP =y
-    CONFIG_BT_TP_CLI =y
 else ifeq ($(CHIP),bl616cl)
     # bl616cl is BLE-only (no classic BT / mesh)
     CONFIG_BTBLECONTROLLER_LIB =m2s1
@@ -49,3 +48,4 @@ else
     CONFIG_BT_SETTINGS =y
 endif
 CONFIG_BT_STACK_CLI =y
+CONFIG_BT_TP_CLI =y

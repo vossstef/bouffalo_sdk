@@ -204,9 +204,8 @@ int mipi_dsi_v2_frame_callback_register(uint32_t callback_type, void (*callback)
 int mipi_dsi_v2_rgb565_display_init(const mipi_dsi_v2_timing_t *cfg, uint32_t framebuffer_addr,
                                     uint32_t osd_sync_buf);
 
-/* Switch the RGB565 DPI base framebuffer. Call from a callback registered by
- * mipi_dsi_v2_rgb565_frame_callback_register(), so the change happens during
- * OSD1 SEOF rather than in the middle of a scanout. */
+/* Queue the next RGB565 DPI base framebuffer. OSD1 SEOF applies the switch at
+ * the frame boundary and then invokes the registered SWAP callback. */
 int mipi_dsi_v2_rgb565_screen_switch(void *screen_buffer);
 
 /* Return the RGB565 framebuffer currently selected for DPI scanout. */

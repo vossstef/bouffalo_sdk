@@ -53,17 +53,21 @@ make flash CHIP=chip_name COMX=xxx # xxx is your com name
 wifi_sta_connect <ssid> <passwd>
 ```
 
-* Enable coexistence mode
+* Start coexistence using PS-PTA
 
 ```
-wifi_sta_ps_on
+wifi_coex_start ps_pta
 ```
 
 * Set the Wi-Fi duty cycle to 50%
 
 ```
-wifi_sta_ps_set 50
+wifi_coex_duty_set 50
 ```
+
+Use `wifi_coex_status` to query the activation and `wifi_coex_stop` to stop it.
+The `wifi_sta_ps_on`, `wifi_sta_ps_off`, and `wifi_sta_ps_set` commands control
+ordinary STA power save; they do not activate coexistence.
 
 * Enable BLE advertising
 

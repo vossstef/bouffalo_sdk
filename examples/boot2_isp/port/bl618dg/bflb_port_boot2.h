@@ -107,6 +107,8 @@
 #define HAL_APP_SIGN_INDIVIDUAL_SHA256        0b010 /*!< app use its own sign key (sha256) */
 #define HAL_APP_SIGN_INDIVIDUAL_SHA384        0b100 /*!< app use its own sign key (sha384) */
 
+#define HAL_BOOT2_APP_ENCRYPT_AFTER_SIGN_MARKER 0x314C4E4FU /* "ONL1" */
+
 /* Sign type values for efuse_cfg->sign[i] and boot_img_cfg->basic_cfg.sign_type */
 #define HAL_BOOT_SIGN_TYPE_NONE              0  /*!< No signature */
 #define HAL_BOOT_SIGN_TYPE_ECC_SHA256        1  /*!< SHA256 (ECC P-256) signature */
@@ -324,7 +326,8 @@ typedef struct
 {
     uint8_t img_valid;
     uint8_t pk_src;
-    uint8_t rsvd[2];
+    uint8_t encrypt_after_sign;
+    uint8_t rsvd;
 
     struct hal_basic_cfg_t basic_cfg;
 

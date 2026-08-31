@@ -19,7 +19,7 @@
              +---0.1--+     +---0.3--+     +---0.5--+           +---0.7--+     +---2.2--+
 |       |    |        |     |        |     |        |           |        |     |        |
 |       |   5.0      5.1   5.2      5.3   5.4      5.5         5.6      5.7   7.3      7.2
-|       |    |        |     |        |     |        |           |        |     |        |
+|       |    |        |     |        |     |        |           |        |     |        |    0.6%
 +--0.0--+    +--10.0--+     +--10.2--+     +--10.4--+           +--10.6--+     +--12.3--+    2.3RH
 |       |    |        |     |        |     |        |           |        |     |        |
 |       |  15.0     10.1  15.2     10.3  15.4     10.5        15.6     10.7  17.3     12.2
@@ -191,7 +191,7 @@ int main(void)
     shell_init();
     pca8553_init();
     memset(buffer, 0, sizeof(buffer));
-    buffer[0] = 0x11; /* show humidity char and point */
+    buffer[0] = 0x51; /* show humidity char, point and percent */
     buffer[1] = 0x11; /* show temperature char and point  */
     buffer[2] = 0x09; /* show unit of degree and RH */
     user_display(temperature, humidity, buffer);

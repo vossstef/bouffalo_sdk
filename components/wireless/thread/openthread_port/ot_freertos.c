@@ -133,7 +133,7 @@ static void otrStackTask(void *p_arg)
 
 void otrStart(void)
 {
-    ot_extLock = xSemaphoreCreateMutex();
+    ot_extLock = xSemaphoreCreateRecursiveMutex();
     assert(ot_extLock != NULL);
 
     xTaskCreate(otrStackTask, "threadTask", OT_TASK_SIZE, NULL,

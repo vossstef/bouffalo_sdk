@@ -1,5 +1,77 @@
 # CHANGELOG
 
+## v2.3.33 — since v2.3.32 (2026-08-18 → 2026-08-31)
+
+### New Features
+
+- **WiFi / Coexistence**
+  - Added runtime WiFi, Bluetooth, BLE, and 802.15.4 coexistence controls, including Bluetooth RF-path configuration
+  - Added WPS push-button configuration for a target BSSID and operating frequency
+  - Added monitor-mode channel switching and beacon/probe-response frame callbacks
+  - Enabled SoftAP in the TCP benchmark profile
+
+- **BL618DG**
+  - Added dual-EMAC support with independent network interfaces and diagnostics
+  - Added BLE low-power firmware support and wireless wake scheduling
+  - Added manufacturing AT commands for eFuse and GPIO testing
+
+- **Bluetooth**
+  - Added Bluetooth coexistence priority APIs and BR/EDR sniff mode support
+  - Added a BL618DG NimBLE example
+
+- **Display**
+  - Added AXS15231E JX371 and EK79007 WKS70WSV114 MIPI DSI LCD drivers
+
+- **Flash / Security**
+  - Added automatic two-line flash fallback and an anti-rollback enable query API
+  - Added Boot2 support for per-device application encryption after signing
+  - Added a browser and command-line Web Serial flasher for BL616 whole-image binaries
+
+- **Zigbee / 802.15.4**
+  - Added a Zigbee API to update attribute configuration
+  - Added support for honoring the software frame-pending bit in 802.15.4 frames
+
+- **Memory**
+  - Added an API to query the largest contiguous free memory block
+
+### Bug Fixes
+
+- **WiFi / Networking**
+  - Fixed connecting to a requested SSID when scan results contain multiple matching networks
+  - Corrected default network-interface selection and country configuration handling
+  - Fixed UDP iperf server buffer allocation and critical WiFi transmissions using unsupported legacy rates
+  - Fixed NetHub host commands
+  - Preserved HTTP connection handles and drained pending TLS data before polling
+
+- **Bluetooth**
+  - Fixed AVDTP OPEN failures when the transaction ID wraps
+  - Fixed HFP SCO codec handling and added A2DP sink statistics
+
+- **Thread / Zigbee**
+  - Fixed OpenThread Border Router forwarding, mDNS, NAT64, REST, UDP, locking, and settings issues
+  - Corrected Zigbee APS data indication RSSI and LQI values
+  - Fixed a Touchlink crash
+
+- **USB / Peripherals**
+  - Added support for additional USB Audio Class sample rates
+  - Improved USB console logging efficiency
+  - Fixed PCA8553 symbol display in the I2C example
+
+- **Platform**
+  - Fixed two-line flash wrapping on BL618DG
+  - Fixed Linux WiFi driver compatibility with newer kernels
+
+### Improvements
+
+- **Build / Configuration**
+  - Centralized SDK, board, and component configuration handling
+
+- **WiFi**
+  - Prioritized WiFi-affinity code placement to improve performance
+
+- **Solution Components**
+  - Consolidated reusable audio, camera, display, USB, and streaming utilities into SDK solution components
+
 ## v2.3.32 — since v2.3.31 (2026-08-10 → 2026-08-17)
 
 ### New Features

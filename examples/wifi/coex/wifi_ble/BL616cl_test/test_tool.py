@@ -559,16 +559,16 @@ def ble_read_mac(board):
 # Coex 操作
 # ============================================================================
 def coex_enable(board):
-    board.cmd("wifi_sta_coex_enable", 1.5)
+    board.cmd("wifi_coex_start ps_pta", 1.5)
 
 
 def coex_disable(board):
-    board.cmd("wifi_sta_coex_disable", 1.5)
+    board.cmd("wifi_coex_stop", 1.5)
 
 
 def coex_duty_set(board, active_ms):
-    out = board.cmd(f"wifi_sta_coex_duty_set {active_ms}", 1.5)
-    ok = "Setting" in out or "coex duty" in out.lower()
+    out = board.cmd(f"wifi_coex_duty_set {active_ms}", 1.5)
+    ok = "coex duty:" in out.lower()
     if ok:
         print(f"  共存 duty 设置: WiFi active={active_ms}ms")
     else:
@@ -577,26 +577,23 @@ def coex_duty_set(board, active_ms):
 
 
 def coex_status(board):
-    out = board.cmd("wifi_sta_coex_status", 1.5)
+    out = board.cmd("wifi_coex_status", 1.5)
     d = {}
-    m = re.search(r"Coex Status:\s+(\S+)\s+\((\d+)\)", out)
+    m = re.search(
+        r"coex active=(\d+) runtime=(\S+) ps_pta_running=(\d+) "
+        r"band=(\S+) duty=(\d+) ms", out)
     if m:
-        d["coex_state"], d["coex_state_code"] = m.group(1), int(m.group(2))
-    m = re.search(r"PTA Role:\s+(\S+)\s+\((\d+)\)", out)
-    if m:
-        d["pta_role"] = m.group(1)
-    m = re.search(r"WiFi Duty Config:\s+(\d+)\s+ms", out)
-    if m:
-        d["wifi_duty_ms"] = int(m.group(1))
-    m = re.search(r"Coex State:\s+(\S+)\s+\((\d+)\)", out)
-    if m:
-        d["pm_state"] = m.group(1)
+        d["active"] = bool(int(m.group(1)))
+        d["runtime"] = m.group(2)
+        d["ps_pta_running"] = bool(int(m.group(3)))
+        d["band"] = m.group(4)
+        d["wifi_duty_ms"] = int(m.group(5))
     return d
 
 
 def coex_is_active(status):
-    return (status.get("coex_state") in ("ENABLED", "RUNNING") and
-            status.get("pta_role") in ("WIFI_AND_BT_DEFAULT", "WIFI"))
+    return (status.get("active") is True and
+            status.get("runtime") == "ps_pta")
 
 
 def wifi_connect_with_coex(board, ssid, password, coex_duty):

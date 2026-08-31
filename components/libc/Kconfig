@@ -19,35 +19,30 @@ config NEWLIB
 config NEWLIB_STANDARD
     bool "Newlib standard (non-nano)"
     default n
-    depends on NEWLIB
     help
       Use the standard newlib variant instead of the nano variant.
 
 config NEWLIB_FATFS
     bool "Newlib FATFS file port"
     default n
-    depends on NEWLIB
     help
       Route newlib file I/O to a FatFS file system.
 
 config NEWLIB_LITTLEFS
     bool "Newlib LittleFS file port"
     default n
-    depends on NEWLIB
     help
       Route newlib file I/O to a LittleFS file system.
 
 config VSNPRINTF_NANO
     bool "Use nano vsnprintf"
     default n
-    depends on NEWLIB
     help
       Use the smaller nano vsnprintf implementation.
 
 config VSNPRINTF_FLOAT
     bool "vsnprintf %f support"
     default n
-    depends on NEWLIB
     help
       Enable %f formatting in the printf family.
 
@@ -61,14 +56,12 @@ config VSNPRINTF_FLOAT_EX
 config VSNPRINTF_LONG_LONG
     bool "vsnprintf long long support"
     default n
-    depends on NEWLIB
     help
       Enable %lld and related long long formatting.
 
 config SCANF_FLOAT
     bool "scanf %f support"
     default n
-    depends on NEWLIB
     help
       Enable %f parsing in the scanf family.
 
@@ -82,14 +75,12 @@ config SCANF_FLOAT_EX
 config STACK_SWITCH_CALL_SSCANF
     bool "Wrap sscanf call"
     default n
-    depends on NEWLIB
     help
       Provide a stack-switching wrapper for sscanf.
 
 config STDATOMIC
     bool "C11 stdatomic"
     default n
-    depends on NEWLIB
     help
       Build the C11 atomic operations support.
 

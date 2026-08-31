@@ -100,3 +100,17 @@ Connection to 192.168.1.3 3365 port [tcp/*] succeeded!
 123456  # echo received data
 
 ```
+
+### scan frame callback test
+
+On BL616/BL618/BL618DG, start a scan that receives raw Beacon and Probe
+Response frames through the scan callback:
+
+```bash
+bouffalolab />wifi_scan_callback
+```
+
+The callback copies each accepted frame into a non-blocking queue. A separate
+task consumes the copied frames and prints their type, BSSID, frequency, RSSI,
+and length. The scan completion log also reports queued and dropped frame
+counts.

@@ -422,11 +422,14 @@ int lcd_draw_str_ascii16(uint16_t x, uint16_t y, lcd_color_t color, lcd_color_t 
  */
 int lcd_init(lcd_color_t *screen_buffer)
 {
-#if (defined(LCD_RESET_EN) && LCD_RESET_EN)
+#if (defined(LCD_RESET_EN) && LCD_RESET_EN) || (defined(LCD_BACKLIGHT_EN) && LCD_BACKLIGHT_EN)
     struct bflb_device_s *gpio;
 
     /* gpio init */
     gpio = bflb_device_get_by_name("gpio");
+#endif
+
+#if (defined(LCD_RESET_EN) && LCD_RESET_EN)
     bflb_gpio_init(gpio, LCD_RESET_PIN, GPIO_OUTPUT | GPIO_PULLUP | GPIO_SMT_EN | GPIO_DRV_2);
 
     /* lcd reset */
@@ -446,6 +449,17 @@ int lcd_init(lcd_color_t *screen_buffer)
 #endif
 
     bflb_mtimer_delay_ms(LCD_RESET_DELAY);
+#endif
+
+#if (defined(LCD_BACKLIGHT_EN) && LCD_BACKLIGHT_EN)
+    /* close backlight */
+    bflb_gpio_init(gpio, LCD_BACKLIGHT_PIN, GPIO_OUTPUT | GPIO_PULLUP | GPIO_SMT_EN | GPIO_DRV_2);
+
+#if defined(LCD_BACKLIGHT_ACTIVE_LEVEL) && LCD_BACKLIGHT_ACTIVE_LEVEL
+    bflb_gpio_reset(gpio, LCD_BACKLIGHT_PIN);
+#else
+    bflb_gpio_set(gpio, LCD_BACKLIGHT_PIN);
+#endif
 #endif
 
     return _LCD_FUNC_DEFINE(init, screen_buffer);

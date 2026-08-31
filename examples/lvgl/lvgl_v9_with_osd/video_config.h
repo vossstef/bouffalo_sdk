@@ -16,6 +16,13 @@
 
 #include "lcd.h" /* LCD_INTERFACE_TYPE / LCD_INTERFACE_DPI (panel interface type) */
 
+/* SW GPIO clock. */
+#if defined(LCD_DPI_STANDARD)
+#define DPI_PIXEL_CLOCK_USE_SW_GPIO 1
+#else
+#define DPI_PIXEL_CLOCK_USE_SW_GPIO 0
+#endif
+
 /* ---- Video frame-rate cap ------------------------------------------------ */
 #ifndef VIDEO_TARGET_FPS
 #define VIDEO_TARGET_FPS   100U
@@ -24,16 +31,16 @@
 /* ---- SD-card frame directory --------------------------------------------- */
 #if (LCD_INTERFACE_TYPE == LCD_INTERFACE_DPI)
 /*  dpi:(704x384 800x480) (960x540 1024x600) */
-#define FRAME_DIR        "/sd/800x480"
-#define VIDEO_WIDTH    800
-#define VIDEO_HEIGHT   480
+#define FRAME_DIR        "/sd/1024x600"
+#define VIDEO_WIDTH    1024
+#define VIDEO_HEIGHT   600
 
 #else
 /*  dsi:(384x768 480x960) (384x768 480x854) (576x1024 720x1280)
  *      (96x528 src:176(video:172)x640) */
-#define FRAME_DIR        "/sd/480x854"
-#define VIDEO_WIDTH    480
-#define VIDEO_HEIGHT   854
+#define FRAME_DIR        "/sd/258x960"
+#define VIDEO_WIDTH    258
+#define VIDEO_HEIGHT   960
 
 #endif
 

@@ -73,6 +73,8 @@ void bflb_sp_boot2_releae_other_cpu(void);
 void bflb_sp_boot2_start_timer(void);
 void bflb_sp_boot2_show_timer(void);
 void bflb_sp_boot2_init_sec_eng_pka(void);
+int32_t bflb_sp_boot2_set_encrypt(uint8_t index, boot2_image_config *boot_img_cfg);
+int32_t bflb_sp_boot2_set_encrypt_region_state(uint8_t index, boot2_image_config *boot_img_cfg, uint8_t enable);
 uint8_t bflb_sp_get_anti_rollback_flag(uint32_t *value);
 uint8_t bflb_sp_set_anti_rollback_flag(uint32_t value);
 uint8_t bflb_sp_clean_anti_rollback_flag();

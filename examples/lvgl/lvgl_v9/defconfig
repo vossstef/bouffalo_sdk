@@ -1,8 +1,10 @@
 CONFIG_PSRAM                =n
+ifeq ($(CHIP),bl618dg)
 CONFIG_PSRAM_FOR_AP_SIZE = 0x600000
+CONFIG_DPI_DISPLAY_BOARD_MODE =n
+endif
 CONFIG_BSP_LCD              =y
 CONFIG_BSP_TOUCH            =y
-CONFIG_DPI_DISPLAY_BOARD_MODE =n
 
 CONFIG_FREERTOS             =y
 

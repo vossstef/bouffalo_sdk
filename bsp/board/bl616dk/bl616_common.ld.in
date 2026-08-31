@@ -460,11 +460,11 @@ SECTIONS
     . = ALIGN(CONFIG_PMP_ALIGN_SIZE);
     SECTION_LOAD_PROLOGUE(rom_text, ,)
     {
-        *(.text*)
-
 #if defined(CONFIG_WIFI6) && !defined(CONFIG_PSRAM_COPY_CODE)
         INCLUDE macsw_cache_affinity.ld.in
 #endif
+
+        *(.text*)
 
         . = ALIGN(CONFIG_PMP_ALIGN_SIZE);
     } > rom

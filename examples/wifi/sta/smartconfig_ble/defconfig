@@ -25,9 +25,4 @@ else
     CONFIG_BLE_TP_SERVER       =y
 endif
 
-ifeq ($(filter $(CHIP),bl616 bl616cl),)
-    CONFIG_COEX                =y
-endif
-
 CONFIG_BFLB_BLESYNC=y
-

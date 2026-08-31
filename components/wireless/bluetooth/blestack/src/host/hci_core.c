@@ -2362,7 +2362,7 @@ static int accept_sco_conn(const bt_addr_t *bdaddr, struct bt_conn *sco_conn, ui
 
 	cp->content_format = BT_VOICE_CVSD_16BIT;
 #if defined CONFIG_BT_HFP
-	if (!hfp_codec_msbc) {
+	if (hfp_codec_msbc) {
 		cp->max_latency = 0x000d;
 		cp->retrans_effort = 0x02;
 		cp->content_format = BT_VOICE_MSBC_16BIT;
@@ -5339,14 +5339,19 @@ static int br_init(void)
 	}
 
 #if defined(BFLB_BREDR_PATCH_ENABLE_BREDR_DEFAULT_ROLE_SWITCH_POLICY)
-	/* Enable role switch in default link policy so the controller
-	 * accepts incoming role switch requests. */
+	/* Enable role switch and sniff mode in default link policy so the
+	 * controller accepts incoming role switch / sniff negotiation and
+	 * allows the host to request sniff mode. Without the sniff bit the
+	 * controller rejects every Sniff Mode command with COMMAND_DISALLOWED,
+	 * which keeps idle ACL links in Active mode and breaks WLAN/BT coex
+	 * (high-rate BR/EDR RX requests starve WLAN RX). */
 	buf = bt_hci_cmd_create(BT_HCI_OP_WRITE_DEFAULT_LINK_POLICY, sizeof(*lp_cp));
 	if (!buf) {
 		return -ENOBUFS;
 	}
 	lp_cp = net_buf_add(buf, sizeof(*lp_cp));
-	lp_cp->link_policy = sys_cpu_to_le16(BT_LINK_POLICY_ENABLE_ROLE_SWITCH);
+	lp_cp->link_policy = sys_cpu_to_le16(BT_LINK_POLICY_ENABLE_ROLE_SWITCH |
+					     BT_LINK_POLICY_ENABLE_SNIFF_MODE);
 	err = bt_hci_cmd_send_sync(BT_HCI_OP_WRITE_DEFAULT_LINK_POLICY, buf, NULL);
 	if (err) {
 		return err;
@@ -5532,6 +5537,11 @@ static int set_event_mask(void)
 		mask |= BT_EVT_MASK_USER_PASSKEY_REQ;
 		mask |= BT_EVT_MASK_SSP_COMPLETE;
 		mask |= BT_EVT_MASK_USER_PASSKEY_NOTIFY;
+#if defined(BFLB_BREDR_PATCH_ENABLE_SNIFF_MODE)
+		/* Mode Change event: required to observe actual sniff mode
+		 * transitions (both locally requested and remote negotiated). */
+		mask |= BT_EVT_MASK_MODE_CHANGE;
+#endif
 	}
 
 	mask |= BT_EVT_MASK_HARDWARE_ERROR;
@@ -8764,10 +8774,13 @@ int bt_br_conn_enter_sniff(struct bt_conn *conn, u16_t min_interval,
 	cp->attempt = sys_cpu_to_le16(4);
 	cp->timeout = sys_cpu_to_le16(1);
 
-	/* Sniff Mode is an asynchronous command: the controller replies with
-	 * Command Status and later a Mode Change event. Use the non-sync send.
+	/* Sniff Mode is a Command Status command: the controller replies with
+	 * Command Status (accept / reject, e.g. COMMAND_DISALLOWED when the
+	 * link policy does not allow sniff) followed by a Mode Change event
+	 * when the transition actually happens. The sync send surfaces the
+	 * Command Status to the caller so rejections are not silently lost.
 	 */
-	return bt_hci_cmd_send(BT_HCI_OP_SNIFF_MODE, buf);
+	return bt_hci_cmd_send_sync(BT_HCI_OP_SNIFF_MODE, buf, NULL);
 }
 
 int bt_br_conn_exit_sniff(struct bt_conn *conn)
@@ -8787,7 +8800,8 @@ int bt_br_conn_exit_sniff(struct bt_conn *conn)
 	cp = net_buf_add(buf, sizeof(*cp));
 	cp->handle = sys_cpu_to_le16(conn->handle);
 
-	return bt_hci_cmd_send(BT_HCI_OP_EXIT_SNIFF_MODE, buf);
+	/* Exit Sniff Mode: same Command Status semantics as Sniff Mode. */
+	return bt_hci_cmd_send_sync(BT_HCI_OP_EXIT_SNIFF_MODE, buf, NULL);
 }
 #endif /* BFLB_BREDR_PATCH_ENABLE_SNIFF_MODE */
 

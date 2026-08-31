@@ -693,13 +693,24 @@ static int usbh_audio_ctrl_connect(struct usbh_hubport *hport, uint8_t intf)
                         } break;
                         case AUDIO_STREAMING_FORMAT_TYPE: {
                             struct audio_cs_if_as_format_type_descriptor *desc = (struct audio_cs_if_as_format_type_descriptor *)p;
+                            uint8_t sample_rate_count = desc->bSamFreqType;
+                            uint16_t format_desc_len;
 
-                            USB_ASSERT(desc->bSamFreqType == 1);
+                            if ((sample_rate_count == 0) || (sample_rate_count > CONFIG_USBHOST_AUDIO_MAX_SAMPLE_RATES)) {
+                                USB_LOG_ERR("Unsupported audio sample rate count: %u\r\n", sample_rate_count);
+                                return -USB_ERR_NOTSUPP;
+                            }
                             USB_ASSERT(desc->bNrChannels <= CONFIG_USBHOST_AUDIO_MAX_CHANNELS);
                             USB_ASSERT(cur_alt_setting < CONFIG_USBHOST_MAX_INTF_ALTSETTINGS);
 
+                            format_desc_len = AUDIO_SIZEOF_FORMAT_TYPE_DESC(sample_rate_count);
+                            if (desc->bLength < format_desc_len) {
+                                USB_LOG_ERR("Invalid audio format descriptor length: %u, expected: %u\r\n", desc->bLength, format_desc_len);
+                                return -USB_ERR_INVAL;
+                            }
+
                             audio_class->as_msg_table[cur_iface - audio_class->ctrl_intf - 1].bNrChannels = desc->bNrChannels;
-                            memcpy(&audio_class->as_msg_table[cur_iface - audio_class->ctrl_intf - 1].as_format[cur_alt_setting], desc, AUDIO_SIZEOF_FORMAT_TYPE_DESC(1));
+                            memcpy(&audio_class->as_msg_table[cur_iface - audio_class->ctrl_intf - 1].as_format[cur_alt_setting], desc, format_desc_len);
                         } break;
                         default:
                             break;

@@ -1574,9 +1574,6 @@ int net_iperf_udp_server_run(struct fhost_iperf_stream* stream)
     int ret = -1;
     struct udp_pcb * pcb = NULL;
 
-    if (net_iperf_buf_init(stream, true)) {
-        goto exit;
-    }
     pcb = net_iperf_init(stream);
     if (pcb == NULL)
     {
@@ -1605,9 +1602,7 @@ cleanup:
         udp_remove(pcb);
         UNLOCK_TCPIP_CORE();
     }
-    net_iperf_buf_deinit(stream);
 
-exit:
     return ret;
 }
 
@@ -2102,7 +2097,7 @@ static RTOS_TASK_FCT(fhost_iperf_main)
             // UDP Server
             if (net_iperf_udp_server_run(iperf_stream))
             {
-                TRACE_APP(ERR, "IPERF : Failed to start UDP server");
+                fhost_printf("IPERF : Failed to start UDP server\r\n");
                 goto end;
             }
         }

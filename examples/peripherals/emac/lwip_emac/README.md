@@ -2,9 +2,11 @@
 
 [English](README.md) | [中文](README_zh.md)
 
-This example provides one EMAC network interface and one lwIP stack for TCP
-loopback, UDP echo, HTTP, and iperf services. EMAC, netif, PHY link monitoring,
-and DHCP are initialized through a shared startup module.
+This example provides EMAC network interfaces on one lwIP stack for TCP
+loopback, UDP echo, HTTP, and iperf services. BL618DG enables EMAC0 and EMAC1;
+single-EMAC chips keep one network interface. Each active port owns its PHY,
+DMA buffers, queues, RX task, MAC address, netif, DHCP client, link state, and
+statistics.
 
 ## Services and Shell commands
 
@@ -22,10 +24,14 @@ The built-in lwIP HTTP server starts automatically after network initialization
 and remains available on TCP port 80; it has no Shell start or stop command.
 
 Services remain usable across normal PHY link down/up transitions. DHCP is
-enabled by default; the assigned IPv4 address is printed by the netif status
-callback.
+enabled by default on every active interface. Logs use the physical port name,
+for example `[EMAC0] IPv4 address: ...`. A linked interface that has no lease
+after 30 seconds prints one `[EMACx] DHCP timeout` message while lwIP continues
+retrying. On BL618DG, EMAC1 keeps the factory MAC while EMAC0 uses the stable
+derived MAC from the earlier dual-port implementation.
 
-The iperf Shell commands are enabled for throughput testing.
+The iperf Shell commands and `lwip_emac_info` statistics command are enabled for
+throughput and per-port diagnostics.
 
 ## Implementation overview
 
@@ -33,14 +39,23 @@ The iperf Shell commands are enabled for throughput testing.
 
 `main.c` initializes the Shell and then calls `lwip_emac_start()`. The shared
 startup module configures the RMII/MDIO pins, starts the lwIP TCP/IP thread,
-adds one EMAC netif through the netif API, selects it as the default interface,
-and starts one DHCP client. A netif status callback prints the assigned IPv4
-address.
+adds one netif and DHCP client for every configured EMAC, and prints the
+assigned IPv4 address with its physical port number. BL618DG initializes the
+configured preferred port first (EMAC0 by default) and selects it as the
+default interface. If that port fails during startup, the first surviving
+interface becomes the fallback default; the other port is not stopped. Runtime
+link loss does not change the default interface.
 
-One background task polls the PHY link state and updates the lwIP link state.
-The EMAC TX/RX queues and hardware buffer descriptors are created only during
-initialization. A normal link down/up event does not stop the EMAC or rebuild
-the descriptors, so queued-buffer ownership remains stable.
+`lwip_emac_start()` is a task-context, one-time startup API and must only be
+called once. The example does not provide runtime EMAC teardown or restart. If
+a port fails during startup, resources created for that port are rolled back
+while the other configured port is still attempted. A fatal startup error
+rolls back initialized ports in reverse order.
+
+One background task permanently polls every active PHY and updates the
+corresponding lwIP link state. The EMAC TX/RX queues and hardware buffer
+descriptors are created during startup. A normal link down/up event only
+updates link state; it does not stop the EMAC or rebuild descriptors.
 
 ### Service lifecycle and Shell control
 
@@ -105,12 +120,12 @@ under `http_server/web_demo/pages/`.
 ### iperf throughput test
 
 The project enables the SDK iperf component and Shell integration. The iperf
-Shell commands use the shared lwIP stack and EMAC netif for throughput testing.
+Shell commands use the shared lwIP stack and selected EMAC route for testing.
 
 ## Source layout
 
-- `lwip_emac_start/`: board pins, lwIP/netif initialization, DHCP and PHY link
-	monitoring.
+- `lwip_emac_start()` / `lwip_emac_port()`: board pins, lwIP/netif init, DHCP,
+	PHY link monitoring and port management (in `bsp/common/eth_phy/lwip_emac_start/`).
 - `tcp/tcp_server.c`: independent socket-based TCP loopback server.
 - `tcp/tcp_client.c`: independent socket-based TCP loopback client.
 - `udp/`: socket-based UDP echo server.
@@ -162,8 +177,17 @@ make CHIP=bl616cl BOARD=bl616cldk
 
 ## Test
 
-The HTTP server is already running after network initialization. After DHCP
-assigns an address, start the TCP and UDP services from the board Shell:
+The HTTP server is already running after network initialization. First inspect
+the per-port state from the board Shell:
+
+```
+lwip_emac_info
+```
+
+On BL618DG this prints the independent EMAC0 and EMAC1 TX/RX summaries and
+available DMA descriptor counts.
+
+After DHCP assigns an address, start the TCP and UDP services:
 
 ```
 tcp_server start

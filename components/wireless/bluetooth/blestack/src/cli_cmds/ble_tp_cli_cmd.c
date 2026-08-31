@@ -87,7 +87,9 @@ static void ble_tp_connected(struct bt_conn *conn, u8_t err);
 static void ble_tp_disconnected(struct bt_conn *conn, u8_t reason);
 static void ble_param_updated(struct bt_conn *conn, u16_t interval, u16_t latency,
                              u16_t timeout);
+#if defined(CONFIG_BT_OBSERVER)
 static int tp_start_scan(void);
+#endif
 static int ble_tp_recv_wr(struct bt_conn *conn, const struct bt_gatt_attr *attr,
                           const void *buf, u16_t len, u16_t offset, u8_t flags);
 static void ble_tp_notify_ccc_changed(const struct bt_gatt_attr *attr, u16_t value);
@@ -134,6 +136,7 @@ static void tp_clear_session(uint8_t idx)
     memset(&ses[idx], 0, sizeof(ses[idx]));
 }
 
+#if defined(CONFIG_BT_OBSERVER)
 static int tp_get_mst_cnt(void)
 {
     int cnt = 0;
@@ -151,6 +154,7 @@ static int tp_get_mst_cnt(void)
     }
     return cnt;
 }
+#endif
 
 static struct bt_gatt_attr *tp_get_attr(u8_t index)
 {
@@ -314,9 +318,11 @@ static void ble_tp_connected(struct bt_conn *conn, u8_t err)
     if (!master_cnt) {
         return;
     }
+#if defined(CONFIG_BT_OBSERVER)
     if (tp_get_mst_cnt() < master_cnt) {
         tp_start_scan();
     }
+#endif
 
     exchg_mtu.func = tp_exchg_mtu_cb;
     ret = bt_gatt_exchange_mtu(conn, &exchg_mtu);
@@ -488,6 +494,7 @@ static int tp_start_adv(void)
     return bt_le_adv_start(&adv_param, adv_data, ARRAY_SIZE(adv_data), NULL, 0);
 }
 
+#if defined(CONFIG_BT_OBSERVER)
 static bool tp_data_cb(struct bt_data *data, void *user_data)
 {
     char *name = user_data;
@@ -509,7 +516,6 @@ static void tp_device_found(const bt_addr_le_t *addr, s8_t rssi, u8_t evtype,
 {
     char le_addr[BT_ADDR_LE_STR_LEN];
     char name[NAME_LEN];
-    struct bt_conn *conn;
     int err;
 
     (void)memset(name, 0, sizeof(name));
@@ -525,6 +531,8 @@ static void tp_device_found(const bt_addr_le_t *addr, s8_t rssi, u8_t evtype,
         printf("Stopping scanning failed (err %d)\r\n", err);
     }
 
+#if defined(CONFIG_BT_CENTRAL)
+    struct bt_conn *conn;
     struct bt_le_conn_param param = {
         .interval_min = BT_GAP_INIT_CONN_INT_MAX << 1,
         .interval_max = BT_GAP_INIT_CONN_INT_MAX << 1,
@@ -543,6 +551,7 @@ static void tp_device_found(const bt_addr_le_t *addr, s8_t rssi, u8_t evtype,
             printf("Connection pending\r\n");
         }
     }
+#endif
 }
 
 static int tp_start_scan(void)
@@ -562,6 +571,7 @@ static int tp_start_scan(void)
 
     return 0;
 }
+#endif
 
 static void tp_mtu_changed_cb(struct bt_conn *conn, int mtu)
 {
@@ -667,6 +677,13 @@ static void tp_show_task(void *pvParameters)
 
 int ble_test_init(uint8_t mst, uint8_t slv, uint8_t type)
 {
+#if !defined(CONFIG_BT_CENTRAL)
+    if (mst) {
+        printf("Master throughput test requires Central and Observer support\r\n");
+        return -ENOTSUP;
+    }
+#endif
+
     master_cnt = mst;
     slave_cnt = slv ? 1 : 0;
     test_type = type < TP_TEST_MAX ? type : TP_TEST_NTF;
@@ -683,9 +700,11 @@ int ble_test_init(uint8_t mst, uint8_t slv, uint8_t type)
     if (slave_cnt) {
         tp_start_adv();
     }
+#if defined(CONFIG_BT_OBSERVER)
     if (master_cnt) {
         tp_start_scan();
     }
+#endif
 
     xTaskCreate(tp_show_task, (char *)"ble_show", 512, NULL, 15, &tp_show_task_hdl);
     return 0;
@@ -723,7 +742,9 @@ static int ble_test_stop(void)
     }
 
     bt_le_adv_stop();
+#if defined(CONFIG_BT_OBSERVER)
     bt_le_scan_stop();
+#endif
     bt_gatt_service_unregister(&ble_tp_server);
     return 0;
 }

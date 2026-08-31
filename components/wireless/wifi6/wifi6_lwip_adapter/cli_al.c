@@ -1103,9 +1103,6 @@ SHELL_CMD_EXPORT_ALIAS(cmd_phy, phy, test cli hello);
 #ifdef CMD_TXL_CNTRL_PUSH_AC_ENABLE
 SHELL_CMD_EXPORT_ALIAS(cmd_ac_set, ac_set, access_category config);
 #endif
-#ifdef CFG_FOR_COEXISTENCE_TEST_STOPAP_PATCH
-SHELL_CMD_EXPORT_ALIAS(cmd_ap_stop, ap_stop, ap stop);
-#endif
 SHELL_CMD_EXPORT_ALIAS(wifi_ap_bcn_mode_set_cmd, bcn_mode_set, wifi ap bcn mode set);
 SHELL_CMD_EXPORT_ALIAS(wifi_mgmr_ap_acl_set_cmd, ap_acl_set, wifi ap acl set);
 SHELL_CMD_EXPORT_ALIAS(wifi_mgmr_ap_acl_enable_cmd, ap_acl_perm_set, wifi ap acl perm set);
@@ -1132,23 +1129,22 @@ SHELL_CMD_EXPORT_ALIAS(wifi_sta_ps_set_cmd, wifi_sta_ps_set, wifi sta powersave 
 SHELL_CMD_EXPORT_ALIAS(cmd_wifi_sta_ipv6_enable, wifi_sta_ipv6_enable, enable STA IPv6);
 SHELL_CMD_EXPORT_ALIAS(cmd_wifi_sta_ipv6_disable, wifi_sta_ipv6_disable, disable STA IPv6);
 #endif
-SHELL_CMD_EXPORT_ALIAS(wifi_coex_enable_cmd, wifi_sta_coex_enable, wifi sta coex enable);
-SHELL_CMD_EXPORT_ALIAS(wifi_coex_disable_cmd, wifi_sta_coex_disable, wifi sta coex disable);
-SHELL_CMD_EXPORT_ALIAS(wifi_coex_duty_set_cmd, wifi_sta_coex_duty_set, wifi sta coex duty set);
-SHELL_CMD_EXPORT_ALIAS(wifi_coex_status_cmd, wifi_sta_coex_status, wifi sta coex status);
-#ifdef BL618DG
-SHELL_CMD_EXPORT_ALIAS(wifi_coex_bt_spdt_cmd, wifi_coex_bt_spdt, wifi coex bt spdt ctrl);
-SHELL_CMD_EXPORT_ALIAS(wifi_coex_bt_adj_pwr_cmd, wifi_coex_bt_adj_pwr, wifi coex bt adjusted tx power);
-SHELL_CMD_EXPORT_ALIAS(wifi_coex_bt_adj_pwr_off_cmd, wifi_coex_bt_adj_pwr_off, wifi coex bt adjusted tx power off);
-SHELL_CMD_EXPORT_ALIAS(wifi_coex_bt_overlay_cmd, wifi_coex_bt_overlay, wifi coex bt channel overlay);
-SHELL_CMD_EXPORT_ALIAS(wifi_coex_bt_overlay_off_cmd, wifi_coex_bt_overlay_off, wifi coex bt channel overlay off);
+SHELL_CMD_EXPORT_ALIAS(wifi_coex_start_cmd, wifi_coex_start, wifi coex start);
+SHELL_CMD_EXPORT_ALIAS(wifi_coex_stop_cmd, wifi_coex_stop, wifi coex stop);
+SHELL_CMD_EXPORT_ALIAS(wifi_coex_duty_set_cmd, wifi_coex_duty_set, wifi coex duty set);
+SHELL_CMD_EXPORT_ALIAS(wifi_coex_status_cmd, wifi_coex_status, wifi coex status);
+SHELL_CMD_EXPORT_ALIAS(wifi_coex_protection_cmd, wifi_coex_protection, wifi coex protection);
+#if defined(CONFIG_WIFI_COEX_DEBUG_CLI)
+SHELL_CMD_EXPORT_ALIAS(wifi_coex_debug_status_cmd, wifi_coex_debug_status, wifi coex debug status);
+SHELL_CMD_EXPORT_ALIAS(wifi_coex_debug_bt_spdt_cmd, wifi_coex_debug_bt_spdt, wifi coex debug bt spdt ctrl);
+SHELL_CMD_EXPORT_ALIAS(wifi_coex_debug_bt_overlay_cmd, wifi_coex_debug_bt_overlay, wifi coex debug bt channel overlay);
+SHELL_CMD_EXPORT_ALIAS(wifi_coex_debug_bt_adj_pwr_cmd, wifi_coex_debug_bt_adj_pwr, wifi coex debug bt adjusted tx power);
 #endif
 SHELL_CMD_EXPORT_ALIAS(wifi_sta_info_cmd, wifi_sta_info, wifi sta info);
 #if MACSW_BEACONING
 SHELL_CMD_EXPORT_ALIAS(wifi_ap_sta_list_get_cmd, wifi_sta_list, get sta list in AP mode);
 SHELL_CMD_EXPORT_ALIAS(wifi_ap_sta_delete_cmd, wifi_sta_del, delete one sta in AP mode);
 SHELL_CMD_EXPORT_ALIAS(wifi_mgmr_ap_start_cmd, wifi_ap_start, start AP mode);
-SHELL_CMD_EXPORT_ALIAS(wifi_ap_coex_enable_cmd, wifi_ap_coex_enable, wifi ap coex enable);
 SHELL_CMD_EXPORT_ALIAS(wifi_mgmr_ap_stop_cmd, wifi_ap_stop, stop AP mode);
 SHELL_CMD_EXPORT_ALIAS(wifi_mgmr_ap_chan_switch_cmd, wifi_ap_chan_switch, AP channel switch: <channel> [cs_count]);
 SHELL_CMD_EXPORT_ALIAS(cmd_wifi_ap_mac_get, wifi_ap_mac_get, get wifi ap mac);

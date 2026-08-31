@@ -15,6 +15,9 @@ target_sources(app PRIVATE
 if (CONFIG_BLUETOOTH)
     sdk_add_compile_definitions(-DCFG_BLE_ENABLE)
 endif()
+
+sdk_add_compile_definitions(-DWPA_SUPPLICANT_CLEANUP_INTERVAL=1800)
+
 sdk_add_include_directories(.)
 
 sdk_set_main_file(main.c)

@@ -21,13 +21,6 @@ typedef struct {
 #define LCD_HEIGHT LCD_H
 #define LCD_PIXELS (LCD_WIDTH * LCD_HEIGHT)
 
-/* SW GPIO clock. */
-#if defined(LCD_DPI_STANDARD)
-#define DPI_PIXEL_CLOCK_USE_SW_GPIO 1
-#else
-#define DPI_PIXEL_CLOCK_USE_SW_GPIO 0
-#endif
-
 /* VIDEO_WIDTH / VIDEO_HEIGHT config live in video_config.h. */
 #ifndef VIDEO_WIDTH
 #define VIDEO_WIDTH    LCD_WIDTH

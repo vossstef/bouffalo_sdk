@@ -411,6 +411,16 @@ size_t kmalloc_size(void *ptr);
 size_t kfree_size(uint32_t heap_id);
 
 /**
+ * @brief Return the largest contiguous free payload block.
+ *
+ * @param heap_id Heap ID to query. Pass 0 to return the largest block among
+ *                all active heaps. Memory from separate heaps is not combined.
+ * @return Largest allocatable payload size in bytes, or 0 when the heap is
+ *         invalid, inactive, or its allocator does not provide usage info.
+ */
+size_t kmax_free_size(uint32_t heap_id);
+
+/**
  * @brief Walk all allocated blocks across active heaps.
  *
  * Invokes allocator-specific block walkers for each active heap that supports

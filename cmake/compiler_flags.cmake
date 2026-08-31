@@ -45,7 +45,7 @@ sdk_add_compile_options(
     -save-temps=obj
 )
 
-if(NOT DEFINED CONFIG_NO_SHORT_ENUMS)
+if(NOT CONFIG_NO_SHORT_ENUMS)
     sdk_add_compile_options(-fshort-enums)
 endif()
 

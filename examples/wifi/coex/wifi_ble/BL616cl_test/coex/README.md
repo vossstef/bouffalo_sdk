@@ -92,18 +92,18 @@ python coex_test.py latency  -a /dev/ttyUSB0 -b /dev/ttyUSB2 \
 ### 共存相关命令速查
 | 命令 | 作用 |
 |------|------|
-| `wifi_sta_coex_enable` | 开启共存（需先连 WiFi） |
-| `wifi_sta_coex_disable` | 关闭共存 |
-| `wifi_sta_coex_duty_set <10-90>` | 设置 WiFi active 时间（ms） |
-| `wifi_sta_coex_status` | 查看共存状态（PTA Role、duty 等） |
+| `wifi_coex_start ps_pta` | 显式开启 PS-PTA 共存（需先连 WiFi） |
+| `wifi_coex_stop` | 关闭共存 |
+| `wifi_coex_duty_set <10-90>` | 设置 WiFi active 时间（ms） |
+| `wifi_coex_status` | 查看 activation、runtime、band 和 duty |
 
 ### 关键前置：每次连 WiFi 后都要 coex_enable
 ```
 wifi_sta_connect nx30 12345678
 [看到 CODE_WIFI_ON_GOT_IP 后]
-wifi_sta_coex_enable
-wifi_sta_coex_duty_set 50
-wifi_sta_coex_status   # 应看到 PTA Role = WIFI_AND_BT_DEFAULT
+wifi_coex_start ps_pta
+wifi_coex_duty_set 50
+wifi_coex_status   # 应看到 active=1 runtime=ps_pta
 ```
 
 ### 测试1：共存吞吐
@@ -113,7 +113,7 @@ wifi_sta_coex_status   # 应看到 PTA Role = WIFI_AND_BT_DEFAULT
 4. PC：`iperf -s -i 1 -p 5005`
 5. 板A：`iperf -c <PC_IP> -i 1 -t 30 -p 5005`
 6. 记录 Mbps（结果在 PC server 输出的汇总行）
-7. 清理：`ble_stop_scan` → `wifi_sta_coex_disable`
+7. 清理：`ble_stop_scan` → `wifi_coex_stop`
 
 ### 测试2：共存独立性
 
@@ -127,7 +127,7 @@ wifi_sta_coex_status   # 应看到 PTA Role = WIFI_AND_BT_DEFAULT
 **场景 B：BLE 扫描过程中连 WiFi + coex**
 1. 板A 先开 BLE 扫描：`ble_start_scan 1 0 0028 0014`
 2. 板B 发包：`ble_test_tx 1000`
-3. BLE 扫描跑几秒后，板A 连 WiFi + `wifi_sta_coex_enable`
+3. BLE 扫描跑几秒后，板A 连 WiFi + `wifi_coex_start ps_pta`
 4. 验证 BLE 扫描没中断（仍有 DEVICE 事件）
 5. 验证 WiFi 连通（PC ping 板A）
 
@@ -167,8 +167,9 @@ wifi_sta_coex_status   # 应看到 PTA Role = WIFI_AND_BT_DEFAULT
 ## 六、常见问题
 
 **Q：共存开不起来？**
-A：必须先 `wifi_sta_connect` 连上 WiFi，再 `wifi_sta_coex_enable`。
-   用 `wifi_sta_coex_status` 看 PTA Role 是否变为 `WIFI_AND_BT_DEFAULT`。
+A：必须先 `wifi_sta_connect` 连上 WiFi，再执行
+   `wifi_coex_start ps_pta`。用 `wifi_coex_status` 确认
+   `active=1 runtime=ps_pta`。
 
 **Q：吞吐测试中 BLE 扫描占用大量射频时隙，吞吐下降很明显？**
 A：这是真实共存表现。`--coex-duty` 调大（WiFi 拿更多时隙）吞吐回升；

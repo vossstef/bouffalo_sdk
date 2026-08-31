@@ -213,6 +213,17 @@ int bt_a2dp_register_endpoint(struct bt_a2dp_endpoint *endpoint,
  */
 int a2dp_sbc_decode_init();
 
+/** @brief Print current sink stream statistics (one log line). */
+void bt_a2dp_sink_stats_print(void);
+
+/** @brief Configure periodic sink statistics reporting.
+ *
+ *  @param period_seconds Dump interval in seconds; 0 stops the periodic dump.
+ *
+ *  @return 0 in case of success and error code in case of error.
+ */
+int bt_a2dp_sink_stats_set_period(uint32_t period_seconds);
+
 /** @brief SBC decode process.
  *
  *  @return 0 in case of success and error code in case of error.

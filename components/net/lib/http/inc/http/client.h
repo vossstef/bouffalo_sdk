@@ -54,7 +54,7 @@ struct http_response;
  * @typedef http_payload_cb_t
  * @brief Callback used when data needs to be sent to the server.
  *
- * @param sock Socket id of the connection
+ * @param sock Connection handle
  * @param req HTTP request information
  * @param user_data User specified data specified in http_client_req()
  *
@@ -63,7 +63,7 @@ struct http_response;
  *         <0  if http_client_req() should return the error code to the
  *             caller.
  */
-typedef int (*http_payload_cb_t)(int sock,
+typedef int (*http_payload_cb_t)(intptr_t sock,
 				 struct http_request *req,
 				 void *user_data);
 
@@ -72,7 +72,7 @@ typedef int (*http_payload_cb_t)(int sock,
  * @brief Callback can be used if application wants to construct additional
  * HTTP headers when the HTTP request is sent. Usage of this is optional.
  *
- * @param sock Socket id of the connection
+ * @param sock Connection handle
  * @param req HTTP request information
  * @param user_data User specified data specified in http_client_req()
  *
@@ -81,7 +81,7 @@ typedef int (*http_payload_cb_t)(int sock,
  *         <0  if http_client_req() should return the error code to the
  *             caller.
  */
-typedef int (*http_header_cb_t)(int sock,
+typedef int (*http_header_cb_t)(intptr_t sock,
 				struct http_request *req,
 				void *user_data);
 
@@ -236,8 +236,8 @@ struct http_client_internal_data {
 	/** User data */
 	void *user_data;
 
-	/** HTTP socket */
-	int sock;
+	/** HTTP connection handle */
+	intptr_t sock;
 };
 
 /**
@@ -340,7 +340,7 @@ struct http_request {
  * server before calling this function so connect() call must have be done
  * successfully for the socket.
  *
- * @param sock Socket id of the connection.
+ * @param sock Connection handle.
  * @param req HTTP request information
  * @param timeout Max timeout to wait for the data. The timeout value cannot be
  *        0 as there would be no time to receive the data.
@@ -349,7 +349,7 @@ struct http_request {
  *
  * @return <0 if error, >=0 amount of data sent to the server
  */
-int http_client_req(int sock, struct http_request *req,
+int http_client_req(intptr_t sock, struct http_request *req,
 		    int32_t timeout, void *user_data);
 
 #ifdef __cplusplus

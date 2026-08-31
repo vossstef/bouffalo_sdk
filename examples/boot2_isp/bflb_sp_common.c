@@ -48,8 +48,6 @@
 
 ATTR_NOCACHE_NOINIT_RAM_SECTION uint8_t g_malloc_buf[BFLB_BOOT2_XZ_MALLOC_BUF_SIZE];
 
-int32_t bflb_sp_boot2_set_encrypt(uint8_t index, boot2_image_config *g_boot_img_cfg);
-
 /****************************************************************************/ /**
  * @brief  Dump data
  *

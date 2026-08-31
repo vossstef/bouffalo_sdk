@@ -10,6 +10,7 @@ elseif("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Darwin")
     set(CMAKE cmake)
 endif()
 
+set(PROJECT_SDK_VERSION ${CONFIG_PROJECT_SDK_VERSION})
 if(NOT DEFINED PROJECT_SDK_VERSION OR PROJECT_SDK_VERSION STREQUAL "")
     if(EXISTS "${BL_SDK_BASE}/VERSION")
         file(READ "${BL_SDK_BASE}/VERSION" VERSION_FILE_CONTENT)
@@ -46,9 +47,9 @@ endif()
 get_property(FW_TOOL_BOARD_DIR GLOBAL PROPERTY FW_TOOL_CUSTOM_BOARD_DIR)
 if(FW_TOOL_BOARD_DIR)
     message(STATUS "Select FW_TOOL_CUSTOM_BOARD_DIR: ${FW_TOOL_BOARD_DIR}")
-elseif(BOARD_DIR)
-    set(FW_TOOL_BOARD_DIR ${BOARD_DIR}/${BOARD})
-    message(STATUS "Select BOARD_DIR: ${FW_TOOL_BOARD_DIR}")
+elseif(CONFIG_BOARD_DIR)
+    set(FW_TOOL_BOARD_DIR ${CONFIG_BOARD_DIR}/${BOARD})
+    message(STATUS "Select CONFIG_BOARD_DIR: ${FW_TOOL_BOARD_DIR}")
 else()
     set(FW_TOOL_BOARD_DIR ${BL_SDK_BASE}/bsp/board/${BOARD})
     message(STATUS "Select BOARD: ${FW_TOOL_BOARD_DIR}")
@@ -103,7 +104,13 @@ endif()
 
 # POST_PROC combine cmd
 set(combine_cmds)
-list(APPEND combine_cmds COMMAND ${BL_FW_POST_PROC} ${BL_FW_POST_PROC_CONFIG})
+if(CONFIG_SKIP_COMBINE)
+    list(APPEND combine_cmds
+        COMMAND ${CMAKE} -E echo "[fw_post_proc] skipped: raw binary output requested")
+else()
+    list(APPEND combine_cmds
+        COMMAND ${BL_FW_POST_PROC} ${BL_FW_POST_PROC_CONFIG})
+endif()
 add_custom_target(combine WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} ${combine_cmds})
 
 

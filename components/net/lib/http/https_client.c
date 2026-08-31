@@ -26,7 +26,7 @@
 #define DEFAULT_HTTPS_PORT (443)
 
 struct http_client {
-    int                     socket;
+    intptr_t                socket;
     char                   *host;               /*!< Domain or IP as string */
     char                   *scheme;
     int                    port;                /*!< Port to connect, default depend on http_client_transport_t (80 or 443) */
@@ -53,7 +53,7 @@ static int connect_https(struct http_client *client,
                          const char *ca_pem, size_t ca_len,
                          const char *client_cert_pem, size_t client_cert_len,
                          const char *client_key_pem, size_t client_key_len,
-                         int *socket)
+                         intptr_t *socket)
 {
     https_wrapper_handle_t https = NULL;
 #if !defined(CONFIG_HTTP_CLIENT_NO_HTTPS)
@@ -95,7 +95,7 @@ static int connect_https(struct http_client *client,
         return -ECONNREFUSED;
     }
 
-    *socket = (int)https;
+    *socket = (intptr_t)https;
     return 0;
 }
 

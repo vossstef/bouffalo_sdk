@@ -33,10 +33,6 @@
 
 # cmake-format: on
 
-if(NOT DEFINED CONFIG_CHERRYUSB_OSAL AND CONFIG_FREERTOS)
-    set(CONFIG_CHERRYUSB_OSAL "freertos")
-endif()
-
 include(${CMAKE_CURRENT_LIST_DIR}/cherryusb.cmake)
 list(REMOVE_DUPLICATES cherryusb_srcs)
 list(REMOVE_DUPLICATES cherryusb_incs)

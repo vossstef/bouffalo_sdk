@@ -28,6 +28,8 @@ static uint16_t wifi_mgmr_listen_itv = 0;
 
 static void auth_cipher_convert(struct wl80211_scan_result_item *result, uint8_t *auth, uint8_t *cipher);
 
+void mm_sec_keydump(void);
+
 #if defined(CONFIG_WL80211_P2P)
 static struct {
     scan_complete_cb_t cb;
@@ -414,7 +416,6 @@ static void wifi_mgmr_event_handler(async_input_event_t ev, void *priv)
         } break;
         case CODE_WIFI_ON_CONNECTED: {
             wl80211_printf("[APP] [EVT] %s, CODE_WIFI_ON_CONNECTED\r\n", __func__);
-            void mm_sec_keydump(void);
             mm_sec_keydump();
         } break;
         case CODE_WIFI_ON_GOT_IP: {
@@ -442,6 +443,7 @@ static void wifi_mgmr_event_handler(async_input_event_t ev, void *priv)
         } break;
         case CODE_WIFI_ON_AP_STA_ADD: {
             wl80211_printf("[APP] [EVT] [AP] [ADD] %ld\r\n", rtos_now(0));
+            mm_sec_keydump();
         } break;
         case CODE_WIFI_ON_AP_STA_DEL: {
             const uint8_t *mac = ((async_input_event_mac_t)ev)->mac;

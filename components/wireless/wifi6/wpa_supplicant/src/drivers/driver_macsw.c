@@ -300,6 +300,8 @@ static void wpa_macsw_driver_release_tx_frame(struct wpa_mac_tx_frame *tx_frame)
 static const int macsw_legacy_rates[] =
 	{ 10, 20, 55, 110, 60, 90, 120, 180, 240, 360, 480, 540 };
 static const int macsw_legacy_rates_11b_only[] = { 10, 20, 55, 110 };
+static const int macsw_legacy_rates_5g[] =
+	{ 60, 90, 120, 180, 240, 360, 480, 540 };
 static struct hostapd_channel_data macsw_2g_11b_channels[14];
 
 static int *macsw_init_rates(int *num, bool is_11b_only)
@@ -317,7 +319,8 @@ static int *macsw_init_rates(int *num, bool is_11b_only)
 bool macsw_hw_feature_uses_static_rates(const int *rates)
 {
 	return rates == macsw_legacy_rates ||
-		rates == macsw_legacy_rates_11b_only;
+		rates == macsw_legacy_rates_11b_only ||
+		rates == macsw_legacy_rates_5g;
 }
 
 bool macsw_hw_feature_uses_static_channels(const struct hostapd_channel_data *channels)
@@ -1555,9 +1558,8 @@ static struct hostapd_hw_modes *wpa_macsw_driver_get_hw_feature_data(void *priv,
 			macsw_to_hostapd_channel(chan_tag, chan);
 		}
 
-		mode->rates = macsw_init_rates(&mode->num_rates, false);
-		if (!mode->rates)
-			goto err;
+		mode->rates = (int *) macsw_legacy_rates_5g;
+		mode->num_rates = ARRAY_SIZE(macsw_legacy_rates_5g);
 
 		if (feat.me_config.ht_supp) {
 			macsw_ht_capabilities_init(mode, &feat.me_config.ht_cap);
@@ -2107,21 +2109,12 @@ static int wpa_macsw_driver_send_external_auth_status(void *priv,
 	return 0;
 }
 
-//In order to do coexistence test, Made a temporary patch
-#ifdef CFG_FOR_COEXISTENCE_TEST_STOPAP_PATCH
-struct wpa_macsw_driver_itf_data *g_ap_drv = NULL;
-#endif
 static int wpa_macsw_driver_set_ap(void *priv, struct wpa_driver_ap_params *params)
 {
 	struct wpa_macsw_driver_itf_data *drv = priv;
 	struct cfgmacsw_start_ap cmd;
 	struct cfgmacsw_resp resp;
 	int res = -1;
-
-//In order to do coexistence test, Made a temporary patch
-#ifdef CFG_FOR_COEXISTENCE_TEST_STOPAP_PATCH
-    g_ap_drv = drv;
-#endif
 
 	drv->dtim_period = params->dtim_period;
 
@@ -2253,16 +2246,6 @@ static int wpa_macsw_driver_deinit_ap(void *priv)
 
 	return 0;
 }
-
-//In order to do coexistence test, Made a temporary patch
-#ifdef CFG_FOR_COEXISTENCE_TEST_STOPAP_PATCH
-void wpa_macsw_deinitap(void)
-{
-    if (g_ap_drv != NULL) {
-        wpa_macsw_driver_deinit_ap(g_ap_drv);
-    }
-}
-#endif
 
 static int wpa_macsw_driver_set_tx_queue_params(void *priv, int queue, int aifs, int cw_min,
 					       int cw_max, int burst_time)

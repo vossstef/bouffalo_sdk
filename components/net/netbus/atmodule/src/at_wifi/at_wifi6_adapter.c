@@ -62,7 +62,12 @@ int at_wifi_mgmr_ap_mac_get(uint8_t mac[6])
 
 int at_wifi_mgmr_ap_mac_set(uint8_t mac[6])
 {
+#ifdef CONFIG_WL80211
+    (void)mac;
+    return -1;
+#else
     return wifi_mgmr_ap_mac_set(mac);
+#endif
 }
 
 int at_wifi_mgmr_sta_mac_get(uint8_t mac[6])
@@ -72,7 +77,12 @@ int at_wifi_mgmr_sta_mac_get(uint8_t mac[6])
 
 int at_wifi_mgmr_sta_mac_set(uint8_t mac[6])
 {
+#ifdef CONFIG_WL80211
+    (void)mac;
+    return -1;
+#else
     return wifi_mgmr_sta_mac_set(mac);
+#endif
 }
 
 #ifdef CONFIG_ATMODULE_WIFI_STA
@@ -340,9 +350,9 @@ int at_wifi_mgmr_get_channel_nums(const char *country_code, uint8_t *c24g_cnt, u
     return wifi_mgmr_get_channel_nums(country_code, c24g_cnt, c5g_cnt);
 }
 
-int at_wifi_mgmr_sta_wps_pbc(int auth)
+int at_wifi_mgmr_sta_wps_pbc(int auth, const uint8_t *bssid, uint8_t channel)
 {
-    return wifi_mgmr_sta_wps_pbc(auth);
+    return wifi_mgmr_sta_wps_pbc(auth, bssid, channel);
 }
 
 int at_wifi_mgmr_set_country_code(const char *code)

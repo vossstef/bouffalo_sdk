@@ -2,7 +2,7 @@
 
 [English](README.md) | [中文](README_zh.md)
 
-本示例通过一个 EMAC 网络接口和一套 lwIP 协议栈提供 TCP Loopback、UDP Echo、HTTP 和 iperf 服务。EMAC、netif、PHY Link 监控和 DHCP 由共享启动模块统一初始化。
+本示例通过一套 lwIP 协议栈上的 EMAC 网络接口提供 TCP Loopback、UDP Echo、HTTP 和 iperf 服务。BL618DG 同时启用 EMAC0 和 EMAC1，单 EMAC 芯片保持一个网络接口。每个活动端口独立维护 PHY、DMA Buffer、Queue、RX Task、MAC 地址、netif、DHCP Client、Link 状态和统计信息。
 
 ## 服务和 Shell 命令
 
@@ -15,17 +15,19 @@
 
 由于 TCP 和 UDP 是不同的传输层协议，因此二者可以使用相同的端口号。TCP 和 UDP 服务由 Shell 控制，不会自动启动；未指定端口时使用相应的默认端口。lwIP 内置 HTTP Server 在网络初始化后自动启动，并长期运行于 TCP 80 端口，不提供 Shell 启停命令。
 
-普通 PHY Link Down/Up 期间服务仍可继续使用。工程默认启用 DHCP，通过 netif 状态回调打印获得的 IPv4 地址。
+普通 PHY Link Down/Up 期间服务仍可继续使用。工程默认为每个活动接口启用 DHCP，日志使用 `[EMAC0]`、`[EMAC1]` 标识物理端口。接口 Link Up 后 30 秒仍未获得租约时输出一次 `[EMACx] DHCP timeout`，lwIP 会继续重试。BL618DG 固定由 EMAC1 使用工厂 MAC，EMAC0 使用兼容旧双口版本的派生 MAC。
 
-工程启用了用于吞吐量测试的 iperf Shell 命令。
+工程启用了用于吞吐量测试的 iperf Shell 命令，以及用于查看每口统计的 `lwip_emac_info` 命令。
 
 ## 实现概述
 
 ### 共享 EMAC 和 lwIP 初始化
 
-`main.c` 初始化 Shell，然后调用 `lwip_emac_start()`。共享启动模块配置 RMII/MDIO 引脚、启动 lwIP TCP/IP 线程、通过 netif API 添加一个 EMAC netif、将其设置为默认网络接口，并启动一个 DHCP Client。netif 状态回调负责打印获取到的 IPv4 地址。
+`main.c` 初始化 Shell，然后调用 `lwip_emac_start()`。共享启动模块配置 RMII/MDIO 引脚、启动 lwIP TCP/IP 线程，并为每个已配置 EMAC 添加独立 netif 和 DHCP Client。BL618DG 先初始化配置的首选口（默认为 EMAC0）并将其作为默认接口；只有该口在启动阶段初始化失败时，才使用第一个存活接口作为默认接口，不停止另一个端口。运行中的 Link Down 不会切换默认接口。
 
-一个后台任务周期性查询 PHY Link 状态，并同步更新 lwIP Link 状态。EMAC TX/RX 队列和硬件 Buffer Descriptor 只在初始化阶段创建。普通 Link Down/Up 不会停止 EMAC，也不会重建 Descriptor，从而保证队列中 Buffer 的所有权稳定。
+`lwip_emac_start()` 是任务上下文的一次性启动 API，只能调用一次；示例不提供运行期 EMAC 停止或重启。某个端口在启动阶段失败时，只回滚该端口已经创建的资源并继续尝试另一端口；致命启动失败则按逆序回滚已经初始化的端口。
+
+一个常驻后台任务周期性查询所有活动 PHY 的 Link 状态，并同步更新对应的 lwIP Link 状态。EMAC TX/RX 队列和硬件 Buffer Descriptor 在启动阶段创建；普通 Link Down/Up 只更新 Link 状态，不会停止 EMAC 或重建 Descriptor。
 
 ### 服务生命周期和 Shell 控制
 
@@ -61,7 +63,7 @@ lwIP 官方同时提供 `makefsdata` 脚本和功能更完整的 C 控制台工�
 
 ## 源码目录
 
-- `lwip_emac_start/`：板级引脚、lwIP/netif 初始化、DHCP 和 PHY Link 监控。
+- `lwip_emac_start()` / `lwip_emac_port()`：板级引脚、lwIP/netif 初始化、DHCP、PHY Link 监控与端口管理，源码位于 `bsp/common/eth_phy/lwip_emac_start/`。
 - `tcp/tcp_server.c`：独立的、基于 Socket 的 TCP Loopback Server。
 - `tcp/tcp_client.c`：独立的、基于 Socket 的 TCP Loopback Client。
 - `udp/`：基于 Socket 的 UDP Echo Server。
@@ -112,7 +114,15 @@ make CHIP=bl616cl BOARD=bl616cldk
 
 ## 测试
 
-HTTP Server 在网络初始化后已经运行。DHCP 获取地址后，在开发板 Shell 中启动 TCP 和 UDP 服务：
+HTTP Server 在网络初始化后已经运行。先在开发板 Shell 中查看每口状态：
+
+```
+lwip_emac_info
+```
+
+BL618DG 会分别输出 EMAC0 和 EMAC1 的 TX/RX 摘要及可用 DMA Descriptor 数量。
+
+DHCP 获取地址后，再启动 TCP 和 UDP 服务：
 
 ```
 tcp_server start

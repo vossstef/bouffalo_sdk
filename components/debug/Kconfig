@@ -6,6 +6,7 @@ menu "Debug"
 
 config BACKTRACE
     bool "Backtrace"
+    default y if FREERTOS
     default n
     help
       Enable the DWARF CFI based backtrace support.

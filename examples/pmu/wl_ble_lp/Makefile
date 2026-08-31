@@ -13,7 +13,6 @@ MACSW_CONFIG_SELECT ?= default
 CONFIG_BLE_ENABLE ?= y
 cmake_definition+=-DCONFIG_BLE_ENABLE=$(CONFIG_BLE_ENABLE)
 
-CONFIG_USBH_MSC ?= 0
-cmake_definition+=-DCONFIG_USBH_MSC=$(CONFIG_USBH_MSC)
+CONFIG_USBH_MSC ?= n
 
 include $(BL_SDK_BASE)/project.build

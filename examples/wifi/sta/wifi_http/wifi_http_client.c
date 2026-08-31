@@ -19,7 +19,7 @@
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
 #endif 
 
-static int payload_cb(int sock, struct http_request *req, void *user_data)
+static int payload_cb(intptr_t sock, struct http_request *req, void *user_data)
 {
     const char *content[] = {
         "foobar",

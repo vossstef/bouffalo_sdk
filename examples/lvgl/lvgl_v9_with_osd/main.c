@@ -72,6 +72,19 @@
 #define FS_TASK_STACK            1536 /* holds FIL(~580B)+FILINFO(~300B)+path buffers */
 #endif
 
+#if (DPI_PIXEL_CLOCK_USE_SW_GPIO)
+/* Pixel clock via software GPIO (CLKOUT). Only LCD_DPI_STANDARD uses this; other panels
+ * drive PCLK from the DPI peripheral's hardware pin (see DPI_PIXEL_CLOCK_USE_SW_GPIO). */
+static void dpi_pixel_clock_output(void)
+{
+    struct bflb_device_s *gpio;
+
+    gpio = bflb_device_get_by_name("gpio");
+
+    bflb_gpio_init(gpio, GPIO_PIN_0, GPIO_FUNC_CLKOUT | GPIO_ALTERNATE | GPIO_PULLUP | GPIO_SMT_EN | GPIO_DRV_1);
+}
+#endif
+
 /* The LVGL draw buffers (OSD overlay) and the flush/swap path live in the framework port
  * (lv_port_disp_rgb.c): it calls lcd_init(), wires flush -> lcd_screen_switch() (OSD swap),
  * and rotates the buffers from the SEOF interrupt. This file only owns the video pipeline. */
@@ -149,6 +162,10 @@ static void lvgl_task(void *param)
     /* Framework display port: brings up the whole display side via lcd_init(), creates the
      * LVGL display with its triple draw buffers, and wires flush -> lcd_screen_switch() (OSD swap). */
     lv_port_disp_init();
+
+#if (DPI_PIXEL_CLOCK_USE_SW_GPIO)
+    dpi_pixel_clock_output();
+#endif
 
     /* Count SEOF scan-out frames to report the panel's true hardware refresh rate. */
     lcd_frame_callback_register(FRAME_INT_TYPE_CYCLE, panel_scan_cycle_cb);

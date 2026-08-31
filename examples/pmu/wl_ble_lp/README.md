@@ -206,7 +206,7 @@ Please be noticed, the USB Host feature in this demo is only for purpose of Wi-F
 ### Build Command
 
 ```bash
-make CONFIG_USBH_MSC=1
+make CONFIG_USBH_MSC=y
 ```
 
 ### Test Step

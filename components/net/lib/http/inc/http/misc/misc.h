@@ -110,7 +110,7 @@ typedef struct { k_ticks_t ticks; } k_timepoint_t;
 
 struct zsock_pollfd {
     struct pollfd fds;
-    int fd;
+    intptr_t fd;
     short events;
     short revents;
 };
@@ -118,6 +118,12 @@ struct zsock_pollfd {
 static inline int zsock_poll(struct zsock_pollfd *fds, nfds_t nfds, int timeout)
 {
     int ret;
+
+    if ((fds->events & ZSOCK_POLLIN) &&
+        https_wrapper_ssl_check_pending((https_wrapper_handle_t)fds->fd)) {
+        fds->revents = ZSOCK_POLLIN;
+        return 1;
+    }
 
     fds->fds.events = fds->events;
     fds->fds.revents = fds->revents;

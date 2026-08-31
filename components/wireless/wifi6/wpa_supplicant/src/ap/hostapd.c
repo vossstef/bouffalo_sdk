@@ -1621,7 +1621,8 @@ static int setup_interface(struct hostapd_iface *iface)
 		wpa_printf(MSG_DEBUG, "Previous country code %s, new country code %s",
 			   previous_country, country);
 
-		if (os_strncmp(previous_country, country, 2) != 0) {
+		if (os_strncmp(previous_country, country, 2) != 0 &&
+		    hapd->driver && hapd->driver->get_country) {
 			wpa_printf(MSG_DEBUG, "Continue interface setup after channel list update");
 			iface->wait_channel_update = 1;
 			eloop_register_timeout(5, 0,

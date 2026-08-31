@@ -74,7 +74,7 @@ static int https_fota_cancel_requested(void *user_data)
     return (fota != NULL && fota->abort_requested) ? 1 : 0;
 }
 
-static int __attribute__((unused)) payload_cb(int sock, struct http_request *req, void *user_data)
+static int __attribute__((unused)) payload_cb(intptr_t sock, struct http_request *req, void *user_data)
 {
     const char *content[] = {
         "foobar",

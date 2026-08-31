@@ -122,7 +122,7 @@ int at_wifi_mgmr_sta_connect_ind_stat_get(at_wifi_mgmr_connect_ind_stat_info_t *
 int at_wifi_mgmr_sta_rssi_get(int *rssi);
 int at_wifi_mgmr_sta_ip_set(uint32_t ip, uint32_t mask, uint32_t gw, uint32_t dns);
 int at_wifi_mgmr_sta_disconnect(void);
-int at_wifi_mgmr_sta_wps_pbc(int auth);
+int at_wifi_mgmr_sta_wps_pbc(int auth, const uint8_t *bssid, uint8_t channel);
 
 // WiFi scan management
 int at_wifi_mgmr_sta_scanlist(void);

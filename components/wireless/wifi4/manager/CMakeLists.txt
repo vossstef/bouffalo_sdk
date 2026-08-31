@@ -34,14 +34,8 @@ if(("${CHIP}" STREQUAL "bl602"))
     sdk_add_compile_definitions(-DCFG_TXDESC=2)
 endif()
 
-if(NOT DEFINED CONFIG_VIRT_DEV_MAX)
-    set(CONFIG_VIRT_DEV_MAX 2)
-endif()
 sdk_add_compile_definitions(-DCFG_VIRT_DEV_MAX=${CONFIG_VIRT_DEV_MAX})
 
-if(NOT DEFINED CONFIG_STA_MAX)
-    set(CONFIG_STA_MAX 5)
-endif()
 sdk_add_compile_definitions(-DCFG_STA_MAX=${CONFIG_STA_MAX})
 
 if(CONFIG_BL_IOT_FW_STATISTIC EQUAL 1)
@@ -63,4 +57,3 @@ endif()
 if(CONFIG_WIFI_PKT_OUTPUT_HOOK EQUAL 1)
 sdk_add_compile_definitions(-D PKT_OUTPUT_HOOK)
 endif()
-

@@ -64,10 +64,10 @@ endif()
 set(OPENSSL ${ENABLE_OPENSSL} CACHE BOOL INTERNAL)
 set(GCM ${ENABLE_OPENSSL} CACHE BOOL INTERNAL)
 
-set(CONFIG_FILE_DIR ${CMAKE_CURRENT_BINARY_DIR})
-include_directories(${CONFIG_FILE_DIR})
+set(SRTP_CONFIG_FILE_DIR ${CMAKE_CURRENT_BINARY_DIR})
+include_directories(${SRTP_CONFIG_FILE_DIR})
 
-configure_file(config_in_cmake.h ${CONFIG_FILE_DIR}/config.h)
+configure_file(config_in_cmake.h ${SRTP_CONFIG_FILE_DIR}/config.h)
 add_definitions(-DHAVE_CONFIG_H)
 
 set(SOURCES_C
@@ -149,7 +149,7 @@ set(SOURCES_H
   include/srtp.h
   include/srtp_priv.h
   include/ut_sim.h
-  ${CONFIG_FILE_DIR}/config.h
+  ${SRTP_CONFIG_FILE_DIR}/config.h
 )
 
 if(BUILD_SHARED_LIBS AND WIN32)

@@ -1534,7 +1534,7 @@ static int at_setup_cmd_wps(int argc, const char **argv)
         auth = 0;
     }
 
-    int ret = at_wifi_mgmr_sta_wps_pbc(auth);
+    int ret = at_wifi_mgmr_sta_wps_pbc(auth, NULL, 0);
     if (ret != 0) {
         return AT_RESULT_WITH_SUB_CODE(AT_SUB_CMD_EXEC_FAIL);
     }

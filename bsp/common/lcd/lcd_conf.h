@@ -43,6 +43,8 @@
     LCD_DSI_ST7102_YH494          (ST7102 480x960, 2-lane, e.g. YH-494BSAC002N1, BL618DG)
     LCD_DSI_ST7102_KD027HVF       (ST7102 320x320, 1-lane, e.g. KD027HVFID009, BL618DG)
     LCD_DSI_AXS15231B_HS035        (AXS15231B 172x640, 1-lane, firmware-init, BL618DG)
+    LCD_DSI_AXS15231E_JX371        (AXS15231E 258x960, 1-lane, e.g. JX 3.71+15231B, BL618DG)
+    LCD_DSI_EK79007_WKS70WSV114    (EK79007 1024x600, 2/4-lane selectable, e.g. WKS70WSV114, BL618DG)
 
   spi interface
     LCD_SPI_GC9307
@@ -1023,6 +1025,21 @@
         1: 180-degree rotation/mirror
     */
     #define ILI9806E_KD050FWFIA019_ROTATE_180 0
+
+/* dsi ek79007 wks70wsv114 config */
+#elif defined LCD_DSI_EK79007_WKS70WSV114
+
+    /* Number of MIPI DSI data lanes the panel is wired for
+        2: 2-lane (vendor EK79007_Initial_Code_2lane, writes 0xB2 = 0x10)
+        4: 4-lane (vendor EK79007_Initial_Code_4lane, leaves 0xB2 at its default)
+    */
+    #define EK79007_WKS70WSV114_LANE_NUM 2
+
+    /* Select EK79007_WKS70WSV114_FB_MODE
+        EK79007_WKS70WSV114_FB_MODE_RGB565: RGB565 framebuffer
+        EK79007_WKS70WSV114_FB_MODE_OSD: ARGB8888 framebuffer for osd0
+    */
+    #define EK79007_WKS70WSV114_FB_MODE EK79007_WKS70WSV114_FB_MODE_RGB565
 
 #endif
 

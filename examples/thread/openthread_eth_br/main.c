@@ -56,6 +56,24 @@
 #define DBG_TAG "MAIN"
 #include "log.h"
 
+#define LWIP_EMAC_RX_BUFF_CNT      (10)
+#define LWIP_EMAC_TX_BUFF_CNT      (6)
+#define LWIP_EMAC_FRAME_SIZE_MIN   (14 + 46 + 4)
+#define LWIP_EMAC_FRAME_SIZE_MAX   (14 + 4 + 1500 + 4)
+#define LWIP_EMAC_BUFFER_ALIGNMENT (32U)
+#define LWIP_EMAC_NETIF_MTU        (1500)
+#define LWIP_EMAC_RX_STACK_SIZE    (512)
+#define LWIP_EMAC_TX_BUF_TIMEOUT   (10)
+#define LWIP_EMAC_BUFFER_SIZE      \
+    ((LWIP_EMAC_FRAME_SIZE_MAX + LWIP_EMAC_BUFFER_ALIGNMENT - 1U) & ~(LWIP_EMAC_BUFFER_ALIGNMENT - 1U))
+
+#if (defined(EMAC_SPEED_10M_SUPPORT) && EMAC_SPEED_10M_SUPPORT)
+#define LWIP_EMAC_PHY_ABILITY \
+    (EPHY_ABILITY_100M_TX | EPHY_ABILITY_100M_FULL_DUPLEX | EPHY_ABILITY_10M_T | EPHY_ABILITY_10M_FULL_DUPLEX)
+#else
+#define LWIP_EMAC_PHY_ABILITY (EPHY_ABILITY_100M_TX | EPHY_ABILITY_100M_FULL_DUPLEX)
+#endif
+
 #define THREAD_CHANNEL     15
 #define THREAD_PANID       0x6677
 #define THREAD_EXTPANID    { 0x11, 0x11, 0x11, 0x11, 0x22, 0x22, 0x22, 0x22 }
@@ -65,6 +83,31 @@ static struct bflb_device_s *uart0;
 
 /* global network interface struct define */
 static struct netif gnetif;
+static lwip_emac_port_ctx_t emac_ctx = {
+    .task_name = "emac0_rx",
+    .hostname = "emac0",
+};
+/* phy cfg */
+static const eth_phy_init_cfg_t emac_phy_cfg = {
+    .speed_mode = EPHY_SPEED_MODE_AUTO_NEGOTIATION,
+    .local_auto_negotiation_ability = LWIP_EMAC_PHY_ABILITY,
+};
+/* emac cfg */
+static const struct bflb_emac_config_s emac_hw_cfg = {
+    .mac_addr = { 0x18, 0xB9, 0x05, 0x12, 0x34, 0x56 },
+    .clk_internal_mode = false,
+#if defined(BL616CL) || defined(BL618DG)
+    .md_clk_div = 79,
+#else
+    .md_clk_div = 39,
+#endif
+    .min_frame_len = LWIP_EMAC_FRAME_SIZE_MIN,
+    .max_frame_len = LWIP_EMAC_FRAME_SIZE_MAX,
+};
+static uint8_t ATTR_NOCACHE_NOINIT_RAM_SECTION __ALIGNED(32)
+    emac_tx_buffer[LWIP_EMAC_TX_BUFF_CNT][LWIP_EMAC_BUFFER_SIZE];
+static uint8_t ATTR_NOCACHE_NOINIT_RAM_SECTION __ALIGNED(32)
+    emac_rx_buffer[LWIP_EMAC_RX_BUFF_CNT][LWIP_EMAC_BUFFER_SIZE];
 
 /****************************************************************************
  * Functions
@@ -185,13 +228,37 @@ static void netif_config(void *arg)
     ip_addr_t ipaddr;
     ip_addr_t netmask;
     ip_addr_t gw;
+    lwip_emac_port_cfg_t emac_port_cfg = {
+        .port = 0,
+        .mdio_port = 0,
+        .phy_scan_start = EPHY_ADDR_MIN,
+        .phy_scan_end = EPHY_ADDR_MAX,
+        .mtu = LWIP_EMAC_NETIF_MTU,
+        .rx_stack_size = LWIP_EMAC_RX_STACK_SIZE,
+        .tx_buf_timeout = LWIP_EMAC_TX_BUF_TIMEOUT,
+        .buffer_stride = LWIP_EMAC_BUFFER_SIZE,
+        .phy_cfg = emac_phy_cfg,
+        .emac_cfg = emac_hw_cfg,
+        .tx_buffer = emac_tx_buffer,
+        .tx_buffer_size = sizeof(emac_tx_buffer),
+        .rx_buffer = emac_rx_buffer,
+        .rx_buffer_size = sizeof(emac_rx_buffer),
+    };
+
+    (void)arg;
 
     memset(&ipaddr, 0, sizeof(ip_addr_t));
     memset(&netmask, 0, sizeof(ip_addr_t));
     memset(&gw, 0, sizeof(ip_addr_t));
 
+    emac_ctx.cfg = emac_port_cfg;
+
     /* add the network interface */
-    netif_add(&gnetif, &ipaddr.u_addr.ip4, &netmask.u_addr.ip4, &gw.u_addr.ip4, NULL, &eth_emac_if_init, &tcpip_input);
+    if (netif_add(&gnetif, &ipaddr.u_addr.ip4, &netmask.u_addr.ip4,
+                  &gw.u_addr.ip4, &emac_ctx, &eth_emac_if_init,
+                  &tcpip_input) == NULL) {
+        return;
+    }
 
     /*  Registers the default network interface */
     netif_set_default(&gnetif);
@@ -263,8 +330,8 @@ int main(void)
     __libc_init_array();
 
     /* emac gpio init */
-    board_emac_rmii_gpio_init(BSP_EMAC_RMII_DEFAULT_PORT);
-    board_emac_mdio_gpio_init(BSP_EMAC_MDIO_DEFAULT_PORT);
+    board_emac_rmii_gpio_init(0);
+    board_emac_mdio_gpio_init(0);
 
     bflb_mtd_init();
 

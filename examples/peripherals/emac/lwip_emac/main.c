@@ -23,7 +23,9 @@ static void app_start_task(void *pvParameters)
     shell_init_with_task(uart0);
     LOG_I("Shell Ready...\r\n");
 
-    if (lwip_emac_start() < 0) {
+    /* Kconfig defaults: port count from CONFIG_EMAC_DEV_COUNT, per-port
+     * RMII/MDIO ids from CONFIG_EMAC0_* / CONFIG_EMAC1_*. */
+    if (lwip_emac_start(NULL, 0) < 0) {
         LOG_E("lwip_emac_start failed\r\n");
         vTaskDelete(NULL);
         return;

@@ -237,7 +237,7 @@ int at_wifi_mgmr_sta_disconnect(void)
     return wifi_mgmr_sta_disconnect();
 }
 
-int at_wifi_mgmr_sta_wps_pbc(int auth)
+int at_wifi_mgmr_sta_wps_pbc(int auth, const uint8_t *bssid, uint8_t channel)
 {
     return -1;
 }

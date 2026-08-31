@@ -1,4 +1,20 @@
 
+= Release 1.4.3 =
+Released: 2026-08
+
+== FlashCube ==
+Features:
+1. When downloading to flash/RAM, do not send command 0x22 if speed_uart_boot and speed_uart_load are identical
+2. Add support for a2 version of bl618dg 
+3. Support auth: if the device is in auth mode but auth verify has not been performed, throw an error
+4. Add a configuration item in the config file for all chip types to update the timece parameter in flash_para.bin
+5. When performing full-chip erase only, support sending flash_para.bin.
+6. Copy flash_para.bin to a temporary folder for update operations to prevent conflicts during multi-threaded access
+7. Update flash size detection logic to support high-capacity flash
+8. Chipname must be provided when build/config/wholechip-erase
+9. Support warm reset
+
+
 = Release 1.4.2 =
 Released: 2026-05
 

@@ -24,6 +24,9 @@
 /* os */
 #include <FreeRTOS.h>
 #include "queue.h"
+#include "task.h"
+
+#include <stdbool.h>
 
 #define DBG_TAG "LWIP_EMAC"
 #include "log.h"
@@ -32,225 +35,165 @@
 #define IFNAME0 'e'
 #define IFNAME1 'x'
 
-static void lwip_emac_irq_cb(void *arg, uint32_t irq_event, struct bflb_emac_trans_desc_s *trans_desc);
+void lwip_emac_irq_cb(void *arg, uint32_t irq_event, struct bflb_emac_trans_desc_s *trans_desc);
 static void ethernetif_input(void *argument);
 static err_t emac_low_level_output(struct netif *netif, struct pbuf *p);
 
-/* tx buff def */
-static uint8_t ATTR_NOCACHE_NOINIT_RAM_SECTION __ALIGNED(32) emac_tx_buff[CONFIG_BSP_LWIP_EMAC_TX_BUFF_CNT][CONFIG_BSP_LWIP_EMAC_TX_BUFF_SIZE];
-/* rx buff def */
-static uint8_t ATTR_NOCACHE_NOINIT_RAM_SECTION __ALIGNED(32) emac_rx_buff[CONFIG_BSP_LWIP_EMAC_RX_BUFF_CNT][CONFIG_BSP_LWIP_EMAC_RX_BUFF_SIZE];
-
-/* tx pool queue */
-static QueueHandle_t tx_pool_queue;
-/* rx process queue */
-static QueueHandle_t rx_process_queue;
-/* rx task  */
-static TaskHandle_t emac_rx_handle;
-
-/* emac */
-static struct bflb_device_s *emacx;
-/* eth phy */
-static eth_phy_ctrl_t phy_ctrl;
-
-/* emac debug info */
-struct lwip_emac_debug_info_s {
-    struct {
-        uint32_t push_cnt;
-        uint32_t success_cnt;
-        uint32_t error_cnt;
-        uint64_t total_size;
-    } tx;
-    struct {
-        uint32_t push_cnt;
-        uint32_t success_cnt;
-        uint32_t error_cnt;
-        uint32_t eamc_busy_cnt;
-        uint32_t pbuf_busy_cnt;
-        uint64_t total_size;
-    } rx;
-};
-
-static volatile struct lwip_emac_debug_info_s emac_debug_info;
-
-/* phy cfg */
-static eth_phy_init_cfg_t phy_cfg = {
-    .speed_mode = EPHY_SPEED_MODE_AUTO_NEGOTIATION,
-#if (defined(EMAC_SPEED_10M_SUPPORT) && EMAC_SPEED_10M_SUPPORT)
-    .local_auto_negotiation_ability = EPHY_ABILITY_100M_TX | EPHY_ABILITY_100M_FULL_DUPLEX | EPHY_ABILITY_10M_T | EPHY_ABILITY_10M_FULL_DUPLEX,
-#else
-    .local_auto_negotiation_ability = EPHY_ABILITY_100M_TX | EPHY_ABILITY_100M_FULL_DUPLEX,
-#endif
-};
-
-/* emac cfg */
-static struct bflb_emac_config_s emac_cfg = {
-    .mac_addr = { 0x18, 0xB9, 0x05, 0x12, 0x34, 0x56 },
-    .clk_internal_mode = false,
-#if defined(BL616CL) || defined(BL618DG)
-    .md_clk_div = 79,
-#else
-    .md_clk_div = 39,
-#endif
-    .min_frame_len = CONFIG_BSP_LWIP_EMAC_FRAME_SIZE_MIN,
-    .max_frame_len = CONFIG_BSP_LWIP_EMAC_FRAME_SIZE_MAX,
-};
-
-void lwip_emac_if_cfg(eth_phy_init_cfg_t *phy_cfg_new, struct bflb_emac_config_s *emac_cfg_new)
-{
-    if (phy_cfg_new) {
-        phy_cfg = *phy_cfg_new;
-    }
-    if (emac_cfg_new) {
-        emac_cfg = *emac_cfg_new;
-    }
-}
-
+/**
+ * @brief Initialize the EMAC hardware and DMA resources for one netif.
+ *
+ * @param[in,out] netif The lwIP network interface bound to an EMAC context.
+ * @return ERR_OK on success, otherwise a lwIP error code.
+ */
 static int emac_low_level_init(struct netif *netif)
 {
+    lwip_emac_port_ctx_t *ctx = (lwip_emac_port_ctx_t *)netif->state;
+    size_t buffer_stride = ctx->cfg.buffer_stride;
+    size_t tx_buffer_count = ctx->cfg.tx_buffer_size / buffer_stride;
+    size_t rx_buffer_count = ctx->cfg.rx_buffer_size / buffer_stride;
     int ret;
 
     /* maximum transfer unit */
-    netif->mtu = CONFIG_BSP_LWIP_EMAC_NETIF_MTU;
+    netif->mtu = ctx->cfg.mtu;
 
     /* set MAC hardware address length */
     netif->hwaddr_len = ETH_HWADDR_LEN;
 
-    netif->hwaddr[0] = emac_cfg.mac_addr[0];
-    netif->hwaddr[1] = emac_cfg.mac_addr[1];
-    netif->hwaddr[2] = emac_cfg.mac_addr[2];
-    netif->hwaddr[3] = emac_cfg.mac_addr[3];
-    netif->hwaddr[4] = emac_cfg.mac_addr[4];
-    netif->hwaddr[5] = emac_cfg.mac_addr[5];
+    netif->hwaddr[0] = ctx->cfg.emac_cfg.mac_addr[0];
+    netif->hwaddr[1] = ctx->cfg.emac_cfg.mac_addr[1];
+    netif->hwaddr[2] = ctx->cfg.emac_cfg.mac_addr[2];
+    netif->hwaddr[3] = ctx->cfg.emac_cfg.mac_addr[3];
+    netif->hwaddr[4] = ctx->cfg.emac_cfg.mac_addr[4];
+    netif->hwaddr[5] = ctx->cfg.emac_cfg.mac_addr[5];
 
     /* emac init */
-    emacx = bsp_emac_get_device(BSP_EMAC_RMII_DEFAULT_PORT);
-    if (emacx == NULL) {
-        LOG_E("device_get error\r\n");
-        return -ERR_IF;
+    ctx->emac_dev = bsp_emac_get_device(ctx->cfg.port);
+    if (ctx->emac_dev == NULL) {
+        LOG_E("[EMAC%u] device_get error\r\n", ctx->cfg.port);
+        return ERR_IF;
     }
-    bflb_emac_init(emacx, &emac_cfg);
-    bflb_emac_irq_attach(emacx, lwip_emac_irq_cb, NULL);
-    // bflb_emac_feature_control(emacx, EMAC_CMD_SET_RX_PROMISCUOUS, false);
+    bflb_emac_init(ctx->emac_dev, &ctx->cfg.emac_cfg);
+    bflb_emac_irq_attach(ctx->emac_dev, lwip_emac_irq_cb, ctx);
+    // bflb_emac_feature_control(ctx->emac_dev, EMAC_CMD_SET_RX_PROMISCUOUS, false);
 
     /* scan eth_phy */
-    phy_ctrl.mac_mdio_dev = bsp_emac_get_device(BSP_EMAC_MDIO_DEFAULT_PORT);
-    if (phy_ctrl.mac_mdio_dev == NULL) {
-        LOG_E("mdio device_get error\r\n");
-        return -ERR_IF;
-    }
+    ctx->phy_ctrl.mac_mdio_dev = bsp_emac_get_device(ctx->cfg.mdio_port);
 
-    ret = eth_phy_scan(&phy_ctrl, BSP_EMAC_PHY_DEFAULT_SCAN_START, BSP_EMAC_PHY_DEFAULT_SCAN_END);
+    ret = eth_phy_scan(&ctx->phy_ctrl, ctx->cfg.phy_scan_start, ctx->cfg.phy_scan_end);
     if (ret < 0) {
-        return -ERR_IF;
+        return ERR_IF;
     }
     /* eth_phy init */
-    ret = eth_phy_init(&phy_ctrl, &phy_cfg);
+    ret = eth_phy_init(&ctx->phy_ctrl, &ctx->cfg.phy_cfg);
     if (ret < 0) {
-        return -ERR_IF;
+        return ERR_IF;
     }
 
     /* LAN8720 Timing Adjustment: When in ref_clk input mode, invert the rx_clk. */
-    if ((emac_cfg.clk_internal_mode == false) &&
-        (phy_ctrl.phy_drv->phy_id == EPHY_LAN8720_ID)) {
-        LOG_W("Invert rx_clk for LAN8720 Timing Adjustment.\r\n");
-        bflb_emac_feature_control(emacx, EMAC_CMD_SET_MAC_RX_CLK_INVERT, true);
+    if ((ctx->cfg.emac_cfg.clk_internal_mode == false) && (ctx->phy_ctrl.phy_drv->phy_id == EPHY_LAN8720_ID)) {
+        LOG_W("[EMAC%u] Invert rx_clk for LAN8720 Timing Adjustment.\r\n", ctx->cfg.port);
+        bflb_emac_feature_control(ctx->emac_dev, EMAC_CMD_SET_MAC_RX_CLK_INVERT, true);
     }
 
     /* tx pool queue init */
-    tx_pool_queue = xQueueCreate(CONFIG_BSP_LWIP_EMAC_TX_BUFF_CNT, sizeof(struct bflb_emac_trans_desc_s));
+    ctx->tx_pool_queue = xQueueCreate(tx_buffer_count, sizeof(struct bflb_emac_trans_desc_s));
 
     /* rx process queue init */
-    rx_process_queue = xQueueCreate(CONFIG_BSP_LWIP_EMAC_RX_BUFF_CNT, sizeof(struct bflb_emac_trans_desc_s));
+    ctx->rx_process_queue = xQueueCreate(rx_buffer_count, sizeof(struct bflb_emac_trans_desc_s));
 
     /* initialize tx buffer pool */
-    for (int i = 0; i < CONFIG_BSP_LWIP_EMAC_TX_BUFF_CNT; i++) {
+    for (size_t i = 0; i < tx_buffer_count; i++) {
         struct bflb_emac_trans_desc_s tx_desc = {
-            .buff_addr = emac_tx_buff[i],
+            .buff_addr = (uint8_t *)ctx->cfg.tx_buffer + i * buffer_stride,
         };
-        xQueueSend(tx_pool_queue, &tx_desc, portMAX_DELAY);
+        xQueueSend(ctx->tx_pool_queue, &tx_desc, portMAX_DELAY);
     }
 
     /* initialize hardware rx descriptor queue */
-    for (int i = 0; i < CONFIG_BSP_LWIP_EMAC_RX_BUFF_CNT; i++) {
+    for (size_t i = 0; i < rx_buffer_count; i++) {
         struct bflb_emac_trans_desc_s rx_desc = {
-            .buff_addr = emac_rx_buff[i],
+            .buff_addr = (uint8_t *)ctx->cfg.rx_buffer + i * buffer_stride,
         };
-        bflb_emac_queue_rx_push(emacx, &rx_desc);
-        emac_debug_info.rx.push_cnt += 1;
+        bflb_emac_queue_rx_push(ctx->emac_dev, &rx_desc);
+        ctx->debug_info.rx.push_cnt += 1;
     }
 
     /* create the task that handles the ETH_MAC */
-    LOG_I("[OS] Starting emac rx task...\r\n");
-    xTaskCreate(ethernetif_input, (char *)"emac_rx_task", CONFIG_BSP_LWIP_EMAC_RX_STACK_SIZE, netif, TCPIP_THREAD_PRIO, &emac_rx_handle);
+    LOG_I("[EMAC%u] [OS] Starting emac rx task...\r\n", ctx->cfg.port);
+    xTaskCreate(ethernetif_input, ctx->task_name, ctx->cfg.rx_stack_size, netif, TCPIP_THREAD_PRIO,
+                &ctx->rx_task_handle);
 
     /* Keep EMAC running across PHY link changes. Stopping the controller resets
      * its BD traversal position and requires a complete descriptor rebuild. */
-    bflb_emac_feature_control(emacx, EMAC_CMD_SET_TX_EN, true);
-    bflb_emac_feature_control(emacx, EMAC_CMD_SET_RX_EN, true);
+    bflb_emac_feature_control(ctx->emac_dev, EMAC_CMD_SET_TX_EN, true);
+    bflb_emac_feature_control(ctx->emac_dev, EMAC_CMD_SET_RX_EN, true);
 
     return ERR_OK;
 }
 
 /* tx/rx done callback  */
-static void lwip_emac_irq_cb(void *arg, uint32_t irq_event, struct bflb_emac_trans_desc_s *trans_desc)
+void lwip_emac_irq_cb(void *arg, uint32_t irq_event, struct bflb_emac_trans_desc_s *trans_desc)
 {
+    lwip_emac_port_ctx_t *ctx = (lwip_emac_port_ctx_t *)arg;
     BaseType_t pxHigherPriorityTaskWoken = pdFALSE;
 
     switch (irq_event) {
         case EMAC_IRQ_EVENT_RX_BUSY:
-            LOG_W("rx busy\r\n");
+            LOG_W("[EMAC%u] rx busy\r\n", ctx->cfg.port);
             /* debug */
-            emac_debug_info.rx.eamc_busy_cnt++;
+            ctx->debug_info.rx.eamc_busy_cnt++;
             break;
 
         case EMAC_IRQ_EVENT_RX_CTRL_FRAME:
-            LOG_W("rx ctrl frame, drop.\r\n");
-            trans_desc->attr_flag = 0;
-            trans_desc->err_status = 0;
-            bflb_emac_queue_rx_push(emacx, trans_desc);
+            LOG_W("[EMAC%u] rx ctrl frame, drop.\r\n", ctx->cfg.port);
+            bflb_emac_queue_rx_push(ctx->emac_dev, trans_desc);
             /* debug */
-            emac_debug_info.rx.push_cnt++;
-            emac_debug_info.rx.success_cnt++;
-            emac_debug_info.rx.total_size += trans_desc->data_len;
+            ctx->debug_info.rx.success_cnt++;
+            ctx->debug_info.rx.total_size += trans_desc->data_len;
             break;
 
         case EMAC_IRQ_EVENT_RX_ERR_FRAME:
-            LOG_W("rx err frame sta %d, drop.\r\n", trans_desc->err_status);
-            trans_desc->attr_flag = 0;
-            trans_desc->err_status = 0;
-            bflb_emac_queue_rx_push(emacx, trans_desc);
+            LOG_W("[EMAC%u] rx err frame sta %d, drop.\r\n", ctx->cfg.port, trans_desc->err_status);
+            bflb_emac_queue_rx_push(ctx->emac_dev, trans_desc);
             /* debug */
-            emac_debug_info.rx.push_cnt++;
-            emac_debug_info.rx.error_cnt++;
+            ctx->debug_info.rx.error_cnt++;
             break;
 
         case EMAC_IRQ_EVENT_RX_FRAME:
-            xQueueSendFromISR(rx_process_queue, trans_desc, &pxHigherPriorityTaskWoken);
+            if (xQueueSendFromISR(ctx->rx_process_queue, trans_desc, &pxHigherPriorityTaskWoken) != pdTRUE) {
+                /* rx queue full: return the descriptor straight back to the DMA pool
+                 * instead of dropping it, otherwise the descriptor would leak. */
+                bflb_emac_queue_rx_push(ctx->emac_dev, trans_desc);
+            } else {
+                /* debug */
+                ctx->debug_info.rx.success_cnt++;
+                ctx->debug_info.rx.total_size += trans_desc->data_len;
+            }
             portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
-            /* debug */
-            emac_debug_info.rx.success_cnt++;
-            emac_debug_info.rx.total_size += trans_desc->data_len;
             break;
 
         case EMAC_IRQ_EVENT_TX_FRAME:
-            xQueueSendFromISR(tx_pool_queue, trans_desc, &pxHigherPriorityTaskWoken);
+            if (xQueueSendFromISR(ctx->tx_pool_queue, trans_desc, &pxHigherPriorityTaskWoken) != pdTRUE) {
+                /* tx pool full: re-queue the descriptor back so the TX buffer is not leaked. */
+                bflb_emac_queue_tx_push(ctx->emac_dev, trans_desc);
+            } else {
+                /* debug */
+                ctx->debug_info.tx.success_cnt++;
+                ctx->debug_info.tx.total_size += trans_desc->data_len;
+            }
             portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
-            /* debug */
-            emac_debug_info.tx.success_cnt++;
-            emac_debug_info.tx.total_size += trans_desc->data_len;
             break;
 
         case EMAC_IRQ_EVENT_TX_ERR_FRAME:
-            xQueueSendFromISR(tx_pool_queue, trans_desc, &pxHigherPriorityTaskWoken);
+            xQueueSendFromISR(ctx->tx_pool_queue, trans_desc, &pxHigherPriorityTaskWoken);
             portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
             /* debug */
             if (trans_desc->err_status & (~EMAC_TX_STA_ERR_CS)) {
-                LOG_W("tx err sta:%d\r\n", trans_desc->err_status);
-                emac_debug_info.tx.error_cnt++;
+                LOG_W("[EMAC%u] tx err sta:%d\r\n", ctx->cfg.port, trans_desc->err_status);
+                ctx->debug_info.tx.error_cnt++;
             } else {
-                emac_debug_info.tx.success_cnt++;
-                emac_debug_info.tx.total_size += trans_desc->data_len;
+                ctx->debug_info.tx.success_cnt++;
+                ctx->debug_info.tx.total_size += trans_desc->data_len;
             }
             break;
 
@@ -276,32 +219,32 @@ static void lwip_emac_irq_cb(void *arg, uint32_t irq_event, struct bflb_emac_tra
   */
 static err_t emac_low_level_output(struct netif *netif, struct pbuf *p)
 {
+    lwip_emac_port_ctx_t *ctx = (lwip_emac_port_ctx_t *)netif->state;
     struct bflb_emac_trans_desc_s trans_desc;
     uint16_t byte_copy;
 
-    if (p->tot_len > CONFIG_BSP_LWIP_EMAC_TX_BUFF_SIZE) {
-        LOG_E("tx tot_len size over\r\n");
+    if (p->tot_len > ctx->cfg.emac_cfg.max_frame_len) {
+        LOG_E("[EMAC%u] tx tot_len size over\r\n", ctx->cfg.port);
         return ERR_BUF;
     }
 
-    if (xQueueReceive(tx_pool_queue, &trans_desc, CONFIG_BSP_LWIP_EMAC_GET_TXBUF_TIMEOUT) == pdFALSE) {
-        LOG_W("no tx buff\r\n");
+    if (xQueueReceive(ctx->tx_pool_queue, &trans_desc, ctx->cfg.tx_buf_timeout) != pdPASS) {
+        LOG_W("[EMAC%u] no tx buff\r\n", ctx->cfg.port);
         return ERR_MEM;
     }
 
     byte_copy = pbuf_copy_partial(p, trans_desc.buff_addr, p->tot_len, 0);
     if (byte_copy != p->tot_len) {
-        LOG_E("tx copy failed\r\n");
-        xQueueSend(tx_pool_queue, &trans_desc, 0);
+        LOG_E("[EMAC%u] tx copy failed\r\n", ctx->cfg.port);
+        xQueueSend(ctx->tx_pool_queue, &trans_desc, 0);
         return ERR_BUF;
     }
 
     trans_desc.data_len = byte_copy;
     trans_desc.attr_flag = 0;
     trans_desc.err_status = 0;
-
-    emac_debug_info.tx.push_cnt += 1;
-    bflb_emac_queue_tx_push(emacx, &trans_desc);
+    ctx->debug_info.tx.push_cnt += 1;
+    bflb_emac_queue_tx_push(ctx->emac_dev, &trans_desc);
 
     return ERR_OK;
 }
@@ -318,11 +261,12 @@ static err_t emac_low_level_output(struct netif *netif, struct pbuf *p)
 static void ethernetif_input(void *argument)
 {
     struct netif *netif = (struct netif *)argument;
+    lwip_emac_port_ctx_t *ctx = (lwip_emac_port_ctx_t *)netif->state;
     struct pbuf *p;
     struct bflb_emac_trans_desc_s trans_desc;
 
     while (1) {
-        xQueueReceive(rx_process_queue, &trans_desc, portMAX_DELAY);
+        xQueueReceive(ctx->rx_process_queue, &trans_desc, portMAX_DELAY);
 
 #if PBUF_POOL_SIZE > 0
         p = pbuf_alloc(PBUF_RAW, trans_desc.data_len, PBUF_POOL);
@@ -334,16 +278,16 @@ static void ethernetif_input(void *argument)
             err_t copy_error = pbuf_take(p, trans_desc.buff_addr, trans_desc.data_len);
 
             /* The DMA buffer is no longer needed after pbuf_take(). */
-            emac_debug_info.rx.push_cnt += 1;
-            bflb_emac_queue_rx_push(emacx, &trans_desc);
+            ctx->debug_info.rx.push_cnt += 1;
+            bflb_emac_queue_rx_push(ctx->emac_dev, &trans_desc);
 
             if (copy_error != ERR_OK || netif->input(p, netif) != ERR_OK) {
                 pbuf_free(p);
             }
         } else {
-            emac_debug_info.rx.pbuf_busy_cnt++;
-            emac_debug_info.rx.push_cnt += 1;
-            bflb_emac_queue_rx_push(emacx, &trans_desc);
+            ctx->debug_info.rx.pbuf_busy_cnt++;
+            ctx->debug_info.rx.push_cnt += 1;
+            bflb_emac_queue_rx_push(ctx->emac_dev, &trans_desc);
         }
     }
 }
@@ -362,18 +306,22 @@ static void ethernetif_input(void *argument)
   */
 err_t eth_emac_if_init(struct netif *netif)
 {
+    lwip_emac_port_ctx_t *ctx;
     int ret;
 
     LWIP_ASSERT("netif != NULL", (netif != NULL));
+    ctx = (lwip_emac_port_ctx_t *)netif->state;
+    LWIP_ASSERT("netif->state != NULL", (ctx != NULL));
+
+    ctx->speed_mode = 0;
+    ctx->link_sta = 0;
 
 #if LWIP_NETIF_HOSTNAME
     /* Initialize interface hostname */
-    netif->hostname = "lwip";
-#endif /* LWIP_NETIF_HOSTNAME */
-
+    netif->hostname = ctx->hostname;
+#endif
     netif->name[0] = IFNAME0;
     netif->name[1] = IFNAME1;
-
     /* We directly use etharp_output() here to save a function call.
      * You can instead declare your own function an call etharp_output()
      * from it if you have to do some checks before sending (e.g. if link
@@ -402,36 +350,37 @@ err_t eth_emac_if_init(struct netif *netif)
 /**
  * @brief Configure the EMAC speed and duplex mode for the negotiated PHY mode.
  *
+ * @param[in] ctx EMAC port context.
  * @param[in] speed Negotiated PHY speed and duplex mode.
  */
-static void emac_link_mode_config(int speed)
+static void emac_link_mode_config(lwip_emac_port_ctx_t *ctx, int speed)
 {
     /* 10M/100M speed mode */
     if (speed == EPHY_SPEED_MODE_10M_HALF_DUPLEX || speed == EPHY_SPEED_MODE_10M_FULL_DUPLEX) {
 #if (defined(EMAC_SPEED_10M_SUPPORT) && EMAC_SPEED_10M_SUPPORT)
-        bflb_emac_feature_control(emacx, EMAC_CMD_SET_SPEED_10M, 0);
+        bflb_emac_feature_control(ctx->emac_dev, EMAC_CMD_SET_SPEED_10M, 0);
 #else
-        LOG_E("10M speed mode not support, please check EMAC_SPEED_10M_SUPPORT config !!!\r\n");
+        LOG_E("[EMAC%u] 10M speed mode not support, please check EMAC_SPEED_10M_SUPPORT config !!!\r\n", ctx->cfg.port);
 #endif
     } else {
-        bflb_emac_feature_control(emacx, EMAC_CMD_SET_SPEED_100M, 0);
+        bflb_emac_feature_control(ctx->emac_dev, EMAC_CMD_SET_SPEED_100M, 0);
     }
 
     /* full/half duplex mode */
     if (speed == EPHY_SPEED_MODE_10M_FULL_DUPLEX || speed == EPHY_SPEED_MODE_100M_FULL_DUPLEX) {
-        bflb_emac_feature_control(emacx, EMAC_CMD_SET_FULL_DUPLEX, true);
+        bflb_emac_feature_control(ctx->emac_dev, EMAC_CMD_SET_FULL_DUPLEX, true);
     } else {
-        bflb_emac_feature_control(emacx, EMAC_CMD_SET_FULL_DUPLEX, false);
+        bflb_emac_feature_control(ctx->emac_dev, EMAC_CMD_SET_FULL_DUPLEX, false);
     }
 
     if (speed == EPHY_SPEED_MODE_10M_HALF_DUPLEX) {
-        LOG_I("eth_phy speed: 10M_HALF_DUPLEX\r\n");
+        LOG_I("[EMAC%u] eth_phy speed: 10M_HALF_DUPLEX\r\n", ctx->cfg.port);
     } else if (speed == EPHY_SPEED_MODE_10M_FULL_DUPLEX) {
-        LOG_I("eth_phy speed: 10M_FULL_DUPLEX\r\n");
+        LOG_I("[EMAC%u] eth_phy speed: 10M_FULL_DUPLEX\r\n", ctx->cfg.port);
     } else if (speed == EPHY_SPEED_MODE_100M_HALF_DUPLEX) {
-        LOG_I("eth_phy speed: 100M_HALF_DUPLEX\r\n");
+        LOG_I("[EMAC%u] eth_phy speed: 100M_HALF_DUPLEX\r\n", ctx->cfg.port);
     } else if (speed == EPHY_SPEED_MODE_100M_FULL_DUPLEX) {
-        LOG_I("eth_phy speed: 100M_FULL_DUPLEX\r\n");
+        LOG_I("[EMAC%u] eth_phy speed: 100M_FULL_DUPLEX\r\n", ctx->cfg.port);
     }
 }
 
@@ -446,37 +395,34 @@ static void emac_link_mode_config(int speed)
  */
 void eth_link_state_update(struct netif *netif)
 {
-    static int speed_mode = 0;
-    static int link_sta = 0;
-
-    int sta = eth_phy_ctrl(&phy_ctrl, EPHY_CMD_GET_LINK_STA, 0);
-    int speed = eth_phy_ctrl(&phy_ctrl, EPHY_CMD_GET_SPEED_MODE, 0);
+    lwip_emac_port_ctx_t *ctx = (lwip_emac_port_ctx_t *)netif->state;
+    int sta = eth_phy_ctrl(&ctx->phy_ctrl, EPHY_CMD_GET_LINK_STA, 0);
+    int speed = eth_phy_ctrl(&ctx->phy_ctrl, EPHY_CMD_GET_SPEED_MODE, 0);
 
     if (sta != EPHY_LINK_STA_UP) {
-        if (link_sta == EPHY_LINK_STA_UP) {
-            LOG_W("Lwip Eth Emac LinkDown !!!\r\n");
+        if (ctx->link_sta == EPHY_LINK_STA_UP) {
+            LOG_W("[EMAC%u] Lwip Eth Emac LinkDown !!!\r\n", ctx->cfg.port);
             netifapi_netif_set_link_down(netif);
         }
-
-        link_sta = 0;
-        speed_mode = 0;
+        ctx->link_sta = 0;
+        ctx->speed_mode = 0;
         return;
     }
 
-    if (link_sta != EPHY_LINK_STA_UP) {
-        LOG_W("Lwip Eth Emac LinkUp !!!\r\n");
-        emac_link_mode_config(speed);
-        speed_mode = speed;
-        link_sta = sta;
+    if (ctx->link_sta != EPHY_LINK_STA_UP) {
+        LOG_W("[EMAC%u] Lwip Eth Emac LinkUp !!!\r\n", ctx->cfg.port);
+        emac_link_mode_config(ctx, speed);
+        ctx->speed_mode = speed;
+        ctx->link_sta = sta;
         netifapi_netif_set_link_up(netif);
         return;
     }
 
-    if (speed_mode != speed) {
-        LOG_W("Lwip Eth Emac Speed Mode Has Changed !!!\r\n");
+    if (ctx->speed_mode != speed) {
+        LOG_W("[EMAC%u] Lwip Eth Emac Speed Mode Has Changed !!!\r\n", ctx->cfg.port);
         netifapi_netif_set_link_down(netif);
-        emac_link_mode_config(speed);
-        speed_mode = speed;
+        emac_link_mode_config(ctx, speed);
+        ctx->speed_mode = speed;
         netifapi_netif_set_link_up(netif);
     }
 }
@@ -486,25 +432,39 @@ void eth_link_state_update(struct netif *netif)
 
 int lwip_emac_info_cmd(int argc, char **argv)
 {
-    uint32_t tx_db_avail = bflb_emac_feature_control(emacx, EMAC_CMD_GET_TX_DB_AVAILABLE, 0);
-    uint32_t rx_db_avail = bflb_emac_feature_control(emacx, EMAC_CMD_GET_RX_DB_AVAILABLE, 0);
+    struct netif *netif;
 
-    LOG_I("TX: success cnt:%d, error cnt:%d, total size:%lldByte\r\n",
-          emac_debug_info.tx.success_cnt, emac_debug_info.tx.error_cnt, emac_debug_info.tx.total_size);
-    LOG_I("    push_cnt:%d, tx_db available:%d, tx_bd_ptr:%d\r\n",
-          emac_debug_info.tx.push_cnt, tx_db_avail, bflb_emac_feature_control(emacx, EMAC_CMD_GET_TX_BD_PTR, 0));
+    NETIF_FOREACH(netif)
+    {
+        lwip_emac_port_ctx_t *ctx;
+        uint32_t tx_db_avail;
+        uint32_t rx_db_avail;
 
-    LOG_I("RX: success cnt:%d, error cnt:%d, total size:%lldByte\r\n",
-          emac_debug_info.rx.success_cnt, emac_debug_info.rx.error_cnt, emac_debug_info.rx.total_size);
-    LOG_I("    push_cnt:%d, rx_db available:%d, rx_bd_ptr:%d\r\n",
-          emac_debug_info.rx.push_cnt, rx_db_avail, bflb_emac_feature_control(emacx, EMAC_CMD_GET_RX_BD_PTR, 0));
-    LOG_I("    emac busy cnt:%d, pbuf busy cnt:%d\r\n",
-          emac_debug_info.rx.eamc_busy_cnt, emac_debug_info.rx.pbuf_busy_cnt);
+        if (netif->linkoutput != emac_low_level_output) {
+            continue;
+        }
 
-    LOG_RI("\r\n");
+        ctx = (lwip_emac_port_ctx_t *)netif->state;
+        tx_db_avail = bflb_emac_feature_control(ctx->emac_dev, EMAC_CMD_GET_TX_DB_AVAILABLE, 0);
+        rx_db_avail = bflb_emac_feature_control(ctx->emac_dev, EMAC_CMD_GET_RX_DB_AVAILABLE, 0);
+
+        LOG_I("[EMAC%u] TX: success cnt:%d, error cnt:%d, total size:%lldByte\r\n", ctx->cfg.port,
+              ctx->debug_info.tx.success_cnt, ctx->debug_info.tx.error_cnt, ctx->debug_info.tx.total_size);
+        LOG_I("[EMAC%u]     push_cnt:%d, tx_db available:%d, tx_bd_ptr:%d\r\n", ctx->cfg.port,
+              ctx->debug_info.tx.push_cnt, tx_db_avail,
+              bflb_emac_feature_control(ctx->emac_dev, EMAC_CMD_GET_TX_BD_PTR, 0));
+
+        LOG_I("[EMAC%u] RX: success cnt:%d, error cnt:%d, total size:%lldByte\r\n", ctx->cfg.port,
+              ctx->debug_info.rx.success_cnt, ctx->debug_info.rx.error_cnt, ctx->debug_info.rx.total_size);
+        LOG_I("[EMAC%u]     push_cnt:%d, rx_db available:%d, rx_bd_ptr:%d\r\n", ctx->cfg.port,
+              ctx->debug_info.rx.push_cnt, rx_db_avail,
+              bflb_emac_feature_control(ctx->emac_dev, EMAC_CMD_GET_RX_BD_PTR, 0));
+        LOG_I("[EMAC%u]     emac busy cnt:%d, pbuf busy cnt:%d\r\n", ctx->cfg.port, ctx->debug_info.rx.eamc_busy_cnt,
+              ctx->debug_info.rx.pbuf_busy_cnt);
+        LOG_RI("\r\n");
+    }
 
     return 0;
 }
 SHELL_CMD_EXPORT_ALIAS(lwip_emac_info_cmd, lwip_emac_info, put netif emac info);
-
 #endif

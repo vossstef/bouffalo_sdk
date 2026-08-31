@@ -1,4 +1,6 @@
+#include "bflb_core.h"
 #include "bflb_mtimer.h"
+#include "bflb_name.h"
 
 #include "usbh_core.h"
 #include "usbh_msc.h"
@@ -9,7 +11,6 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "shell.h"
-#include "bl616_glb.h"
 
 FATFS fs;
 FIL fnew;
@@ -218,12 +219,15 @@ void usbh_msc_stop(struct usbh_msc *msc_class)
 
 int usbh_init(int argc, char **argv)
 {
-    *(volatile uint32_t *)(GLB_BASE + GLB_CGEN_CFG1_OFFSET) |= 1U << 13;
-    *(volatile uint32_t *)(GLB_BASE + GLB_CGEN_CFG2_OFFSET) |= 1U << 19;
+    struct bflb_device_s *usb_dev;
 
-    GLB_Set_USB_CLK_From_WIFIPLL(1);
+    usb_dev = bflb_device_get_by_name(BFLB_NAME_USB_V2);
+    if (usb_dev == NULL) {
+        USB_LOG_ERR("usb device not found\r\n");
+        return -1;
+    }
 
-    usbh_initialize(0, USB_BASE);
+    usbh_initialize(0, usb_dev->reg_base, NULL);
 
     return 0;
 }

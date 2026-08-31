@@ -10,7 +10,12 @@ config MULTIMEDIA
     help
       Build the multimedia framework and its codec backends.
 
-if MULTIMEDIA
+menu "Multimedia Options"
+    depends on MULTIMEDIA
+
+config ALGRTC
+    bool "Audio algorithm runtime"
+    default n
 
 config AACDEC
     bool "AAC decoder"
@@ -114,6 +119,12 @@ config SMART_AUDIO_BL616
     help
       Build the BL616 smart audio solution.
 
+config BL606P_PLAYER
+    bool "BL606P audio player"
+    default n
+    help
+      Enable the legacy BL606P audio player integration.
+
 config AV
     bool "Audio/video framework"
     default n
@@ -200,6 +211,76 @@ config XCODEC_OUTPUT_CACHE
     help
       Cache decoded audio output in the X codec pipeline.
 
-endif # CONFIG_MULTIMEDIA
+endmenu
+
+menu "Audio player compatibility"
+    depends on MULTIMEDIA
+
+config MP3_PLAYER_TEST_MP3
+    bool "MP3 player test"
+    default n
+config MP3_PLAYER_TASK_STACK_DEPTH
+    int "MP3 player task stack depth"
+    default 376
+config MP3_PLAYER_CACHE_BYTES
+    int "MP3 player cache bytes"
+    default 4096
+config MP3_PLAYER_RESAMPLE_TX_BLOCK_BYTES
+    int "MP3 player resample block bytes"
+    default 0
+config WAVE_PLAYER_CODEC_REG_CLI
+    int "Wave player codec CLI"
+    default 0
+config WAVE_PLAYER_ENABLE_REC
+    bool "Wave player recording"
+    default n
+config WAVE_PLAYER_ENABLE_REC_RB
+    bool "Wave player record loopback"
+    default y if WAVE_PLAYER_ENABLE_REC
+    default n
+config WAVE_PLAYER_ENABLE_RESAMPLE
+    bool "Wave player resampling"
+    default n
+config WAVE_PLAYER_FIX_SAMPLE_RATE
+    int "Wave player fixed sample rate"
+    default 0
+config WAVE_PLAYER_RESAMPLE_QUALITY
+    int "Wave player resample quality"
+    default 5
+config WAVE_PLAYER_OUT_CHANNELS
+    int "Wave player output channels"
+    default 2
+config WAVE_PLAYER_OUT_SAMPLES
+    int "Wave player output samples"
+    default 512
+config WAVE_PLAYER_REC_CHANNELS
+    int "Wave player record channels"
+    default 2
+config WAVE_PLAYER_REC_DEFAULT_MIC_PGA
+    int "Wave player default microphone PGA"
+    default 90
+config WAVE_PLAYER_REC_DMA_BLOCKS
+    int "Wave player record DMA blocks"
+    default 8
+config WAVE_PLAYER_REC_FRAME_MS
+    int "Wave player record frame duration"
+    default 20
+config WAVE_PLAYER_REC_MAX_FS_HZ
+    int "Wave player maximum record rate"
+    default 32000
+config WAVE_PLAYER_REC_MONO_SOURCE
+    int "Wave player mono source"
+    default 0
+config WAVE_PLAYER_REC_SECONDS
+    int "Wave player record seconds"
+    default 2
+config WAVE_PLAYER_TASK_STACK_DEPTH
+    int "Wave player task stack depth"
+    default 256
+config FLAC
+    bool "FLAC support"
+    default n
+
+endmenu
 
 endmenu

@@ -26,6 +26,10 @@ target_sources(app PRIVATE
                    wifi_tcp_client.c
                    wifi_tcp_server.c)
 
+if(NOT "${CHIP}" STREQUAL "bl602")
+    target_sources(app PRIVATE wifi_scan_callback.c)
+endif()
+
 sdk_add_include_directories(.)
 
 sdk_set_main_file(main.c)

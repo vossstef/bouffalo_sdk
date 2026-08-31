@@ -82,6 +82,7 @@ endif()
 
 if((${CHIP} STREQUAL "bl618dg"))
     sdk_add_compile_definitions(-DCHIP_BL618DG)
+    sdk_add_compile_definitions(-DCONFIG_APP_ENCRYPT_AFTER_SIGN)
 endif()
 
 sdk_add_compile_definitions(-D CONFIG_DISABLE_NOCACHE_RAM_LOAD)

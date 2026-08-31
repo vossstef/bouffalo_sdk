@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 #include <inttypes.h>
 #include "conn.h"
 #include "conn_internal.h"
@@ -6,6 +7,7 @@
 #include "hci_core.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "timers.h"
 #if defined(CONFIG_SHELL)
 #include "shell.h"
 #else
@@ -195,6 +197,151 @@ BLE_CLI(gatt_indicate);
 BLE_CLI(conn_count);
 BLE_CLI(directed_adv);
 
+#if defined(BL618DG)
+/* RF time-slice between WiFi and BT, only usable on BL618DG shared-RF parts. */
+#define BLE_COEX_RF_DEFAULT_PERIOD_MS   100U
+#define BLE_COEX_RF_DEFAULT_BT_MS       10U
+
+static TimerHandle_t g_ble_coex_rf_timer;
+static bool g_ble_coex_rf_running;
+static bool g_ble_coex_rf_bt_window;
+static uint32_t g_ble_coex_rf_period_ms;
+static uint32_t g_ble_coex_rf_bt_ms;
+
+static TickType_t ble_coex_rf_to_ticks(uint32_t ms)
+{
+    TickType_t ticks = pdMS_TO_TICKS(ms);
+
+    return ticks == 0 ? 1 : ticks;
+}
+
+static void ble_coex_rf_timer_callback(TimerHandle_t timer)
+{
+    uint32_t next_ms;
+
+    taskENTER_CRITICAL();
+    if (!g_ble_coex_rf_running) {
+        taskEXIT_CRITICAL();
+        return;
+    }
+
+    g_ble_coex_rf_bt_window = !g_ble_coex_rf_bt_window;
+    if (g_ble_coex_rf_bt_window) {
+        btble_controller_set_coex_bt_only();
+        next_ms = g_ble_coex_rf_bt_ms;
+    } else {
+        btble_controller_set_coex_wifi_only();
+        next_ms = g_ble_coex_rf_period_ms - g_ble_coex_rf_bt_ms;
+    }
+    taskEXIT_CRITICAL();
+
+    if (xTimerChangePeriod(timer, ble_coex_rf_to_ticks(next_ms), 0) != pdPASS) {
+        taskENTER_CRITICAL();
+        g_ble_coex_rf_running = false;
+        btble_controller_set_coex_bt_only();
+        taskEXIT_CRITICAL();
+        vOutputString("ble_coex_rf: time slice stopped (timer queue full)\r\n");
+    }
+}
+
+static int ble_coex_rf_slice_start(uint32_t period_ms, uint32_t bt_ms)
+{
+    if (period_ms == 0 || bt_ms == 0 || bt_ms >= period_ms) {
+        return -1;
+    }
+
+    if (g_ble_coex_rf_timer == NULL) {
+        g_ble_coex_rf_timer = xTimerCreate("ble_coex_rf",
+                                           ble_coex_rf_to_ticks(bt_ms),
+                                           pdFALSE, NULL,
+                                           ble_coex_rf_timer_callback);
+        if (g_ble_coex_rf_timer == NULL) {
+            return -2;
+        }
+    }
+
+    taskENTER_CRITICAL();
+    g_ble_coex_rf_running = false;
+    taskEXIT_CRITICAL();
+    (void)xTimerStop(g_ble_coex_rf_timer, portMAX_DELAY);
+
+    taskENTER_CRITICAL();
+    g_ble_coex_rf_period_ms = period_ms;
+    g_ble_coex_rf_bt_ms = bt_ms;
+    g_ble_coex_rf_bt_window = true;
+    g_ble_coex_rf_running = true;
+    btble_controller_set_coex_bt_only();
+    taskEXIT_CRITICAL();
+
+    if (xTimerChangePeriod(g_ble_coex_rf_timer,
+                           ble_coex_rf_to_ticks(bt_ms),
+                           portMAX_DELAY) != pdPASS) {
+        taskENTER_CRITICAL();
+        g_ble_coex_rf_running = false;
+        btble_controller_set_coex_bt_only();
+        taskEXIT_CRITICAL();
+        return -2;
+    }
+
+    return 0;
+}
+
+static int ble_coex_rf_slice_stop(void)
+{
+    taskENTER_CRITICAL();
+    g_ble_coex_rf_running = false;
+    btble_controller_set_coex_bt_only();
+    taskEXIT_CRITICAL();
+
+    if (g_ble_coex_rf_timer != NULL) {
+        (void)xTimerStop(g_ble_coex_rf_timer, portMAX_DELAY);
+    }
+
+    return 0;
+}
+
+BLE_CLI(coex_rf_start)
+{
+    uint32_t period_ms = BLE_COEX_RF_DEFAULT_PERIOD_MS;
+    uint32_t bt_ms = BLE_COEX_RF_DEFAULT_BT_MS;
+    int ret;
+
+    if (argc == 3) {
+        period_ms = strtoul(argv[1], NULL, 0);
+        bt_ms = strtoul(argv[2], NULL, 0);
+    } else if (argc != 1) {
+        vOutputString("Usage: ble_coex_rf_start [period_ms] [bt_ms]\r\n");
+        return;
+    }
+
+    ret = ble_coex_rf_slice_start(period_ms, bt_ms);
+    vOutputString("ble_coex_rf_start: ret=%d period=%lu bt=%lu\r\n",
+                  ret, (unsigned long)period_ms, (unsigned long)bt_ms);
+}
+
+BLE_CLI(coex_rf_stop)
+{
+    vOutputString("ble_coex_rf_stop: ret=%d\r\n", ble_coex_rf_slice_stop());
+}
+
+BLE_CLI(coex_rf_set)
+{
+    if (argc != 2 || (strcmp(argv[1], "bt") != 0 && strcmp(argv[1], "wifi") != 0)) {
+        vOutputString("Usage: ble_coex_rf_set bt|wifi\r\n");
+        return;
+    }
+
+    /* Manual override wins; stop the time slice so the timer does not fight it. */
+    (void)ble_coex_rf_slice_stop();
+    if (strcmp(argv[1], "bt") == 0) {
+        btble_controller_set_coex_bt_only();
+    } else {
+        btble_controller_set_coex_wifi_only();
+    }
+    vOutputString("ble_coex_rf_set: rf forced to %s\r\n", argv[1]);
+}
+#endif /* BL618DG */
+
 #if defined(CONFIG_SHELL)
     SHELL_CMD_EXPORT_ALIAS(blecli_enable, ble_enable, ble enable Parameter:[Null]);
     SHELL_CMD_EXPORT_ALIAS(blecli_set_chan_map, ble_set_chan_map, ble set channel map Parameter:[channels]);
@@ -366,6 +513,11 @@ BLE_CLI(directed_adv);
 #endif /* CONFIG_BLE_TP_SERVER */
     SHELL_CMD_EXPORT_ALIAS(blecli_conn_count, ble_conn_count, ble conn count Parameter:[Null]);
     SHELL_CMD_EXPORT_ALIAS(blecli_directed_adv, ble_directed_adv, ble directed adv Parameter:[duty:0=high/1=low] [addr_type:0=pub/1=rand] [addr:6-byte hex MSB]);
+#if defined(BL618DG)
+    SHELL_CMD_EXPORT_ALIAS(blecli_coex_rf_start, ble_coex_rf_start, ble coex rf time slice start Parameter:[period_ms:default 100] [bt_ms:default 10]);
+    SHELL_CMD_EXPORT_ALIAS(blecli_coex_rf_stop, ble_coex_rf_stop, ble coex rf time slice stop Parameter:[Null]);
+    SHELL_CMD_EXPORT_ALIAS(blecli_coex_rf_set, ble_coex_rf_set, ble coex rf force direction Parameter:[bt|wifi]);
+#endif /* BL618DG */
 #else /* CONFIG_SHELL */
 const struct cli_command btStackCmdSet[] STATIC_CLI_CMD_ATTRIBUTE = {
 #if 1
@@ -527,6 +679,11 @@ const struct cli_command btStackCmdSet[] STATIC_CLI_CMD_ATTRIBUTE = {
     {"ble_tx_test","LE tx test\r\nparameter [tx channel, 1 octet, test data length, 1 octet, packet payload, 1 octet, phy, 1 octet]",blecli_le_enh_tx_test},
     {"ble_rx_test","LE tx test\r\nparameter [rx channel, 1 octet, phy, 1 octet, modulation index, 1 octet]",blecli_le_enh_rx_test},
     {"ble_test_end","",blecli_le_test_end},
+#if defined(BL618DG)
+    {"ble_coex_rf_start","ble coex rf time slice start\r\nParameter [period_ms, default 100] [bt_ms, default 10]\r\n",blecli_coex_rf_start},
+    {"ble_coex_rf_stop","ble coex rf time slice stop\r\nParameter [Null]\r\n",blecli_coex_rf_stop},
+    {"ble_coex_rf_set","ble coex rf force direction\r\nParameter [bt|wifi]\r\n",blecli_coex_rf_set},
+#endif /* BL618DG */
 #else
     {"ble_init", "", blecli_init},
 #if defined(CONFIG_BLE_TP_SERVER)
@@ -602,6 +759,11 @@ const struct cli_command btStackCmdSet[] STATIC_CLI_CMD_ATTRIBUTE = {
 #endif /* CONFIG_BLE_TP_SERVER */
     {"ble_conn_count", "", blecli_conn_count},
     {"ble_directed_adv", "", blecli_directed_adv},
+#if defined(BL618DG)
+    {"ble_coex_rf_start", "", blecli_coex_rf_start},
+    {"ble_coex_rf_stop", "", blecli_coex_rf_stop},
+    {"ble_coex_rf_set", "", blecli_coex_rf_set},
+#endif /* BL618DG */
 };
 #endif /* CONFIG_SHELL */
 

@@ -127,19 +127,6 @@ void bl_mipi_dpi_v2_osd0_base_layer_swap(void)
     }
 }
 
-#if (DPI_PIXEL_CLOCK_USE_SW_GPIO)
-/* Pixel clock via software GPIO (CLKOUT). Only LCD_DPI_STANDARD uses this; other panels
- * drive PCLK from the DPI peripheral's hardware pin (see DPI_PIXEL_CLOCK_USE_SW_GPIO). */
-static void dpi_pixel_clock_output(void)
-{
-    struct bflb_device_s *gpio;
-
-    gpio = bflb_device_get_by_name("gpio");
-
-    bflb_gpio_init(gpio, GPIO_PIN_0, GPIO_FUNC_CLKOUT | GPIO_ALTERNATE | GPIO_PULLUP | GPIO_SMT_EN | GPIO_DRV_1);
-}
-#endif
-
 #if !VIDEO_FULLSCREEN
 /* Sub-panel (centered) video: MJDEC decodes the small frame into a compact scratch, then
  * DMA2D stride-copies it into the centered window of the panel buffer (borders stay black). */
@@ -419,11 +406,6 @@ int dpi_manager_init(void)
         bflb_l1c_dcache_clean_range(yuv_images[i], YUV_BUFFER_SIZE);
     }
 #endif
-
-#if (DPI_PIXEL_CLOCK_USE_SW_GPIO)
-    dpi_pixel_clock_output();
-#endif
-
     return 0;
 }
 

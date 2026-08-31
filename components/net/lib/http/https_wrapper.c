@@ -740,6 +740,21 @@ int https_wrapper_recv(https_wrapper_handle_t https, uint8_t *data, uint32_t siz
     return recv(ctx->fd, data, size, flags);
 }
 
+int https_wrapper_ssl_check_pending(https_wrapper_handle_t https)
+{
+    https_wrapper_ctx_t *ctx = (https_wrapper_ctx_t *)https;
+
+#if !defined(CONFIG_HTTP_CLIENT_NO_HTTPS)
+    if (ctx != NULL && ctx->ssl != NULL) {
+        return mbedtls_ssl_check_pending(&ctx->ssl->ssl);
+    }
+#else
+    (void)ctx;
+#endif
+
+    return 0;
+}
+
 int https_wrapper_destroy(https_wrapper_handle_t https)
 {
     https_wrapper_ctx_t *ctx = (https_wrapper_ctx_t *)https;

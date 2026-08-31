@@ -231,6 +231,13 @@ fih_ret bflb_sp_boot_parse_aesiv(boot2_image_config *g_boot_img_cfg, uint8_t *da
     boot_aes_config *cfg = (boot_aes_config *)data;
 
     if (cfg->crc32 == BFLB_Soft_CRC32(cfg->aes_iv, sizeof(cfg->aes_iv))) {
+#if defined(CONFIG_APP_ENCRYPT_AFTER_SIGN)
+        if (g_boot_img_cfg->encrypt_after_sign &&
+            ((cfg->aes_iv[12] | cfg->aes_iv[13] |
+              cfg->aes_iv[14] | cfg->aes_iv[15]) != 0U)) {
+            FIH_RET(fih_ret_encode_status(BFLB_BOOT2_IMG_AES_IV_LEN_ERROR));
+        }
+#endif
         arch_memcpy_fast(g_boot_img_cfg->aes_iv, cfg->aes_iv, sizeof(boot_aes_config));
 
         /* Update image hash */
@@ -300,12 +307,20 @@ fih_ret bflb_sp_boot_parser_check_signature(boot2_image_config *g_boot_img_cfg)
 
         BOOT2_MSG_DBG("Check sig1\r\n");
         startTime = bflb_mtimer_get_time_ms();
-        bflb_sec_ecdsa_init(&ecdsa_handle, curve_type);
+#if defined(CONFIG_APP_ENCRYPT_AFTER_SIGN)
+        if (g_boot_img_cfg->encrypt_after_sign) {
+            hal_boot2_reset_sec_eng();
+        }
+#endif
+        if (bflb_sec_ecdsa_init(&ecdsa_handle, curve_type) != 0) {
+            FIH_RET(fih_ret_encode_status(BFLB_BOOT2_IMG_SIGN_ERROR));
+        }
 
         ecdsa_handle.publicKeyx = (uint32_t *)g_boot_img_cfg->eckey_x;
         ecdsa_handle.publicKeyy = (uint32_t *)g_boot_img_cfg->eckey_y;
 
-        if (bflb_sec_ecdsa_verify(&ecdsa_handle, pk_hash, hash_len_words, (uint32_t *)g_boot_img_cfg->signature,
+        if (bflb_sec_ecdsa_verify(&ecdsa_handle, pk_hash, hash_len_words,
+                                  (uint32_t *)g_boot_img_cfg->signature,
                                   (uint32_t *)&g_boot_img_cfg->signature[signature_size]) != 0) {
             BOOT2_MSG_DBG("verify failed\r\n");
             FIH_RET(fih_ret_encode_status(BFLB_BOOT2_IMG_SIGN_ERROR));

@@ -4,6 +4,14 @@ find_package(bouffalo_sdk REQUIRED HINTS $ENV{BL_SDK_BASE})
 
 # User
 sdk_add_compile_definitions(-DCONFIG_CLI_CMD_ENABLE)
+sdk_add_compile_definitions(-DCONFIG_WIFI_COEX_DEBUG_CLI)
+
+# Only these PHYRF libraries export cmd_set_btble_combo/standalone.
+if(("${CHIP}" STREQUAL "bl618dg") AND
+   ((("${CPU_MODEL}" STREQUAL "b0") AND (NOT CONFIG_PHY_LPFW)) OR
+    CONFIG_PHY_CLI))
+sdk_add_compile_definitions(-DCONFIG_BL618DG_PHYRF_BTBLE_PATH_COMMANDS)
+endif()
 
 if(CONFIG_WIFI_GATEWAY)
 sdk_add_compile_definitions(-DFHOST_BUFFER_COPY=1)

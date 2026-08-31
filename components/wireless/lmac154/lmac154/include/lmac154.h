@@ -6,9 +6,17 @@
 #include <string.h>
 #include "lmac154_frame.h"
 
+#ifndef CONFIG_LMAC154_DBG
+#define CONFIG_LMAC154_DBG 0
+#endif
+
+#ifndef CONFIG_LMAC154_DBG_ALL
+#define CONFIG_LMAC154_DBG_ALL 0
+#endif
+
 #define VERSION_LMAC154_MAJOR 1
 #define VERSION_LMAC154_MINOR 7
-#define VERSION_LMAC154_PATCH 10
+#define VERSION_LMAC154_PATCH 11
 
 // #define VERSION_LMAC154_SRC_EXTRA_INFO "customer-1"
 
@@ -439,6 +447,15 @@ int lmac154_monitor(uint32_t monitor_timeout);
  *
  * @return The lmac154 interrupt handler
  *
+ * @note  Use this handler for the legacy single-stack send/receive path.
+ *        Send entry points: lmac154_triggerTx(), lmac154_triggerParamTx(),
+ *        lmac154_triggerParamTxExt(), and lmac154_writeTxAckFrame().
+ *        Receive control: lmac154_enableRx(), lmac154_forceEnableRX(), and
+ *        lmac154_disableRx().
+ *        Interrupt-context event callbacks: lmac154_txDoneEvent(),
+ *        lmac154_ackEvent(), lmac154_ackFrameEvent(), lmac154_rxDoneEvent(),
+ *        lmac154_rxStartEvent(), and lmac154_hwAutoTxAckDoneEvent().
+ *
 *******************************************************************************/
 lmac154_isr_t lmac154_getInterruptHandler(void);
 
@@ -463,6 +480,13 @@ bool lmac154_registerEventCallback(lmac154_stack_idx_t stack_idx,
  * @param  stack2_rxDoneCallback, frame received with destination panid on stack 2
  *
  * @return The m154 irq handler
+ *
+ * @note  Use this callback for the dual-stack send/receive path.
+ *        Register stack receive callbacks with
+ *        lmac154_registerEventCallback() and enable stacks with
+ *        lmac154_enable1stStack() or lmac154_enable2ndStack().
+ *        Send entry points: lmac154_triggerParamTxExt() and
+ *        lmac154_writeTxAckFrame().
  *
 *******************************************************************************/
 lmac154_isr_t lmac154_getInterruptCallback(void);

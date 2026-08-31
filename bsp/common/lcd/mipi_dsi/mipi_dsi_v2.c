@@ -234,13 +234,18 @@ void mipi_dsi_v2_hs_mode_start(const mipi_dsi_v2_timing_t *cfg)
      * (display_clk_sel / display_clk_div), so read it back instead of carrying
      * a hand-copied constant that can drift out of sync with the divider. */
     uint32_t dpi_pixel_clock = Clock_Peripheral_Clock_Get(BL_PERIPHERAL_CLOCK_DISPLAY);
+
+    /* bflb_dsi_set_line_buffer_threshold() requires frame_width to be a multiple of 4;
+     * round up cfg->width to meet that constraint (DPI/DSI timing still uses actual width). */
+    uint32_t lb_width = (cfg->width + 3) & ~3u;
+
     if(dpi_pixel_clock>=60000000){
-        bflb_dsi_set_line_buffer_threshold(dsi_dev, cfg->width, dpi_pixel_clock+4000000, cfg->dsi_hs_clock,
-                                       cfg->data_type, cfg->lane_num);//dpi_pixel_clock
+        bflb_dsi_set_line_buffer_threshold(dsi_dev, lb_width, dpi_pixel_clock+4000000, cfg->dsi_hs_clock,
+                                       cfg->data_type, cfg->lane_num);
     }
     else{
-        bflb_dsi_set_line_buffer_threshold(dsi_dev, cfg->width, dpi_pixel_clock, cfg->dsi_hs_clock,
-                                       cfg->data_type, cfg->lane_num);//dpi_pixel_clock
+        bflb_dsi_set_line_buffer_threshold(dsi_dev, lb_width, dpi_pixel_clock, cfg->dsi_hs_clock,
+                                       cfg->data_type, cfg->lane_num);
     }
     bflb_dsi_phy_hs_mode_start(dsi_dev);
 }
@@ -476,21 +481,31 @@ int mipi_dsi_v2_frame_callback_register(uint32_t callback_type, void (*callback)
 
 static struct bflb_device_s *dsi_v2_rgb565_dpi = NULL;
 static struct bflb_device_s *dsi_v2_rgb565_osd = NULL;
-static void *dsi_v2_rgb565_screen_using = NULL;
+static void *volatile dsi_v2_rgb565_screen_using = NULL;
+static void *volatile dsi_v2_rgb565_screen_pending = NULL;
 static void (*dsi_v2_rgb565_swap_callback)(void) = NULL;
 static void (*dsi_v2_rgb565_cycle_callback)(void) = NULL;
 
 static void mipi_dsi_v2_rgb565_osd1_isr(int irq, void *arg)
 {
+    bool swapped = false;
+
     (void)irq;
     (void)arg;
 
     bflb_osd_int_clear(dsi_v2_rgb565_osd);
 
+    if (dsi_v2_rgb565_screen_using != dsi_v2_rgb565_screen_pending) {
+        bflb_dpi_framebuffer_switch(
+            dsi_v2_rgb565_dpi, (uint32_t)(uintptr_t)dsi_v2_rgb565_screen_pending);
+        dsi_v2_rgb565_screen_using = dsi_v2_rgb565_screen_pending;
+        swapped = true;
+    }
+
     if (dsi_v2_rgb565_cycle_callback != NULL) {
         dsi_v2_rgb565_cycle_callback();
     }
-    if (dsi_v2_rgb565_swap_callback != NULL) {
+    if (swapped && dsi_v2_rgb565_swap_callback != NULL) {
         dsi_v2_rgb565_swap_callback();
     }
 }
@@ -554,6 +569,7 @@ int mipi_dsi_v2_rgb565_display_init(const mipi_dsi_v2_timing_t *cfg, uint32_t fr
     bflb_irq_enable(dsi_v2_rgb565_osd->irq_num);
 
     dsi_v2_rgb565_screen_using = (void *)(uintptr_t)framebuffer_addr;
+    dsi_v2_rgb565_screen_pending = (void *)(uintptr_t)framebuffer_addr;
     return 0;
 }
 
@@ -566,8 +582,12 @@ int mipi_dsi_v2_rgb565_screen_switch(void *screen_buffer)
         return -2;
     }
 
-    bflb_dpi_framebuffer_switch(dsi_v2_rgb565_dpi, (uint32_t)(uintptr_t)screen_buffer);
-    dsi_v2_rgb565_screen_using = screen_buffer;
+    /* Need to clean D-cache. */
+    if (dsi_v2_osd_buf_size != 0U) {
+        bflb_l1c_dcache_clean_range(screen_buffer, dsi_v2_osd_buf_size);
+    }
+
+    dsi_v2_rgb565_screen_pending = screen_buffer;
     return 0;
 }
 

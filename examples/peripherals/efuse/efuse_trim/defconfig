@@ -1,2 +1,1 @@
-CONFIG_VLIBC    =n
 CONFIG_BFLB_LOG =n

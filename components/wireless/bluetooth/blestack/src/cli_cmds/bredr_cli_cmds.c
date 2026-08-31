@@ -25,7 +25,13 @@
 //#include <rfcomm.h>
 #endif
 #if defined(CONFIG_BT_HFP)
+#include <FreeRTOS.h>
+#include <task.h>
 #include <hfp_hf.h>
+#include "btble_lib_api.h"
+#if defined(CONFIG_BT_HFP_SCO_TEST)
+#include "hfp_sco_audio.h"
+#endif
 #endif
 #if defined(CONFIG_BT_SPP)
 #include <spp.h>
@@ -319,6 +325,7 @@ BT_AVDTP_CLI(set_conf_reject);
 
 #if defined(CONFIG_BT_A2DP)
 BT_A2DP_CLI(connect);
+BT_A2DP_CLI(stats);
 #if defined(BFLB_BREDR_PATCH_A2DP_DISCOVERY_CALLBACK)
 BT_A2DP_CLI(discovery_probe);
 #endif
@@ -354,6 +361,18 @@ BT_AVRCP_CLI(send_play_status);
 #endif
 
 #if defined(CONFIG_BT_HFP)
+#if defined(CONFIG_BT_HFP_SCO_TEST)
+static void hfp_sco_audio_task_init(void);
+#endif
+static void codec_bt_hfp_cb(uint16_t interval_halfslot,
+                        uint32_t tx_buffer_0,
+                        uint32_t tx_buffer_1,
+                        uint32_t rx_buffer_0,
+                        uint32_t rx_buffer_1,
+                        uint32_t tx_buffer_size,
+                        uint32_t rx_buffer_size,
+                        uint32_t start_time_halfslot,
+                        uint8_t buffer_index);
 static void hfp_bsir_indication(struct bt_conn *conn, uint8_t inband)
 {
     printf("HFP in-band ring tone: %s\n", inband ? "enabled" : "disabled");
@@ -474,6 +493,7 @@ BT_SPP_CLI(throughput_stop);
     #endif
     #if defined(CONFIG_BT_A2DP)
     SHELL_CMD_EXPORT_ALIAS(a2dp_connect,a2dp_connect,"");
+    SHELL_CMD_EXPORT_ALIAS(a2dp_stats,a2dp_stats,a2dp_stats Parameter:[Null: print once; seconds: periodic dump; 0: stop]);
     #if defined(BFLB_BREDR_PATCH_A2DP_DISCOVERY_CALLBACK)
     SHELL_CMD_EXPORT_ALIAS(a2dp_discovery_probe,a2dp_discovery_probe,"");
     #endif
@@ -581,6 +601,7 @@ const struct cli_command bredr_cmd_set[] STATIC_CLI_CMD_ATTRIBUTE = {
         
     #if defined(CONFIG_BT_A2DP)
     {"a2dp_connect", "", a2dp_connect},
+    {"a2dp_stats", "", a2dp_stats},
     #if defined(BFLB_BREDR_PATCH_A2DP_DISCOVERY_CALLBACK)
     {"a2dp_discovery_probe", "", a2dp_discovery_probe},
 	#endif
@@ -704,7 +725,11 @@ BT_CLI(init)
     spp_cb_register(&spp_conn_callbacks);
 #endif
 #if defined(CONFIG_BT_HFP)
+#if defined(CONFIG_BT_HFP_SCO_TEST)
+    hfp_sco_audio_task_init();
+#endif
     bt_hfp_hf_register(&hfp_hf_callbacks);
+    btble_controller_sco_codec_callback_register(codec_bt_hfp_cb);
 #endif
     init = true;
     printf("bredr init successfully\n");
@@ -1218,10 +1243,10 @@ BT_CLI(sniff)
 
     err = bt_br_conn_enter_sniff(conn, min_slots, slots);
     if (err) {
-        printf("bredr_sniff, enter sniff failed (err %d)\r\n", err);
+        printf("bredr_sniff, command rejected by controller (err %d)\r\n", err);
     } else {
-        printf("bredr_sniff, sniff requested (%u ms, %u slots)\r\n",
-               interval_ms, slots);
+        printf("bredr_sniff, command accepted (%u ms, %u slots), "
+               "wait for Mode Change event\r\n", interval_ms, slots);
     }
 
     bt_conn_unref(conn);
@@ -1251,9 +1276,9 @@ BT_CLI(unsniff)
 
     err = bt_br_conn_exit_sniff(conn);
     if (err) {
-        printf("bredr_unsniff, exit sniff failed (err %d)\r\n", err);
+        printf("bredr_unsniff, command rejected by controller (err %d)\r\n", err);
     } else {
-        printf("bredr_unsniff, exit sniff requested\r\n");
+        printf("bredr_unsniff, command accepted, wait for Mode Change event\r\n");
     }
 
     bt_conn_unref(conn);
@@ -1378,6 +1403,31 @@ BT_A2DP_CLI(connect)
         printf("a2dp connect successfully.\n");
     } else {
         printf("a2dp connect fail. \n");
+    }
+}
+
+BT_A2DP_CLI(stats)
+{
+    char *end;
+    unsigned long period;
+
+    if (argc < 2) {
+        bt_a2dp_sink_stats_print();
+        return;
+    }
+
+    period = strtoul(argv[1], &end, 10);
+    if (end == argv[1] || *end != 0 || period > UINT32_MAX) {
+        printf("Invalid period.\n");
+        return;
+    }
+
+    if (bt_a2dp_sink_stats_set_period((uint32_t)period) != 0) {
+        printf("Failed to update A2DP stats period.\n");
+    } else if (period) {
+        printf("A2DP stats every %lus.\n", period);
+    } else {
+        printf("A2DP stats stopped.\n");
     }
 }
 
@@ -2275,6 +2325,282 @@ BT_HFP_CLI(hf_disconnect)
     }
 }
 
+#if defined(CONFIG_BT_HFP_SCO_TEST)
+#define HFP_SCO_CLOCK_MASK          0x0FFFFFFFU
+#define HFP_SCO_CLOCK_HALF_RANGE    0x08000000U
+#define HFP_SCO_FEED_TASK_STACK     512
+#define HFP_SCO_FEED_TASK_PRIO      (CONFIG_BT_RX_PRIO - 1)
+
+struct hfp_sco_sync_state {
+    uint32_t tx_buffer[2];
+    uint32_t tx_size;
+    uint32_t start_time_halfslot;
+    uint32_t session_id;
+    uint32_t buffer_epoch;
+    uint32_t sync_epoch;
+    uint16_t interval_halfslot;
+    uint8_t buffer_index;
+    bool active;
+};
+
+static volatile struct hfp_sco_sync_state hfp_sco_sync;
+static volatile uint32_t hfp_sco_sync_version;
+static TaskHandle_t hfp_sco_feed_task_handle;
+static uint32_t sample_pos = 0;
+
+extern uint32_t lld_read_clock(void);
+
+static int32_t hfp_sco_clock_diff(uint32_t from, uint32_t to)
+{
+    uint32_t diff = (to - from) & HFP_SCO_CLOCK_MASK;
+
+    if (diff >= HFP_SCO_CLOCK_HALF_RANGE) {
+        return -(int32_t)((from - to) & HFP_SCO_CLOCK_MASK);
+    }
+
+    return (int32_t)diff;
+}
+
+static uint32_t hfp_sco_clock_add(uint32_t clock, uint32_t halfslots)
+{
+    return (clock + halfslots) & HFP_SCO_CLOCK_MASK;
+}
+
+static void sco_audio_fill(uint32_t buffer, uint32_t size)
+{
+    uint16_t *samples = (uint16_t *)buffer;
+    uint32_t num_samples = size / sizeof(samples[0]);
+    uint32_t sample_count = sizeof(sco_audio_buf) / sizeof(sco_audio_buf[0]);
+
+    for (uint32_t i = 0; i < num_samples; i++) {
+        samples[i] = sco_audio_buf[(sample_pos + i) % sample_count];
+    }
+    sample_pos = (sample_pos + num_samples) % sample_count;
+}
+
+static uint32_t hfp_sco_sync_snapshot(struct hfp_sco_sync_state *state)
+{
+    uint32_t version;
+
+    taskENTER_CRITICAL();
+    version = hfp_sco_sync_version;
+    state->tx_buffer[0] = hfp_sco_sync.tx_buffer[0];
+    state->tx_buffer[1] = hfp_sco_sync.tx_buffer[1];
+    state->tx_size = hfp_sco_sync.tx_size;
+    state->start_time_halfslot = hfp_sco_sync.start_time_halfslot;
+    state->session_id = hfp_sco_sync.session_id;
+    state->buffer_epoch = hfp_sco_sync.buffer_epoch;
+    state->sync_epoch = hfp_sco_sync.sync_epoch;
+    state->interval_halfslot = hfp_sco_sync.interval_halfslot;
+    state->buffer_index = hfp_sco_sync.buffer_index;
+    state->active = hfp_sco_sync.active;
+    taskEXIT_CRITICAL();
+
+    return version;
+}
+
+static bool hfp_sco_fill_if_current(const struct hfp_sco_sync_state *state,
+                                    uint32_t version,
+                                    uint8_t first_buffer,
+                                    uint8_t buffer_count)
+{
+    bool filled = false;
+
+    taskENTER_CRITICAL();
+    if (hfp_sco_sync_version == version && hfp_sco_sync.active) {
+        for (uint8_t i = 0; i < buffer_count; i++) {
+            uint8_t buffer_index = first_buffer ^ i;
+
+            sco_audio_fill(state->tx_buffer[buffer_index], state->tx_size);
+        }
+        filled = true;
+    }
+    taskEXIT_CRITICAL();
+
+    return filled;
+}
+
+static void hfp_sco_feed_task(void *arg)
+{
+    struct hfp_sco_sync_state state = { 0 };
+    uint32_t session_id = 0;
+    uint32_t buffer_epoch = 0;
+    uint32_t sync_epoch = 0;
+    uint32_t next_refill_halfslot = 0;
+    uint8_t active_buffer = 0;
+    bool scheduled = false;
+
+    (void)arg;
+
+    while (1) {
+        uint32_t state_version;
+
+        if (!scheduled) {
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        }
+
+        state_version = hfp_sco_sync_snapshot(&state);
+        if (!state.active) {
+            scheduled = false;
+            continue;
+        }
+
+        if (state.session_id != session_id) {
+            sample_pos = 0;
+            session_id = state.session_id;
+        }
+
+        if (state.buffer_epoch != buffer_epoch) {
+            int32_t halfslots_to_start = hfp_sco_clock_diff(lld_read_clock(),
+                                                            state.start_time_halfslot);
+
+            active_buffer = state.buffer_index;
+            if (halfslots_to_start > 0) {
+                if (!hfp_sco_fill_if_current(&state, state_version,
+                                             active_buffer, 2)) {
+                    continue;
+                }
+                next_refill_halfslot = hfp_sco_clock_add(state.start_time_halfslot,
+                                                         state.interval_halfslot);
+            } else {
+                uint32_t elapsed_intervals =
+                    (uint32_t)(-halfslots_to_start) / state.interval_halfslot;
+
+                if (elapsed_intervals & 1U) {
+                    active_buffer ^= 1U;
+                }
+                if (!hfp_sco_fill_if_current(&state, state_version,
+                                             active_buffer ^ 1U, 1)) {
+                    continue;
+                }
+                next_refill_halfslot = hfp_sco_clock_add(
+                    state.start_time_halfslot,
+                    (elapsed_intervals + 1U) * state.interval_halfslot);
+            }
+            buffer_epoch = state.buffer_epoch;
+            sync_epoch = state.sync_epoch;
+            scheduled = true;
+            continue;
+        }
+
+        if (state.sync_epoch != sync_epoch) {
+            active_buffer = state.buffer_index;
+            sync_epoch = state.sync_epoch;
+            next_refill_halfslot = hfp_sco_clock_add(state.start_time_halfslot,
+                                                     state.interval_halfslot);
+        }
+
+        int32_t halfslots_to_refill = hfp_sco_clock_diff(lld_read_clock(),
+                                                         next_refill_halfslot);
+        if (halfslots_to_refill > 2) {
+            ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1));
+            continue;
+        }
+        if (halfslots_to_refill > 0) {
+            taskYIELD();
+            continue;
+        }
+
+        do {
+            active_buffer ^= 1U;
+            next_refill_halfslot = hfp_sco_clock_add(next_refill_halfslot,
+                                                     state.interval_halfslot);
+        } while (hfp_sco_clock_diff(lld_read_clock(), next_refill_halfslot) <= 0);
+
+        hfp_sco_fill_if_current(&state, state_version,
+                                active_buffer ^ 1U, 1);
+    }
+}
+
+static void hfp_sco_audio_task_init(void)
+{
+    if (hfp_sco_feed_task_handle != NULL) {
+        return;
+    }
+
+    if (xTaskCreate(hfp_sco_feed_task, "hfp_sco_feed",
+                    HFP_SCO_FEED_TASK_STACK, NULL,
+                    HFP_SCO_FEED_TASK_PRIO,
+                    &hfp_sco_feed_task_handle) != pdPASS) {
+        printf("Failed to create HFP SCO feed task\r\n");
+    }
+}
+
+static void hfp_sco_feed_task_notify(void)
+{
+    if (hfp_sco_feed_task_handle == NULL) {
+        return;
+    }
+
+    if (k_is_in_isr()) {
+        BaseType_t higher_priority_task_woken = pdFALSE;
+
+        vTaskNotifyGiveFromISR(hfp_sco_feed_task_handle,
+                               &higher_priority_task_woken);
+        portYIELD_FROM_ISR(higher_priority_task_woken);
+    } else {
+        xTaskNotifyGive(hfp_sco_feed_task_handle);
+    }
+}
+#endif
+static void codec_bt_hfp_cb(uint16_t interval_halfslot,
+                        uint32_t tx_buffer_0,
+                        uint32_t tx_buffer_1,
+                        uint32_t rx_buffer_0,
+                        uint32_t rx_buffer_1,
+                        uint32_t tx_buffer_size,
+                        uint32_t rx_buffer_size,
+                        uint32_t start_time_halfslot,
+                        uint8_t buffer_index)
+{
+#if defined(CONFIG_BT_HFP_SCO_TEST)
+    bool in_isr = k_is_in_isr();
+
+    (void)rx_buffer_0;
+    (void)rx_buffer_1;
+    (void)rx_buffer_size;
+
+    if (!in_isr) {
+        taskENTER_CRITICAL();
+    }
+
+    if (buffer_index != 0xFF) {
+        bool new_session = !hfp_sco_sync.active;
+        bool buffers_changed = new_session ||
+            hfp_sco_sync.tx_size != tx_buffer_size ||
+            hfp_sco_sync.tx_buffer[0] != tx_buffer_0 ||
+            hfp_sco_sync.tx_buffer[1] != tx_buffer_1;
+
+        hfp_sco_sync_version++;
+        hfp_sco_sync.tx_buffer[0] = tx_buffer_0;
+        hfp_sco_sync.tx_buffer[1] = tx_buffer_1;
+        hfp_sco_sync.tx_size = tx_buffer_size;
+        hfp_sco_sync.start_time_halfslot = start_time_halfslot;
+        hfp_sco_sync.interval_halfslot = interval_halfslot;
+        hfp_sco_sync.buffer_index = buffer_index;
+        hfp_sco_sync.active = true;
+        hfp_sco_sync.sync_epoch++;
+        if (new_session) {
+            hfp_sco_sync.session_id++;
+        }
+        if (buffers_changed) {
+            hfp_sco_sync.buffer_epoch++;
+        }
+        hfp_sco_sync_version++;
+    } else {
+        hfp_sco_sync_version++;
+        hfp_sco_sync.active = false;
+        hfp_sco_sync.sync_epoch++;
+        hfp_sco_sync_version++;
+    }
+
+    if (!in_isr) {
+        taskEXIT_CRITICAL();
+    }
+
+    hfp_sco_feed_task_notify();
+#endif
+}
 #endif
 #if defined(CONFIG_BT_SPP)
 static uint8_t spp_test_buffer[1024];

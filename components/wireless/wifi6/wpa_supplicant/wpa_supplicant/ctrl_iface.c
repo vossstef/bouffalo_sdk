@@ -1345,6 +1345,7 @@ static int wpa_supplicant_ctrl_iface_wps_pbc(struct wpa_supplicant *wpa_s,
 #endif /* CONFIG_AP */
 	char *pos;
 	int multi_ap = 0;
+	int freq = 0;
 
 	if (!cmd || os_strcmp(cmd, "any") == 0 ||
 	    os_strncmp(cmd, "any ", 4) == 0) {
@@ -1369,6 +1370,17 @@ static int wpa_supplicant_ctrl_iface_wps_pbc(struct wpa_supplicant *wpa_s,
 	}
 
 	if (cmd) {
+		pos = os_strstr(cmd, " freq=");
+		if (pos) {
+			freq = atoi(pos + 6);
+			if (freq <= 0) {
+				wpa_printf(MSG_DEBUG,
+					   "CTRL_IFACE WPS_PBC: invalid frequency '%s'",
+					   pos + 6);
+				return -1;
+			}
+		}
+
 		pos = os_strstr(cmd, " multi_ap=");
 		if (pos) {
 			pos += 10;
@@ -1381,7 +1393,7 @@ static int wpa_supplicant_ctrl_iface_wps_pbc(struct wpa_supplicant *wpa_s,
 		return wpa_supplicant_ap_wps_pbc(wpa_s, _bssid, _p2p_dev_addr);
 #endif /* CONFIG_AP */
 
-	return wpas_wps_start_pbc(wpa_s, _bssid, 0, multi_ap);
+	return wpas_wps_start_pbc(wpa_s, _bssid, 0, multi_ap, freq);
 }
 
 
@@ -13125,47 +13137,6 @@ static char * wpas_global_ctrl_iface_ifname(struct wpa_global *global,
 
 	return wpa_supplicant_ctrl_iface_process(wpa_s, cmd, resp_len);
 }
-
-//In order to do coexistence test, Made a temporary patch
-#ifdef CFG_FOR_COEXISTENCE_TEST_STOPAP_PATCH
-int wpa_stop_ap(void)
-{
-    int res;
-    size_t resp_len = 1;
-    char cmd[] = "STOP_AP";
-
-	struct wpa_supplicant *wpa_s;
-    struct wpa_global *global;
-
-    extern struct wpa_global *g_global;
-
-    global = g_global;
-
-    if (global == NULL) {
-        printf("global is NULL\r\n");
-        return -1;
-    }
-
-	for (wpa_s = global->ifaces; wpa_s; wpa_s = wpa_s->next) {
-		if (os_strcmp("wl1", wpa_s->ifname) == 0)
-			break;
-	}
-
-	if (wpa_s == NULL) {
-        printf("wpa_s == NULL\r\n");
-		return -1;
-	}
-
-	wpa_supplicant_ctrl_iface_process(wpa_s, cmd, &resp_len);
-
-    res = (int)resp_len;
-    printf("res = %d\r\n", res);
-
-    printf("--------------- 2 wpa_supplicant_ctrl_iface_process %d\r\n", res);
-
-    return res;
-}
-#endif
 
 static char * wpas_global_ctrl_iface_redir_p2p(struct wpa_global *global,
 					       char *buf, size_t *resp_len)

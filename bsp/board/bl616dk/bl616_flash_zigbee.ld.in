@@ -412,6 +412,38 @@ SECTIONS
         __start_nwk_preprocess = .;
         KEEP(*(nwk_preprocess))
         __stop_nwk_preprocess = .;
+        . = ALIGN(4);
+        __start_c7b_datastubd = .;
+        KEEP(*(c7b_datastubd))
+        __stop_c7b_datastubd = .;
+        . = ALIGN(4);
+        __start_c7b_gd = .;
+        KEEP(*(c7b_gd))
+        __stop_c7b_gd = .;
+        . = ALIGN(4);
+        __start_c7b_kasuites = .;
+        KEEP(*(c7b_kasuites))
+        __stop_c7b_kasuites = .;
+        . = ALIGN(4);
+        __start_c7b_kapsks = .;
+        KEEP(*(c7b_kapsks))
+        __stop_c7b_kapsks = .;
+        . = ALIGN(4);
+        __start_c7bex_gwa = .;
+        KEEP(*(c7bex_gwa))
+        __stop_c7bex_gwa = .;
+        . = ALIGN(4);
+        __start_c7bfx_iaszd = .;
+        KEEP(*(c7bfx_iaszd))
+        __stop_c7bfx_iaszd = .;
+        . = ALIGN(4);
+        __start_c7bfx_timecd = .;
+        KEEP(*(c7bfx_timecd))
+        __stop_c7bfx_timecd = .;
+        . = ALIGN(4);
+        __start_c7bfx_tld = .;
+        KEEP(*(c7bfx_tld))
+        __stop_c7bfx_tld = .;
 
         /* section information for shell */
         . = ALIGN(4);

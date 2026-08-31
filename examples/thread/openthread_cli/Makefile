@@ -8,8 +8,11 @@ BOARD ?= ${CHIP}dk
 CONFIG_OT_FTD ?= y
 CONFIG_OT_MTD ?= n
 CONFIG_OT_CLI ?= shell
-# CONFIG_OT_CLI ?= uart
-CONFIG_LMAC154_DBG ?= 0
+CONFIG_LMAC154_DBG ?= n
+
+ifeq ($(CONFIG_OT_SERIAL),UART)
+  CONFIG_OT_CLI = uart
+endif
 
 ifeq ("$(CONFIG_OT_CLI)", "shell")
   CONFIG_SHELL =y

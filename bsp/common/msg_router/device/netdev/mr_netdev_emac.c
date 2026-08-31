@@ -322,15 +322,15 @@ static int emac_phy_init(void)
     int ret;
 
     /* get device */
-    g_emac_dev = bsp_emac_get_device(BSP_EMAC_RMII_DEFAULT_PORT);
+    g_emac_dev = bsp_emac_get_device(0);
     if (!g_emac_dev) {
         LOG_E("Failed to get emac device\r\n");
         return -1;
     }
 
     /* gpio init */
-    board_emac_rmii_gpio_init(BSP_EMAC_RMII_DEFAULT_PORT);
-    board_emac_mdio_gpio_init(BSP_EMAC_MDIO_DEFAULT_PORT);
+    board_emac_rmii_gpio_init(0);
+    board_emac_mdio_gpio_init(0);
 
     /* 初始化EMAC硬件 */
     bflb_emac_init(g_emac_dev, &g_emac_cfg);
@@ -340,13 +340,13 @@ static int emac_phy_init(void)
     bflb_emac_feature_control(g_emac_dev, EMAC_CMD_SET_RX_EN, true);
 
     /* 初始化PHY */
-    g_phy_ctrl.mac_mdio_dev = bsp_emac_get_device(BSP_EMAC_MDIO_DEFAULT_PORT);
+    g_phy_ctrl.mac_mdio_dev = bsp_emac_get_device(0);
     if (!g_phy_ctrl.mac_mdio_dev) {
         LOG_E("Failed to get mdio device\r\n");
         return -1;
     }
 
-    ret = eth_phy_scan(&g_phy_ctrl, BSP_EMAC_PHY_DEFAULT_SCAN_START, BSP_EMAC_PHY_DEFAULT_SCAN_END);
+    ret = eth_phy_scan(&g_phy_ctrl, EPHY_ADDR_MIN, EPHY_ADDR_MAX);
     if (ret < 0) {
         LOG_E("Failed to scan PHY: %d\r\n", ret);
         return -1;

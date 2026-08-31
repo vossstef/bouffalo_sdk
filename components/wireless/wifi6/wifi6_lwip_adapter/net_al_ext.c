@@ -65,7 +65,6 @@ static ip4_addr_t saved_ip_mask = {IPADDR_ANY};
 static ip4_addr_t saved_ip_gw = {IPADDR_ANY};
 static int dhcp_renew_ok = 0;
 
-#ifdef BL618DG
 static uint8_t net_al_ext_sta_band(void)
 {
     struct fhost_vif_status vif_status;
@@ -80,7 +79,6 @@ static uint8_t net_al_ext_sta_band(void)
 
     return vif_status.chan.band;
 }
-#endif
 
 static void net_if_disable_arp_for_us(net_al_if_t net_if)
 {
@@ -107,6 +105,88 @@ static void net_if_set_default(net_al_if_t net_if)
     inet_if_t *nif = (inet_if_t *)net_if;
 
     netifapi_netif_set_default(nif);
+}
+
+static bool net_if_ipv4_ready(struct netif *netif)
+{
+    return netif && netif_is_up(netif) && netif_is_link_up(netif) &&
+           !ip4_addr_isany_val(*netif_ip4_addr(netif));
+}
+
+static bool net_al_ext_ipv4_subnets_overlap(struct netif *first,
+                                            struct netif *second)
+{
+    uint32_t common_mask;
+
+    if (!net_if_ipv4_ready(first) || !net_if_ipv4_ready(second) ||
+        ip4_addr_isany_val(*netif_ip4_netmask(first)) ||
+        ip4_addr_isany_val(*netif_ip4_netmask(second)))
+        return false;
+
+    /* A valid IPv4 mask intersection is the shorter of the two prefixes. */
+    common_mask = ip4_addr_get_u32(netif_ip4_netmask(first)) &
+                  ip4_addr_get_u32(netif_ip4_netmask(second));
+
+    return ((ip4_addr_get_u32(netif_ip4_addr(first)) ^
+             ip4_addr_get_u32(netif_ip4_addr(second))) & common_mask) == 0;
+}
+
+static void net_al_ext_warn_ipv4_subnet_overlap(void)
+{
+    static bool warning_reported;
+    struct netif *sta = fhost_to_net_if(MGMR_VIF_STA);
+    struct netif *ap = fhost_to_net_if(MGMR_VIF_AP);
+    bool overlap = net_al_ext_ipv4_subnets_overlap(sta, ap);
+    char sta_addr[IP4ADDR_STRLEN_MAX];
+    char sta_mask[IP4ADDR_STRLEN_MAX];
+    char ap_addr[IP4ADDR_STRLEN_MAX];
+    char ap_mask[IP4ADDR_STRLEN_MAX];
+
+    if (!overlap) {
+        warning_reported = false;
+        return;
+    }
+
+    if (warning_reported)
+        return;
+
+    ip4addr_ntoa_r(netif_ip4_addr(sta), sta_addr, sizeof(sta_addr));
+    ip4addr_ntoa_r(netif_ip4_netmask(sta), sta_mask, sizeof(sta_mask));
+    ip4addr_ntoa_r(netif_ip4_addr(ap), ap_addr, sizeof(ap_addr));
+    ip4addr_ntoa_r(netif_ip4_netmask(ap), ap_mask, sizeof(ap_mask));
+    printf("[wifi][WARN] AP_STA_SUBNET_OVERLAP: STA=%s/%s AP=%s/%s; "
+           "routing is ambiguous. Use different subnets or bind sockets "
+           "to a netif.\r\n",
+           sta_addr, sta_mask, ap_addr, ap_mask);
+    warning_reported = true;
+}
+
+/* Called from the lwIP netif status callback while the TCP/IP core is locked. */
+static void net_al_ext_update_default_netif(void)
+{
+    struct netif *sta = fhost_to_net_if(MGMR_VIF_STA);
+    struct netif *ap = fhost_to_net_if(MGMR_VIF_AP);
+    struct netif *selected = NULL;
+
+    /* Do not override a usable default interface owned by another subsystem. */
+    if (netif_default && netif_default != sta && netif_default != ap &&
+        net_if_ipv4_ready(netif_default))
+        return;
+
+    if (net_if_ipv4_ready(sta))
+        selected = sta;
+    else if (net_if_ipv4_ready(ap))
+        selected = ap;
+
+    if (netif_default == selected)
+        return;
+
+    netif_set_default(selected);
+    if (selected)
+        printf("[lwip] default netif: %c%c%u\r\n",
+               selected->name[0], selected->name[1], selected->num);
+    else
+        printf("[lwip] default netif cleared\r\n");
 }
 
 static void net_if_set_ip(net_al_if_t net_if, uint32_t ip, uint32_t mask, uint32_t gw)
@@ -226,18 +306,19 @@ static int net_quick_dhcp_restore(net_al_if_t net_if);
 
 static int fhost_dhcp_start(net_al_if_t net_if, uint32_t to_ms, uint32_t from_api)
 {
+    coex_protect_acquire_result_t coex_prot_result;
     uint32_t start_ms;
     bool coex_prot_acquired = false;
-    uint8_t coex_prot_band = PHY_BAND_2G4;
+    uint8_t coex_prot_band = net_al_ext_sta_band();
     int ret = 0;
     int dhcp_renew = 0;
 
-    if (wifi_mgmr_sta_coex_status_get()) {
-#ifdef BL618DG
-        coex_prot_band = net_al_ext_sta_band();
-#endif
-        coex_prot_acquired = (coex_protect_acquire(COEX_PROT_DHCP, coex_prot_band) == 0);
+    coex_prot_result = coex_protect_acquire(COEX_PROT_DHCP,
+                                             coex_prot_band);
+    if (coex_prot_result == COEX_PROTECT_ACQUIRE_ERROR) {
+        return DHCPC_START_FAILED;
     }
+    coex_prot_acquired = coex_prot_result == COEX_PROTECT_ACQUIRED;
 
     // Run DHCP client
     if (!from_api && wifiMgmr.sta_connect_param.quick_connect) {
@@ -277,7 +358,10 @@ static int fhost_dhcp_start(net_al_if_t net_if, uint32_t to_ms, uint32_t from_ap
 
 out:
     if (coex_prot_acquired) {
-        (void)coex_protect_release(COEX_PROT_DHCP, coex_prot_band);
+        if (coex_protect_release(COEX_PROT_DHCP, coex_prot_band) != 0 &&
+            ret == 0) {
+            ret = DHCPC_START_FAILED;
+        }
     }
 
     return ret;
@@ -794,6 +878,9 @@ void net_al_ext_dhcp_disconnect(void)
 void net_al_ext_netif_status_callback(struct netif *netif)
 {
     static ip4_addr_t old_addr;
+
+    net_al_ext_update_default_netif();
+    net_al_ext_warn_ipv4_subnet_overlap();
 
     if (!is_sta_netif(netif))
         return;

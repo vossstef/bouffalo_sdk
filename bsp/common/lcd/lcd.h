@@ -266,6 +266,15 @@
 #define LCD_COLOR_DEPTH              AXS15231B_HS035_DSI_COLOR_DEPTH
 #define _LCD_FUNC_DEFINE(_func, ...) axs15231b_hs035_dsi_##_func(__VA_ARGS__)
 
+#elif defined LCD_DSI_AXS15231E_JX371
+
+#include "mipi_dsi/axs15231e_jx371_dsi.h"
+#define LCD_INTERFACE_TYPE           LCD_INTERFACE_DSI
+#define LCD_W                        AXS15231E_JX371_DSI_W
+#define LCD_H                        AXS15231E_JX371_DSI_H
+#define LCD_COLOR_DEPTH              AXS15231E_JX371_DSI_COLOR_DEPTH
+#define _LCD_FUNC_DEFINE(_func, ...) axs15231e_jx371_dsi_##_func(__VA_ARGS__)
+
 #elif defined LCD_DSI_JD9365TX_7KF82
 
 #include "mipi_dsi/jd9365tx_7kf82_dsi.h"
@@ -274,6 +283,15 @@
 #define LCD_H                        JD9365TX_7KF82_DSI_H
 #define LCD_COLOR_DEPTH              JD9365TX_7KF82_DSI_COLOR_DEPTH
 #define _LCD_FUNC_DEFINE(_func, ...) jd9365tx_7kf82_dsi_##_func(__VA_ARGS__)
+
+#elif defined LCD_DSI_EK79007_WKS70WSV114
+
+#include "mipi_dsi/ek79007_wks70wsv114_dsi.h"
+#define LCD_INTERFACE_TYPE           LCD_INTERFACE_DSI
+#define LCD_W                        EK79007_WKS70WSV114_DSI_W
+#define LCD_H                        EK79007_WKS70WSV114_DSI_H
+#define LCD_COLOR_DEPTH              EK79007_WKS70WSV114_DSI_COLOR_DEPTH
+#define _LCD_FUNC_DEFINE(_func, ...) ek79007_wks70wsv114_dsi_##_func(__VA_ARGS__)
 
 #elif defined LCD_SPI_GC9307
 

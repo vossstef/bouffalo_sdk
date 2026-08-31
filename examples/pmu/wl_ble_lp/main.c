@@ -16,13 +16,19 @@
 #include "bflb_mtimer.h"
 #include "board.h"
 #include "bl_lp.h"
+#if defined(BL618DG)
+#include "bl618dg_pm.h"
+#include "bl618dg_glb.h"
+#include "bl618dg_hbn.h"
+#else
 #include "bl616_pm.h"
-#include "bflb_uart.h"
-#include "bflb_gpio.h"
-#include "bflb_clock.h"
 #include "bl616_glb.h"
 #include "bl616_glb_gpio.h"
 #include "bl616_hbn.h"
+#endif
+#include "bflb_uart.h"
+#include "bflb_gpio.h"
+#include "bflb_clock.h"
 #include "bflb_rtc.h"
 
 #include "rfparam_adapter.h"
@@ -45,7 +51,11 @@
 #include "conn.h"
 #include "conn_internal.h"
 #include "btble_lib_api.h"
+#if defined(BL618DG)
+#include "bl618dg_glb.h"
+#else
 #include "bl616_glb.h"
+#endif
 #include "hci_driver.h"
 #include "hci_core.h"
 #include "async_event.h"
@@ -73,7 +83,7 @@
 static struct bflb_device_s *uart0;
 
 TaskHandle_t wifi_fw_task;
-static TaskHandle_t app_start_handle;
+static TaskHandle_t bluetooth_start_handle;
 struct bt_conn *bleapp_default_conn;
 
 #if defined(CFG_BLE_ENABLE)
@@ -125,13 +135,28 @@ void bt_enable_cb(int err)
     }
 }
 #endif
-static void app_start_task(void *pvParameters)
+static void bluetooth_start_task(void *pvParameters)
 {
+#if defined(BL618DG)
+    bt_addr_le_t addr;
+#endif
     app_clock_init();
 #if defined(CFG_BLE_ENABLE)
     btble_controller_init(configMAX_PRIORITIES - 1);
     hci_driver_init();
     bt_enable(bt_enable_cb);
+
+#if defined(BL618DG)
+    extern void cmd_set_btble_standalone(int argc, char **argv);
+    // extern void cmd_set_btble_combo(int argc, char **argv);
+
+    cmd_set_btble_standalone(0, NULL);
+    // cmd_set_btble_combo(0, NULL);   
+
+    if (bt_addr_le_create_static(&addr) == 0) {
+        bt_id_create(&addr, NULL);
+    }
+#endif
 #endif
     vTaskDelete(NULL);
 }
@@ -172,13 +197,6 @@ static void wifi_start_firmware_task(void *pvParameters)
 {
     (void)pvParameters;
     LOG_I("Starting wifi ...\r\n");
-
-    if (0 != rfparam_init(0, NULL, 0)) {
-        LOG_I("PHY RF init failed!\r\n");
-        vTaskDelete(NULL);
-    }
-
-    LOG_I("PHY RF init success!\r\n");
 
     async_register_event_filter(EV_WIFI, wifi_event_handler, NULL);
 
@@ -299,12 +317,14 @@ static void set_cpu_bclk_80M_and_gate_clk(void)
     BL_WR_REG(GLB_BASE, GLB_CGEN_CFG2, tmpVal);
 }
 
-GLB_GPIO_Type pinList[4] = {
+#if !defined(BL618DG)
+static GLB_GPIO_Type pinList[4] = {
     GLB_GPIO_PIN_0,
     GLB_GPIO_PIN_1,
     GLB_GPIO_PIN_2,
     GLB_GPIO_PIN_3,
 };
+#endif
 
 static int lp_exit(void *arg)
 {
@@ -321,8 +341,14 @@ static int lp_exit(void *arg)
     //GLB_Set_EM_Sel(GLB_WRAM160KB_EM0KB);
     //bflb_sys_em_config();
 
-    //board_rf_ctl(BRD_CTL_RF_RESET_DEFAULT, 0);
+#if defined(CFG_BLE_ENABLE) && defined(BL618DG)
+    board_rf_ctl(BRD_CTL_RF_RESET_DEFAULT, 0);
+    extern void cmd_set_btble_standalone(int argc, char **argv);
+    // extern void cmd_set_btble_combo(int argc, char **argv);
 
+    cmd_set_btble_standalone(0, NULL);
+    // cmd_set_btble_combo(0, NULL);   
+#endif
     vPortSetupTimerInterrupt();
 
     bflb_uart_rxint_mask(uart_shell, false);
@@ -330,6 +356,11 @@ static int lp_exit(void *arg)
     bflb_irq_enable(uart_shell->irq_num);
 
     wakeup_reason = bl_lp_get_wake_reason();
+
+    if (wakeup_reason & LPFW_WAKEUP_BLE) {
+        pm_disable_tickless();
+    }
+
     if (wakeup_reason & LPFW_WAKEUP_WIFI_BROADCAST) {
         vTaskNotifyGiveFromISR(rxl_process_task_hd, &xHigherPriorityTaskWoken);
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
@@ -337,8 +368,9 @@ static int lp_exit(void *arg)
         pm_alloc_mem_reset();
     }
 
-    //GLB_GPIO_Func_Init(GPIO_FUN_JTAG, pinList, 4);
-
+#if !defined(BL618DG)
+    GLB_GPIO_Func_Init(GPIO_FUN_JTAG, pinList, 4);
+#endif
     return 0;
 }
 
@@ -470,6 +502,12 @@ static int test_tcp_keepalive(int argc, char **argv)
 
 static void cmd_hbn_test(int argc, char **argv)
 {
+#if defined(BL618DG)
+    (void)argc;
+    (void)argv;
+
+    printf("hbn_test unsupported on BL618DG wl_ble_lp\r\n");
+#else
     if (argc <= 5) {
         bl_lp_hbn_fw_cfg_t hbn_test_cfg = {
             .hbn_sleep_cnt = 32768 * 5,
@@ -494,6 +532,7 @@ static void cmd_hbn_test(int argc, char **argv)
             bl_lp_hbn_enter(&hbn_test_cfg);
         }
     }
+#endif
 }
 
 static void cmd_io_dbg(int argc, char **argv)
@@ -504,12 +543,21 @@ static void cmd_io_dbg(int argc, char **argv)
     }
 
     if (atoi(argv[1]) <= 34) {
+#if defined(BL618DG)
+        iot2lp_para->wifi_debug_io = atoi(argv[1]);
+#else
         iot2lp_para->debug_io = atoi(argv[1]);
+#endif
     } else {
+#if defined(BL618DG)
+        iot2lp_para->wifi_debug_io = 0xFF;
+#else
         iot2lp_para->debug_io = 0xFF;
+#endif
     }
 }
 
+#if defined(CONFIG_CLOCK_SOURCE_EF_PARAM) && CONFIG_CLOCK_SOURCE_EF_PARAM
 static void cmd_set_clock_source(int argc, char **argv)
 {
     uint8_t source;
@@ -574,16 +622,60 @@ static void cmd_get_clock_source(int argc, char **argv)
         printf("Using default source: Internal RC oscillator\r\n");
     }
 }
+#endif
+
+#if !defined(BL616)
+static void cmd_lpfw_uart_cfg(int argc, char **argv)
+{
+    if (argc != 5) {
+        printf("Need param\r\n");
+        return;
+    }
+
+    iot2lp_para->uart_config->debug_log_en = atoi(argv[1]);
+    iot2lp_para->uart_config->uart_tx_io = atoi(argv[2]);
+    iot2lp_para->uart_config->uart_rx_io = atoi(argv[3]);
+    iot2lp_para->uart_config->baudrate = atoi(argv[4]);
+}
+
+static void cmd_lpfw_clock_cfg(int argc, char **argv)
+{
+    if (argc != 5) {
+        printf("Need param\r\n");
+        printf("mcu_clk_sel:\n\t0:GLB_MCU_SYS_CLK_RC32M\r");
+        printf("\n\t1:GLB_MCU_SYS_CLK_XTAL\r");
+        printf("\n\t2:GLB_MCU_SYS_CLK_WIFIPLL_96M\r");
+        printf("\n\t3:GLB_MCU_SYS_CLK_WIFIPLL_192M\r");
+        printf("\n\t4:GLB_MCU_SYS_CLK_TOP_WIFIPLL_240M\r");
+        printf("\n\t5:GLB_MCU_SYS_CLK_TOP_WIFIPLL_320M\r\n");
+
+        printf("xclk_sel:\n\t0:HBN_MCU_XCLK_RC32M\r");
+        printf("\n\t1:HBN_MCU_XCLK_XTAL\r");
+
+        return;
+    }
+
+    iot2lp_para->clock_config->mcu_clk_sel = atoi(argv[1]);
+    iot2lp_para->clock_config->hclk_div = atoi(argv[2]);
+    iot2lp_para->clock_config->bclk_div = atoi(argv[3]);
+    iot2lp_para->clock_config->xclk_sel = atoi(argv[4]);
+}
+#endif
 
 SHELL_CMD_EXPORT_ALIAS(cmd_tickless, pm_enter_lp, cmd tickless);
 SHELL_CMD_EXPORT_ALIAS(cmd_set_dtim, wifi_lp_set_dtim, cmd_set_dtim);
 SHELL_CMD_EXPORT_ALIAS(test_tcp_keepalive, lpfw_tcp_keepalive, tcp keepalive test);
 SHELL_CMD_EXPORT_ALIAS(cmd_hbn_test, hbn_test, hbn test);
 SHELL_CMD_EXPORT_ALIAS(cmd_io_dbg, io_debug, cmd io_debug);
+#if defined(CONFIG_CLOCK_SOURCE_EF_PARAM) && CONFIG_CLOCK_SOURCE_EF_PARAM
 SHELL_CMD_EXPORT_ALIAS(cmd_set_clock_source, set_clock_source, Set system clock source (1:RC, 2:Passive XTAL, 3:Active XTAL));
 SHELL_CMD_EXPORT_ALIAS(cmd_get_clock_source, get_clock_source, Get current system clock source);
 #endif
-
+#if !defined(BL616)
+SHELL_CMD_EXPORT_ALIAS(cmd_lpfw_uart_cfg, lpfw_uart, cmd lpfw_uart);
+SHELL_CMD_EXPORT_ALIAS(cmd_lpfw_clock_cfg, lpfw_clock, cmd lpfw_clock);
+#endif
+#endif
 /**********************************************************
     proc_hellow_entry task func
  **********************************************************/
@@ -606,22 +698,24 @@ void tcpip_init_done(void *arg)
 
 int main(void)
 {
+#if !defined(BL618DG)
     uint8_t soc_v, rt_v, aon_v;
+#endif
 
     board_init();
-
     uart0 = bflb_device_get_by_name("uart0");
     shell_init_with_task(uart0);
 
-    tcpip_init(tcpip_init_done, NULL);
-    xTaskCreate(wifi_start_firmware_task, "wifi init", 1024, NULL, 27, NULL);
-
+#if !defined(BL618DG)
     hal_pm_ldo11_cfg(PM_PDS_LDO_LEVEL_SOC_DEFAULT, PM_PDS_LDO_LEVEL_RT_DEFAULT, PM_PDS_LDO_LEVEL_AON_DEFAULT);
     hal_pm_ldo11_cfg_get(&soc_v, &rt_v, &aon_v);
     printf("SOC:%d RT:%d AON:%d\r\n", soc_v, rt_v, aon_v);
+#endif
 
     HBN_Enable_RTC_Counter();
+#if !defined(BL618DG)
     pm_rc32k_auto_cal_init();
+#endif
 
     bflb_mtd_init();
     easyflash_init();
@@ -632,15 +726,32 @@ int main(void)
     bl_lp_init(); //wifi lowpower
     bl_lp_sys_callback_register(lp_enter, NULL, lp_exit, NULL);
 #endif
+#if defined(CONFIG_CLOCK_SOURCE_EF_PARAM) && CONFIG_CLOCK_SOURCE_EF_PARAM
     app_set_clock_source(CLOCK_SOURCE_PASSIVE);
+#endif
+
+    /* set ble controller EM Size */
+#ifdef CFG_BLE_ENABLE
+extern int bl_sys_em_config(void);
+    bl_sys_em_config();
+#endif
+
+    if (0 != rfparam_init(0, NULL, 0)) {
+        LOG_I("PHY RF init failed!\r\n");
+        return 0;
+    }
+
+    LOG_I("PHY RF init success!\r\n");
+
+    tcpip_init(tcpip_init_done, NULL);
 
 #if 0
     printf("[OS] Starting proc_hellow_entry task...\r\n");
     xTaskCreate(proc_hellow_entry, (char*)"hellow", 512, NULL, 10, NULL);
 #endif
 
-    xTaskCreate(app_start_task, (char *)"app_start", 1024, NULL, 15, &app_start_handle);
-    
+    xTaskCreate(wifi_start_firmware_task, "wifi init", 1024, NULL, 27, NULL);
+    xTaskCreate(bluetooth_start_task, (char *)"bluetooth_start", 1024, NULL, 15, &bluetooth_start_handle);
     vTaskStartScheduler();
 
     while (1) {

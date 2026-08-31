@@ -399,7 +399,7 @@ void hal_boot2_get_efuse_cfg(boot2_efuse_hw_config *efuse_cfg)
     bflb_ef_ctrl_read_direct(NULL, 0x7C, (uint32_t *)&app_encrypt_sign, 1, 0);
 
     efuse_cfg->app_encrypt_type = ((app_encrypt_sign >> 7) & 0xf);
-    efuse_cfg->app_sign_type = ((app_encrypt_sign >> 4) & 0x3);
+    efuse_cfg->app_sign_type = ((app_encrypt_sign >> 4) & 0x7);
 
     for (i = 0; i < HAL_BOOT2_CPU_GROUP_MAX; i++) {
         switch (efuse_cfg->app_encrypt_type) {
@@ -738,6 +738,25 @@ int32_t hal_boot_parse_bootheader(boot2_image_config *boot_img_cfg, uint8_t *dat
 
     arch_memcpy_fast(&boot_img_cfg->basic_cfg, &header->basic_cfg,
                      sizeof(header->basic_cfg));
+
+#if defined(CONFIG_APP_ENCRYPT_AFTER_SIGN)
+    boot_img_cfg->encrypt_after_sign =
+        (header->rsvd == HAL_BOOT2_APP_ENCRYPT_AFTER_SIGN_MARKER);
+    if (boot_img_cfg->encrypt_after_sign &&
+        ((boot_img_cfg->basic_cfg.sign_type == HAL_BOOT_SIGN_TYPE_NONE) ||
+         (boot_img_cfg->basic_cfg.encrypt_type == 0U) ||
+         (boot_img_cfg->basic_cfg.key_sel != 0U) ||
+         (boot_img_cfg->basic_cfg.xts_mode != 0U) ||
+         (boot_img_cfg->basic_cfg.aes_region_lock != 0U) ||
+         (boot_img_cfg->basic_cfg.no_segment == 0U) ||
+         (boot_img_cfg->basic_cfg.group_image_offset !=
+          HAL_BOOT2_FW_IMG_OFFSET_AFTER_HEADER) ||
+         (boot_img_cfg->basic_cfg.aes_region_len != 0U) ||
+         (boot_img_cfg->basic_cfg.img_len_cnt == 0U) ||
+         ((boot_img_cfg->basic_cfg.img_len_cnt & 0x0fU) != 0U))) {
+        return 0x0205;
+    }
+#endif
 
 #if BFLB_SP_BOOT2_SUPPORT_SIGN_ENCRYPT
     BOOT2_MSG_DBG("Encrypt mode:%d\r\n", g_efuse_cfg.app_encrypt_type);

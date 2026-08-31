@@ -2,10 +2,15 @@ sdk_generate_library()
 sdk_library_add_sources(clock_manager.c)
 sdk_library_add_sources(pm_manager.c)
 if (CONFIG_TICKLESS_EXT)
-    sdk_library_add_sources(tickless.c)
+    sdk_add_compile_definitions(-DconfigEXPECTED_IDLE_TIME_BEFORE_SLEEP=40)
+
     sdk_library_add_sources(tickless_hook.c)
     sdk_library_add_sources(rc32k_trim.c)
-    if (NOT CONFIG_TICKLESS_ACCURATE)
+
+    if (CONFIG_TICKLESS_ACCURATE)
+        sdk_library_add_sources(tickless_accurate.c)
+    else()
+        sdk_library_add_sources(tickless.c)
         sdk_add_compile_definitions(-DconfigUSE_TICKLESS_IDLE=1)
         sdk_add_compile_definitions(-Dconfig_CUSTOM_TICKLESS=1)
     endif()
@@ -22,6 +27,10 @@ if("${CHIP}" STREQUAL "bl616")
     endif()
 endif()
 
+if("${CHIP}" STREQUAL "bl618dg")
+    sdk_add_compile_definitions(-D PM_PDS_LDO_SOC_LEVEL_DEFAULT=AON_LDO_SOC_LEVEL_0P800V)
+endif()
+
 if (CONFIG_TICKLESS_ACCURATE)
     # sdk_add_compile_definitions(-DTICKLESS_DEBUG=4)
     sdk_add_compile_definitions(-DconfigUSE_TICKLESS_IDLE=1)
@@ -32,8 +41,6 @@ if (CONFIG_TICKLESS_ACCURATE)
 
     sdk_add_compile_definitions(-DconfigEXPECTED_IDLE_TIME_BEFORE_SLEEP=40)
     sdk_add_compile_definitions(-Dconfig_CUSTOM_TICKLESS=2)
-    sdk_library_add_sources(tickless_accurate.c)
-
     # MTIME base addresses for tickless_accurate.c
     if("${CHIP}" STREQUAL "bl602" OR "${CHIP}" STREQUAL "bl702" OR "${CHIP}" STREQUAL "bl702l")
         set(MTIME_BASE "0x0200BFF8UL")

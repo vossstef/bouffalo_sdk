@@ -165,6 +165,9 @@ static fih_ret bflb_sp_mediaboot_parse_one_group(boot2_image_config *boot_img_cf
 {
     uint32_t addr;
     uint32_t bootheader_size = sizeof(struct hal_bootheader_t);
+#if defined(CONFIG_APP_ENCRYPT_AFTER_SIGN)
+    uint8_t encrypt_region = 0;
+#endif
     FIH_DECLARE(fih_rc, FIH_FAILURE);
 
     addr = boot_header_addr + hal_boot2_get_bootheader_offset();
@@ -313,6 +316,19 @@ static fih_ret bflb_sp_mediaboot_parse_one_group(boot2_image_config *boot_img_cf
     }
 #endif
 
+#if defined(CONFIG_APP_ENCRYPT_AFTER_SIGN)
+    if (boot_img_cfg->encrypt_after_sign) {
+        encrypt_region =
+            (g_efuse_cfg.app_encrypt_type > HAL_APP_ENCRYPT_SAME_AS_BOOT2) ? 1U : 0U;
+
+        BOOT2_MSG("Enable APP decrypt before hash\r\n");
+        if (bflb_sp_boot2_set_encrypt(encrypt_region, boot_img_cfg) !=
+            BFLB_BOOT2_SUCCESS) {
+            FIH_RET(fih_ret_encode_status(BFLB_BOOT2_IMG_DEC_ERROR));
+        }
+    }
+#endif
+
     if (boot_img_cfg->basic_cfg.no_segment) {
         /* Flash image */
         if (!boot_img_cfg->basic_cfg.hash_ignore) {
@@ -329,7 +345,23 @@ static fih_ret bflb_sp_mediaboot_parse_one_group(boot2_image_config *boot_img_cf
             }
         }
 #if BFLB_SP_BOOT2_SUPPORT_SIGN_ENCRYPT
+#if defined(CONFIG_APP_ENCRYPT_AFTER_SIGN)
+        if (boot_img_cfg->encrypt_after_sign) {
+            if (bflb_sp_boot2_set_encrypt_region_state(encrypt_region, boot_img_cfg, 0) !=
+                BFLB_BOOT2_SUCCESS) {
+                FIH_RET(fih_ret_encode_status(BFLB_BOOT2_IMG_DEC_ERROR));
+            }
+        }
+#endif
         FIH_CALL(bflb_sp_boot_parser_check_signature, fih_rc, boot_img_cfg);
+#if defined(CONFIG_APP_ENCRYPT_AFTER_SIGN)
+        if (boot_img_cfg->encrypt_after_sign) {
+            if (bflb_sp_boot2_set_encrypt_region_state(encrypt_region, boot_img_cfg, 1) !=
+                BFLB_BOOT2_SUCCESS) {
+                FIH_RET(fih_ret_encode_status(BFLB_BOOT2_IMG_DEC_ERROR));
+            }
+        }
+#endif
         if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
             FIH_RET(fih_rc);
         }

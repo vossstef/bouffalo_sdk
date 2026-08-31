@@ -1509,8 +1509,8 @@ void usb_ecm_uac_device_start(void)
 
     composite_usb_init(0, 0);
 
-    board_emac_rmii_gpio_init(BSP_EMAC_RMII_DEFAULT_PORT);
-    board_emac_mdio_gpio_init(BSP_EMAC_MDIO_DEFAULT_PORT);
+    board_emac_rmii_gpio_init(0);
+    board_emac_mdio_gpio_init(0);
     eth_emac_init();
     eth_emac_event_cb_register(usbd_emac_event_cb);
 

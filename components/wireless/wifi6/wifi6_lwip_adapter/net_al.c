@@ -85,6 +85,8 @@ extern uint32_t _heap_wifi_size[];
 #define TST_SHEAP_PTR(ptr)  (((uint32_t)(ptr)) < (uint32_t)_heap_wifi_start ||             \
                              ((uint32_t)(ptr)) >= ((uint32_t)_heap_wifi_start + (uint32_t)_heap_wifi_size))
 
+#define NET_AL_ALIGN4_LO(val) ((val) & ~(uintptr_t)0x3)
+
 #define MACSW_NB_L2_FILTER 2
 
 #define L2_SEND_SW_RETRIES 7
@@ -671,11 +673,14 @@ int net_al_tx_req(struct net_al_tx_req req)
         if (staid == 0xff) {
             fhost_tx_release_buf(ibuf, 0, cfm_cb, cfm_cb_arg, buf_rx);
         } else {
+            uintptr_t info_addr = NET_AL_ALIGN4_LO((uintptr_t)ibuf->payload -
+                                                   sizeof(struct bc_tx_info_tag));
+
             if (!(ibuf->type_internal & PBUF_TYPE_FLAG_STRUCT_DATA_CONTIGUOUS &&
-                CO_ALIGN4_LO((uintptr_t)ibuf->payload - sizeof(struct bc_tx_info_tag)) >= (uintptr_t)ibuf + sizeof(*ibuf))) {
+                  info_addr >= (uintptr_t)ibuf + sizeof(*ibuf))) {
                 assert(0);
             }
-            bc_tx_enqueue((struct bc_tx_info_tag *)CO_ALIGN4_LO((uintptr_t)ibuf->payload - sizeof(struct bc_tx_info_tag)), staid, req);
+            bc_tx_enqueue((struct bc_tx_info_tag *)info_addr, staid, req);
         }
     }
     return 0;

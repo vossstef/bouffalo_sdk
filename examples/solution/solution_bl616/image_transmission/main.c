@@ -39,7 +39,15 @@
 #include "usbh_core.h"
 #endif
 
-#include "solution.h"
+#include "soln_solution.h"
+
+#if IS_ENABLED(CONFIG_SOLN_HB_TX_EN)
+#include "soln_hb_start_tx.h"
+#endif
+
+#if IS_ENABLED(CONFIG_SOLN_HB_RX_EN)
+#include "soln_hb_start_rx.h"
+#endif
 
 #define DBG_TAG "MAIN"
 #include "log.h"
@@ -67,26 +75,23 @@ static void main_init_task(void *param)
     /* USB host init */
     printf("Starting usb host task...\r\n");
     struct bflb_device_s *usb_dev = bflb_device_get_by_name("usb_v2");
-    usbh_initialize(0, usb_dev->reg_base);
+    usbh_initialize(0, usb_dev->reg_base, NULL);
 #endif
 
     /* solution util init */
-    solution_init();
+    soln_init();
 
     /************** image transmission *************** */
 
-#if IS_ENABLED(CONFIG_SOLUTION_FUNC_HIBOOSTER_TX)
+#if IS_ENABLED(CONFIG_SOLN_HB_TX_EN)
     /* Default startup of the sending end (server) */
-    extern int hb_sender_init(uint16_t local_port);
-    hb_sender_init(0);
+    soln_hb_sender_init(0);
 #endif
 
-#if IS_ENABLED(CONFIG_SOLUTION_FUNC_HIBOOSTER_RX)
+#if IS_ENABLED(CONFIG_SOLN_HB_RX_EN)
     /* hibooster rx start */
-    extern int hb_recv_init(uint16_t local_port, uint8_t peer_ip0, uint8_t peer_ip1, uint8_t peer_ip2, uint8_t peer_ip3, uint16_t peer_port);
-    extern int hb_recv_start(void);
-    hb_recv_init(9000, 192, 168, 169, 1, 8800);
-    hb_recv_start();
+    soln_hb_recv_init(9000, 192, 168, 169, 1, 8800);
+    soln_hb_recv_start();
 #endif
 
     LOG_D("main init done\r\n");

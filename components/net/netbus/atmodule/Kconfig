@@ -41,7 +41,7 @@ menu "AT module features"
 
 config ATMODULE_FULL_FEAT
     bool "Enable full feature set"
-    default y
+    default n
     help
       Enable the complete AT command feature set.
 

@@ -1,4 +1,16 @@
 # Changes
+## 2026-08-21
+1.Support compiling ble throughput test code as slave-only.
+
+## 2026-08-19
+1. [ble_cli_cmds] Add BL618DG RF coexistence CLI controls: ble_coex_rf_start, ble_coex_rf_stop, and ble_coex_rf_set for Bluetooth/WiFi time slicing and manual RF selection.
+2. [bredr_cli_cmds] Add A2DP Sink statistics CLI support with one-shot reporting, periodic reporting, and manual stopping, including bitrate, sequence range, and packet count.
+3. [bredr_cli_cmds] Add HFP SCO test-tone simulation and RX sample inspection commands for CVSD audio-path validation.
+
+## 2026-08-18
+1. [BR/EDR] Enable sniff mode in the default link policy so the controller accepts sniff negotiation; without it idle ACL links stay in Active mode and break WLAN/BT coex.
+2. [BR/EDR] Send Sniff/Exit Sniff Mode commands synchronously to surface Command Status rejections, enable the Mode Change event, and clarify sniff/unsniff CLI output.
+
 ## 2026-08-12
 1. [BR/EDR] Add per-device Extended Inquiry Result callback support under BFLB_BREDR_PATCH_EXTENDED_INQUIRY_RESULT_CALLBACK, with CLI test output for address, class of device, RSSI, and EIR name.
 

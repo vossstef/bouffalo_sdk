@@ -23,7 +23,7 @@
 #define HTTP_CONTENT_LEN_SIZE 11
 #define MAX_SEND_BUF_LEN 192
 
-static int sendall(int sock, const void *buf, size_t len,
+static int sendall(intptr_t sock, const void *buf, size_t len,
             const k_timepoint_t req_end_timepoint)
 {
     while (len) {
@@ -57,7 +57,7 @@ static int sendall(int sock, const void *buf, size_t len,
     return 0;
 }
 
-static int http_send_data(int sock, char *send_buf,
+static int http_send_data(intptr_t sock, char *send_buf,
               size_t send_buf_max_len, size_t *send_buf_pos,
               const k_timepoint_t req_end_timepoint,
               ...)
@@ -132,7 +132,7 @@ err:
     return ret;
 }
 
-static int http_flush_data(int sock, const char *send_buf, size_t send_buf_len,
+static int http_flush_data(intptr_t sock, const char *send_buf, size_t send_buf_len,
                 const k_timepoint_t req_end_timepoint)
 {
     int ret;
@@ -479,7 +479,7 @@ static bool http_client_cancel_requested(struct http_request *req)
     return req->cancel(req->internal.user_data) != 0;
 }
 
-static int http_wait_data(int sock, struct http_request *req, const k_timepoint_t req_end_timepoint)
+static int http_wait_data(intptr_t sock, struct http_request *req, const k_timepoint_t req_end_timepoint)
 {
     int total_received = 0;
     size_t offset = 0;
@@ -589,7 +589,7 @@ error:
     return ret;
 }
 
-int http_client_req(int sock, struct http_request *req,
+int http_client_req(intptr_t sock, struct http_request *req,
             int32_t timeout, void *user_data)
 {
     /* Utilize the network usage by sending data in bigger blocks */

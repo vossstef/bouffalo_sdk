@@ -39,6 +39,10 @@
 #define CONFIG_CONSOLE_USB_CDC_TASK_STACK_SIZE 1024U
 #endif
 
+#ifndef CONFIG_CONSOLE_USB_CDC_TX_FLUSH_TIMEOUT_MS
+#define CONFIG_CONSOLE_USB_CDC_TX_FLUSH_TIMEOUT_MS 5U
+#endif
+
 #define USB_CONSOLE_RETRY_DELAY_MS 10U
 
 static const uint8_t usb_console_device_descriptor[] = { USB_DEVICE_DESCRIPTOR_INIT(
@@ -214,6 +218,9 @@ static void usb_console_data_reset(enum usb_console_state next_state)
 
 ssize_t usb_console_write(const void *data, size_t size)
 {
+    bool should_notify;
+    uint32_t length_before;
+    uint32_t written;
     uintptr_t flags;
 
     if (size == 0U) {
@@ -230,10 +237,16 @@ ssize_t usb_console_write(const void *data, size_t size)
         return (ssize_t)size;
     }
 
-    (void)Ring_Buffer_Write(&usb_console.tx_ring, data, (uint32_t)size);
+    length_before = Ring_Buffer_Get_Length(&usb_console.tx_ring);
+    written = Ring_Buffer_Write(&usb_console.tx_ring, data, (uint32_t)size);
+    should_notify = (length_before == 0U) ||
+                    ((length_before < sizeof(usb_console_tx_buffer)) &&
+                     (written >= (sizeof(usb_console_tx_buffer) - length_before)));
     bflb_irq_restore(flags);
 
-    usb_console_notify_task();
+    if (should_notify) {
+        usb_console_notify_task();
+    }
     return (ssize_t)size;
 }
 
@@ -283,17 +296,33 @@ static void usb_console_event_cb(uint8_t busid, uint8_t event)
     usb_console_notify_task();
 }
 
-static bool usb_console_tx_polling(void)
+static bool usb_console_tx_polling(bool flush_timeout, TickType_t *wait_ticks, bool *flush_waiting)
 {
     bool done;
+    uint32_t pending_len;
+    TickType_t flush_ticks;
     uintptr_t flags;
 
 polling_continue:
     switch (usb_console.tx_state) {
         case USB_CONSOLE_TX_STA_IDLE:
             if (usb_console.tx_len == 0U) {
+                flush_ticks = pdMS_TO_TICKS(CONFIG_CONSOLE_USB_CDC_TX_FLUSH_TIMEOUT_MS);
+                if ((CONFIG_CONSOLE_USB_CDC_TX_FLUSH_TIMEOUT_MS != 0U) && (flush_ticks == 0U)) {
+                    flush_ticks = 1U;
+                }
+
                 flags = bflb_irq_save();
-                usb_console.tx_len = Ring_Buffer_Get_Length(&usb_console.tx_ring);
+                pending_len = Ring_Buffer_Get_Length(&usb_console.tx_ring);
+                if ((pending_len != 0U) && (pending_len < sizeof(usb_console_tx_buffer)) &&
+                    (flush_ticks != 0U) && !flush_timeout) {
+                    bflb_irq_restore(flags);
+                    *flush_waiting = true;
+                    *wait_ticks = flush_ticks;
+                    break;
+                }
+
+                usb_console.tx_len = pending_len;
                 if (usb_console.tx_len > sizeof(usb_console_tx_buffer)) {
                     usb_console.tx_len = sizeof(usb_console_tx_buffer);
                 }
@@ -390,12 +419,18 @@ polling_continue:
 
 static void usb_console_task(void *arg)
 {
+    BaseType_t wait_result;
     bool retry;
+    bool flush_timeout;
+    bool flush_waiting;
+    TickType_t retry_ticks;
+    TickType_t wait_ticks;
     uint8_t usb_event;
     uintptr_t flags;
 
     (void)arg;
     usb_console_data_reset(USB_CONSOLE_STA_WAIT_USBD_CFG);
+    flush_timeout = false;
 
     for (;;) {
         flags = bflb_irq_save();
@@ -404,6 +439,8 @@ static void usb_console_task(void *arg)
         bflb_irq_restore(flags);
 
         retry = false;
+        flush_waiting = false;
+        wait_ticks = portMAX_DELAY;
 
 state_continue:
         switch (usb_console.state) {
@@ -435,9 +472,10 @@ state_continue:
 
                     case USB_CONSOLE_EVENT_IDLE:
                         retry = usb_console_rx_polling();
-                        if (usb_console_tx_polling()) {
+                        if (usb_console_tx_polling(flush_timeout, &wait_ticks, &flush_waiting)) {
                             retry = true;
                         }
+                        flush_timeout = false;
                         break;
 
                     default:
@@ -474,7 +512,15 @@ state_continue:
                 break;
         }
 
-        (void)xSemaphoreTake(usb_console.event_sem, retry ? pdMS_TO_TICKS(USB_CONSOLE_RETRY_DELAY_MS) : portMAX_DELAY);
+        if (retry) {
+            retry_ticks = pdMS_TO_TICKS(USB_CONSOLE_RETRY_DELAY_MS);
+            if ((wait_ticks == portMAX_DELAY) || (retry_ticks < wait_ticks)) {
+                wait_ticks = retry_ticks;
+                flush_waiting = false;
+            }
+        }
+        wait_result = xSemaphoreTake(usb_console.event_sem, wait_ticks);
+        flush_timeout = flush_waiting && (wait_result == pdFALSE);
     }
 }
 

@@ -243,20 +243,28 @@ enum cfgmacsw_msg_index {
     /// Requset to send null packet
     CFGMACSW_NULL_DATA_SEND_CMD,
     CFGMACSW_NULL_DATA_SEND_RESP,
-    /// Request to enable WiFi/BLE coexistence (param: @ref cfgmacsw_coex_enable)
-    CFGMACSW_COEX_ENABLE_CMD,
-    /// Response to CFGMACSW_COEX_ENABLE_CMD (param: @ref cfgmacsw_resp)
-    CFGMACSW_COEX_ENABLE_RESP,
-    /// Request to disable WiFi/BLE coexistence (param: @ref cfgmacsw_coex_disable)
-    CFGMACSW_COEX_DISABLE_CMD,
-    /// Response to CFGMACSW_COEX_DISABLE_CMD (param: @ref cfgmacsw_resp)
-    CFGMACSW_COEX_DISABLE_RESP,
+    /// Start WiFi/BLE coexistence using a product runtime policy
+    CFGMACSW_COEX_START_CMD = 102,
+    /// Response to CFGMACSW_COEX_START_CMD
+    CFGMACSW_COEX_START_RESP = 103,
+    /// Stop the current WiFi/BLE coexistence activation
+    CFGMACSW_COEX_STOP_CMD = 104,
+    /// Response to CFGMACSW_COEX_STOP_CMD
+    CFGMACSW_COEX_STOP_RESP = 105,
     /// Request to set coexistence duty cycle (param: @ref cfgmacsw_coex_duty_set)
-    CFGMACSW_COEX_DUTY_SET_CMD,
+    CFGMACSW_COEX_DUTY_SET_CMD = 106,
     /// Response to CFGMACSW_COEX_DUTY_SET_CMD (param: @ref cfgmacsw_resp)
-    CFGMACSW_COEX_DUTY_SET_RESP,
+    CFGMACSW_COEX_DUTY_SET_RESP = 107,
     /// Event sent when AP CSA completes (param: @ref cfgmacsw_csa_finish_event)
-    CFGMACSW_CSA_FINISH_EVENT,
+    CFGMACSW_CSA_FINISH_EVENT = 108,
+    /// Query the current WiFi/BLE coexistence activation
+    CFGMACSW_COEX_STATUS_GET_CMD = 109,
+    /// Response to CFGMACSW_COEX_STATUS_GET_CMD
+    CFGMACSW_COEX_STATUS_GET_RESP = 110,
+    /// Enable or disable connection protection independently of activation
+    CFGMACSW_COEX_PROTECTION_SET_CMD = 111,
+    /// Response to CFGMACSW_COEX_PROTECTION_SET_CMD
+    CFGMACSW_COEX_PROTECTION_SET_RESP = 112,
 };
 
 /// CFGMACSW status
@@ -988,36 +996,70 @@ struct cfgmacsw_set_ps_mode {
     uint8_t ps_mode;
 };
 
-/// structure for CFGMACSW_COEX_ENABLE_CMD
-struct cfgmacsw_coex_enable {
+/// structure for CFGMACSW_COEX_START_CMD
+struct cfgmacsw_coex_start {
     /// header
     struct cfgmacsw_msg_hdr hdr;
-    /// Vif idx
-    uint16_t fhost_vif_idx;
-    /// Whether config_id was explicitly supplied by the application
-    bool config_present;
-    /// Fixed configuration ID carried as a stable wire value
-    uint8_t config_id;
-    /// Request software TBTT/PS_PTA runtime
-    bool ps_pta_enable;
+    /// One of enum wifi_mgmr_coex_runtime_policy values
+    uint8_t policy;
 };
 
-/// structure for CFGMACSW_COEX_DISABLE_CMD
-struct cfgmacsw_coex_disable {
+/// structure for CFGMACSW_COEX_STOP_CMD
+struct cfgmacsw_coex_stop {
     /// header
     struct cfgmacsw_msg_hdr hdr;
-    /// Vif idx
-    uint16_t fhost_vif_idx;
+};
+
+/// structure for CFGMACSW_COEX_STATUS_GET_CMD
+struct cfgmacsw_coex_status_get {
+    /// header
+    struct cfgmacsw_msg_hdr hdr;
+};
+
+/// structure for CFGMACSW_COEX_STATUS_GET_RESP
+struct cfgmacsw_coex_status_resp {
+    /// header
+    struct cfgmacsw_msg_hdr hdr;
+    /// One of enum wifi_mgmr_coex_error values
+    int32_t result;
+    /// A product activation is committed
+    bool active;
+    /// PS-PTA runtime is currently running
+    bool ps_pta_running;
+    /// Resolved runtime policy
+    uint8_t effective_runtime;
+    /// Stable Wi-Fi band, or PHY_BAND_MAX while inactive
+    uint8_t band;
+    /// Configured Wi-Fi active window in milliseconds
+    uint8_t duty_active_ms;
 };
 
 /// structure for CFGMACSW_COEX_DUTY_SET_CMD
 struct cfgmacsw_coex_duty_set {
     /// header
     struct cfgmacsw_msg_hdr hdr;
-    /// Vif idx
-    uint16_t fhost_vif_idx;
     /// WiFi active time in ms (10-90)
     uint8_t active_ms;
+};
+
+/// structure for CFGMACSW_COEX_PROTECTION_SET_CMD
+struct cfgmacsw_coex_protection_set {
+    /// header
+    struct cfgmacsw_msg_hdr hdr;
+    /// true to enable connection protection
+    bool enable;
+    /// enum coexm_hw_topology value captured from Board Config
+    uint8_t topology;
+    /// enum coex_rf_path value reported by the selected backend
+    uint8_t rf_path;
+};
+
+/// structured result for coexistence control commands
+struct cfgmacsw_coex_resp {
+    /// header
+    struct cfgmacsw_msg_hdr hdr;
+    /// One of enum wifi_mgmr_coex_error values
+    int32_t result;
 };
 
 /// structure for CFGMACSW_TWT_SETUP_CMD

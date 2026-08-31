@@ -795,6 +795,61 @@ size_t kfree_size(uint32_t heap_id)
 }
 
 /**
+ * @brief Return the largest contiguous free payload block.
+ *
+ * @param heap_id Heap ID to query. Pass 0 to query all active heaps.
+ * @return Largest allocatable payload size in bytes, or 0 on failure.
+ */
+size_t kmax_free_size(uint32_t heap_id)
+{
+    mem_manager_t *manager = &g_mem_manager;
+    uint32_t start_idx, end_idx;
+    uintptr_t irq_flags;
+    size_t max_free_size = 0;
+
+    if (!manager->initialized) {
+        return 0;
+    }
+
+    if (heap_id != 0) {
+        if (heap_id >= CONFIG_MM_HEAP_COUNT) {
+            return 0;
+        }
+        start_idx = heap_id;
+        end_idx = heap_id + 1;
+    } else {
+        start_idx = 1;
+        end_idx = CONFIG_MM_HEAP_COUNT;
+    }
+
+    irq_flags = mm_lock_save();
+
+    for (uint32_t i = start_idx; i < end_idx; i++) {
+        mm_heap_t *heap = manager->heaps[i];
+        const mm_allocator_t *allocator;
+        struct mm_usage_info usage;
+
+        if (!heap || !heap->is_active || heap->allocator_id >= CONFIG_MM_ALLOCATOR_COUNT) {
+            continue;
+        }
+
+        allocator = manager->allocators[heap->allocator_id];
+        if (!allocator || !allocator->get_usage_info) {
+            continue;
+        }
+
+        allocator->get_usage_info(heap, &usage);
+        if ((size_t)usage.max_free_size > max_free_size) {
+            max_free_size = (size_t)usage.max_free_size;
+        }
+    }
+
+    mm_unlock_restore(irq_flags);
+
+    return max_free_size;
+}
+
+/**
  * @brief Walk all allocated blocks across active heaps.
  *
  * Invokes allocator-specific block walkers for each active heap that supports

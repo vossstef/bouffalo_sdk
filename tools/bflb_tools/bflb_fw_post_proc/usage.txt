@@ -6,12 +6,15 @@ In order to achieve this goal, some parameters must be specified:
   --ota_ver: ota software version in x.y.z format
   --ota_ver_prefix: ota version prefix prepended before x.y.z
   --key: AES key when you want to encrypt image with AES CTR
-  --iv: AES iv when you want to encrypt image with AES CTR
+  --iv: AES iv; it can be used with --encrypt_type without exposing the AES key
+  --encrypt_type: encryption type used with --iv when --key is not specified: aes128/aes192/aes256/xts128
   --xtsmode: xts mode enable when you want to encrypt image with AES xts and your chip should support it
-  --privatekey: private key of ecc-256 in pem format
-  --publickey: public key of ecc-256 in pem format
-  --publickey_sign: signature of the public key, in base64 format
-  --publickey_hash_sign: signature of the public key's hash, in base64 format
+  --privatekey: ECC private key in PEM format; secp256r1 by default, secp384r1 when --secp384r1=true
+  --publickey: ECC public key in PEM format; secp256r1 by default, secp384r1 when --secp384r1=true
+  --app_privatekey: APP ECC private key in PEM format, used by --fw_append_pkh
+  --app_publickey: APP ECC public key in PEM format, used by --fw_append_pkh
+  --publickey_sign: raw ECC public key coordinates (X || Y), in base64 format
+  --publickey_hash_sign: hash of the raw ECC public key, in base64 format
   --imgfile_sign: signature of the image file, in base64 format
   --appkeys: true: APP uses different keys from bootloader; shared: APP uses the same key as bootloader; "not specified" or other: App is neither encrypted nor signed
 
@@ -20,8 +23,8 @@ Examples(examples/wifi/sta/wifi_tcp, bl616):
 
 ***Secure boot with sign***
 step1: sign the helloworld_bl616.bin with privatekey_uecc.pem and convert into base64 format as input imgfile_sign
-step2: sign the publickey_uecc.pem with privatekey_uecc.pem and convert into base64 format as input publickey_sign
-step3: sign the hash(sha256) of publickey_uecc.pem with privatekey_uecc.pem and convert into base64 format as input publickey_hash_sign
+step2: export the raw public key coordinates (X || Y) from publickey_uecc.pem and convert them into base64 format as input publickey_sign
+step3: calculate the hash of the raw public key and convert it into base64 format as input publickey_hash_sign
 step4: "bflb_fw_post_proc --chipname=bl616 --imgfile=helloworld_bl616.bin --publickey_sign=tdZGKpDE0/BysnPH166h86/d4vJOrqxW2ObGuGp+SxpXFJouWQ+8bTVaBbYpVjgEfXE5dlDWz/BC+21hMiMlgg== --publickey_hash_sign=E4U3TCWEezXSRnzVVzsOQtLML0z3VX4FNunVj0tuqf0=  --imgfile_sign=Ft+u9TD6IM7nOf4lqssT4Ed9+KnnRzdUdUgKN1DLIu9doQUAhqVa1yq/Vyz2cvcA2eu1I/cZzFdKCipRTppz2g=="
 
 
@@ -88,6 +91,15 @@ step11: make efuse
 Other options:
   multi-files: "bflb_fw_post_proc --chipname=bl616 --imgfile=./build/build_out/helloworld_bl616.bin,./build/build_out/boot2_*.bin --key=000102030405060708090A0B0C0D0E0F --iv=100102030405060708090A0B00000000"
 
+  Automatic boot header handling:
+  When --imgfile is specified, the tool retains an existing boot header or adds the default boot header when one is not found.
+  e.g.: bflb_fw_post_proc --chipname=bl616 --imgfile=helloworld_bl616_noheader.bin
+  Note: this automatic boot header handling is different from --hd_append, which appends the file explicitly specified by the user.
+
+  --encrypt_type: specify the encryption type when only --iv is available: aes128/aes192/aes256/xts128 (subject to chip support);
+  --key and --encrypt_type are mutually exclusive. APP encryption without a plaintext AES key requires --appkeys=true and an APP signing key. The tool signs the image, updates the encryption metadata and efuse configuration, but does not write the AES key.
+  e.g.: bflb_fw_post_proc --chipname=bl616 --imgfile=wifi_tcp_bl616.bin --iv=000102030405060708090A0B00000000 --encrypt_type=aes128 --privatekey=privatekey_uecc_app.pem --publickey=publickey_uecc_app.pem --appkeys=true
+
   --edatafile_in: input efuse data file;
   e.g.: bflb_fw_post_proc --chipname=bl616 --edatafile_in=./efusedata.bin --edbg_mode=close
 
@@ -148,7 +160,8 @@ Other options:
   --hd_append: header append file
   e.g.: bflb_fw_post_proc --chipname=bl616 --imgfile=wifi_tcp_bl616.bin --hd_append=./hd_append.bin
 
-  --publickey_str: ECC public key base 64 string;--privatekey_str:ECC private key base 64 string;
+  --publickey_str: DER encoded ECC public key in base64 format; --privatekey_str: DER encoded ECC private key in base64 format;
+  The key curve must match --secp384r1: secp256r1 by default, or secp384r1 when --secp384r1=true. A private key can be supplied without a public key; the public key is derived from it.
   e.g.: bflb_fw_post_proc --chipname=bl616 --imgfile=./build/build_out/wifi_tcp_bl616.bin --publickey_str=MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEb0B+ztCy6iK0K53PsEEWfPBSFTiUYY8MgtZEM/VNOnngKPnGDY9acMOvCX7l3cPpo6/fAiNCSgY9qnpcJdhRuQ== --privatekey_str=MHcCAQEEIPWAZexo3e8wEvbqxaK5NJfIsdOq9X9Iqke+etCNxZfmoAoGCCqGSM49AwEHoUQDQgAEb0B+ztCy6iK0K53PsEEWfPBSFTiUYY8MgtZEM/VNOnngKPnGDY9acMOvCX7l3cPpo6/fAiNCSgY9qnpcJdhRuQ==
 
   --checkpartition: check partition in whole_flash_data.bin;
@@ -163,7 +176,7 @@ Other options:
   --eisp_mode: isp mode:open/pswd/close
   e.g.: bflb_fw_post_proc --chipname=bl616 --imgfile=wifi_tcp_bl616.bin --edbg_mode=pswd --epswd=12345678223456783234567842345678 --eisp_mode=pswd
 
-  --secp384r1: true: use secp384r1 as ecdsa parameter
+  --secp384r1: true: use secp384r1 as the ECDSA parameter. All supplied public/private keys must use the selected curve; a mismatched key is rejected before the firmware is modified.
   e.g.: bflb_fw_post_proc --chipname=bl616 --imgfile=wifi_tcp_bl616.bin --privatekey=privatekey_secp384r1.pem --secp384r1=true --appkeys=true
 
   --appignore: ignore app firmware when only deal boot2/mfg
@@ -184,8 +197,9 @@ Other options:
   --pkh_to_flash_otp: just for bl616cl, put publickey hash to flash otp areas, generate pk_hash_to_flash_otp.bin
   e.g.: bflb_fw_post_proc --chipname=bl616cl --imgfile=./build/build_out/wifi_tcp_bl616cl.bin --key=000102030405060708090A0B0C0D0E0F --iv=100102030405060708090A0B00000000 --privatekey=privatekey_uecc.pem --appkeys=true --pkh_to_flash_otp=true
 
-  --fw_append_pkh: just for bl616cl, firmware append public key hash;
-  e.g.: bflb_fw_post_proc --chipname=bl616cl --imgfile=./build/build_out/wifi_tcp_bl616cl.bin --fw_append_pkh=true --app_publickey=publickey_uecc_app.pem
+  --fw_append_pkh: append the APP public key hash to firmware; this option does not sign the firmware. --app_publickey or --app_privatekey is required. If only --app_privatekey is specified, the public key is derived from it.
+  e.g.1: bflb_fw_post_proc --chipname=bl616cl --imgfile=./build/build_out/wifi_tcp_bl616cl.bin --fw_append_pkh=true --app_publickey=publickey_uecc_app.pem
+  e.g.2: bflb_fw_post_proc --chipname=bl616cl --imgfile=./build/build_out/wifi_tcp_bl616cl.bin --fw_append_pkh=true --app_privatekey=privatekey_secp384r1.pem --secp384r1=true
 
   --app_publickey: just for bl616cl, APP ECC public key used by --fw_append_pkh; required when --fw_append_pkh=true
   e.g.: bflb_fw_post_proc --chipname=bl616cl --imgfile=./build/build_out/wifi_tcp_bl616cl.bin --fw_append_pkh=true --app_publickey=app_publickey_uecc.pem --privatekey=boot2_privatekey_uecc.pem --appkeys=true

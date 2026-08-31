@@ -42,6 +42,8 @@ int https_wrapper_send(https_wrapper_handle_t https, const void *data, uint16_t 
 
 int https_wrapper_recv(https_wrapper_handle_t https, uint8_t *data, uint32_t size, int flags);
 
+int https_wrapper_ssl_check_pending(https_wrapper_handle_t https);
+
 int https_wrapper_socketfd_get(https_wrapper_handle_t https);
 
 #endif  /* HTTPS_WRAPPER_H */

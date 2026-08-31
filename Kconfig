@@ -4,7 +4,22 @@
 
 mainmenu "Bouffalo SDK Configuration"
 
+# Load board defaults before the common fallback defaults below.
+osource "$BL_SDK_BASE/bsp/board/$BOARD/Kconfig"
+
 menu "Build Options"
+
+config CHIP
+    string "SoC name"
+    default "$CHIP"
+    help
+      SoC selected by the Make bootstrap configuration.
+
+config BOARD
+    string "Board name"
+    default "$BOARD"
+    help
+      Board selected by the Make bootstrap configuration.
 
 config STRICT
     bool "Strict compilation (treat warnings as errors)"
@@ -19,6 +34,62 @@ config GCC_OPTIMISE_LEVEL
     default "-Os"
     help
       GCC optimization level used for the whole SDK, e.g. -O0, -Og, -Os, -O2.
+
+config CPU_ID
+    string "CPU core ID"
+    default ""
+    help
+      CPU core selected for a multi-core SoC, e.g. ap, np or lp.
+
+config CPU_MODEL
+    string "CPU model revision"
+    default ""
+    help
+      CPU model or silicon revision selected by the board.
+
+config BOARD_DIR
+    string "Custom board root"
+    default ""
+    help
+      Optional directory containing an external board implementation.
+
+config VSCODE_PARSE_EN
+    bool "Generate VS Code parse data"
+    default y
+    help
+      Enable build metadata used by VS Code source parsing.
+
+config EXPORT_COMPILE_COMMANDS
+    bool "Export compile commands"
+    default n
+    help
+      Generate compile_commands.json for editor and analysis tools.
+
+config PROJECT_SDK_VERSION
+    string "Project SDK version override"
+    default "1.1.1"
+    help
+      SDK version embedded in generated firmware metadata.
+
+config DBG_RUN_ON_FPGA
+    bool "Run wireless stacks on FPGA"
+    default n
+    help
+      Enable wireless timing and behavior intended for FPGA execution.
+
+config BUILD_ROM_CODE
+    bool "Build wireless ROM code"
+    default n
+    help
+      Build wireless controller or stack code for a ROM image.
+
+config SKIP_COMBINE
+    bool "Skip firmware image post-processing"
+    default n
+    help
+      Keep the raw linked binary and skip the firmware image combine step.
+      This is used by low-power firmware images that are embedded into a
+      separate application image.
 
 config DEBUG
     bool "Enable debug build"
@@ -43,6 +114,13 @@ config COMX
     default "COM5"
     help
       Host serial port used by flash/download tools.
+
+config FLASH_AUTO_2LINE_FALLBACK
+    bool "Retry flash initialization in two-line mode"
+    default n
+    help
+      Validate the configured quad read mode first. If validation fails,
+      retry initialization in DIO or DO mode according to c_read_support.
 
 config XTAL_POWER_TYPE_ACTIVE
     bool "Use active crystal power mode"

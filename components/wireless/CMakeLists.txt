@@ -52,7 +52,6 @@ if(CONFIG_THREAD)
   endif()
 endif()
 
-sdk_add_subdirectory_ifdef(CONFIG_COEX coex)
 sdk_add_subdirectory_ifdef(CONFIG_MATTER matter/mfd)
 sdk_add_subdirectory_ifdef(CONFIG_SUBG bl3141_drv)
 sdk_add_subdirectory_ifdef(CONFIG_ZIGBEE zigbee)

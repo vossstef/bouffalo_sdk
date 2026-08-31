@@ -8,10 +8,6 @@ sdk_library_add_sources(mm.c)
 
 sdk_library_add_sources(mm_debug.c)
 
-if(NOT DEFINED CONFIG_MEM_TLSF_EN)
-    set(CONFIG_MEM_TLSF_EN y)
-endif()
-
 if(CONFIG_MEM_TLSF_EN)
     sdk_add_include_directories(tlsf)
     sdk_library_add_sources(tlsf/tlsf.c)

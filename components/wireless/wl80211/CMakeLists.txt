@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-if(DEFINED PROJECT_SDK_VERSION)
+if(DEFINED CONFIG_PROJECT_SDK_VERSION)
     sdk_generate_library(wl80211_plat)
     sdk_add_private_compile_options(-Wno-unused-function)
     sdk_add_private_compile_options(-Wno-unused-variable)

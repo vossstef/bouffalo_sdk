@@ -90,7 +90,7 @@ const char private_cert[] =
     "FHFBlzbNHqryPsFm7VVC4TyY\n"
     "-----END PRIVATE KEY-----\n";
 
-static int payload_cb(int sock, struct http_request *req, void *user_data)
+static int payload_cb(intptr_t sock, struct http_request *req, void *user_data)
 {
     const char *content[] = {
         "foobar",

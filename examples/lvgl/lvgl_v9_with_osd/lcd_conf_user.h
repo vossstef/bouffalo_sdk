@@ -12,6 +12,8 @@
     LCD_DSI_ST7102_YH494           (ST7102 480x960, 2-lane, e.g. YH-494BSAC002N1, BL618DG)
     LCD_DSI_ST7102_KD027HVF        (ST7102 320x320, 1-lane, e.g. KD027HVFID009, BL618DG)
     LCD_DSI_AXS15231B_HS035        (AXS15231B 172x640, 1-lane, firmware-init, BL618DG)
+    LCD_DSI_AXS15231E_JX371        (AXS15231E 258x960, 1-lane, e.g. JX 3.71+15231B, BL618DG)
+    LCD_DSI_EK79007_WKS70WSV114    (EK79007 1024x600, 2/4-lane selectable, e.g. WKS70WSV114, BL618DG)
 
   mipi dpi (RGB) interface (parallel RGB; main.c sets up DPI GPIO + display clock)
     LCD_DPI_GC9503V                (GC9503V 480x480, BL618DG)
@@ -25,10 +27,10 @@
   filesystem_reader.c, CMakeLists.txt) keys off LCD_INTERFACE_TYPE (derived from
   this macro in bsp/common/lcd/lcd.h) so the same project builds for either panel.
 */
-#define LCD_DPI_STANDARD
+#define LCD_DSI_EK79007_WKS70WSV114
 
 /* --------- DSI panels: reset + backlight live here (board-specific timing) --------- */
-#if defined LCD_DSI_ST7102_YH494 || defined LCD_DSI_ST7102_KD027HVF || defined LCD_DSI_ILI9881C_KD050023W4 || defined LCD_DSI_ILI9881C_KD050020 || defined LCD_DSI_ILI9806E_KD050FWFIA019 || defined LCD_DSI_AXS15231B_HS035
+#if defined LCD_DSI_ST7102_YH494 || defined LCD_DSI_ST7102_KD027HVF || defined LCD_DSI_ILI9881C_KD050023W4 || defined LCD_DSI_ILI9881C_KD050020 || defined LCD_DSI_ILI9806E_KD050FWFIA019 || defined LCD_DSI_AXS15231B_HS035 || defined LCD_DSI_AXS15231E_JX371 || defined LCD_DSI_EK79007_WKS70WSV114
 
     /* DSI panel reset is driven by the LCD framework: lcd_init() pulses the reset
      * GPIO (per these macros) before calling into the panel's bring-up. Reset
@@ -55,6 +57,14 @@
      *   0: panel default orientation
      *   1: 180-degree rotation/mirror */
     #define ILI9806E_KD050FWFIA019_ROTATE_180  0
+
+    /* dsi ek79007 wks70wsv114 config */
+    /* Number of MIPI DSI data lanes the panel is wired for
+        2: 2-lane (vendor EK79007_Initial_Code_2lane, writes 0xB2 = 0x10)
+        4: 4-lane (vendor EK79007_Initial_Code_4lane, leaves 0xB2 at its default)
+    */
+    #define EK79007_WKS70WSV114_LANE_NUM 2
+    #define EK79007_WKS70WSV114_FB_MODE EK79007_WKS70WSV114_FB_MODE_OSD
 
 /* --------- DPI panel configs (copied verbatim from bsp/common/lcd/lcd_conf.h) --------- */
 
@@ -257,7 +267,7 @@
        Total Width = HSW + HBP + Active_Width + HFP
        Total Height = VSW + VBP + Active_Height + VFP */
 
-    #if ((STANDARD_DPI_W == 1024)&&(STANDARD_DPI_H == 600))
+#if ((STANDARD_DPI_W == 1024)&&(STANDARD_DPI_H == 600))
     /* Hsync Pulse Width */
     #define STANDARD_DPI_HSW 20 
     /* Hsync Back Porch */

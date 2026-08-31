@@ -13,11 +13,6 @@
 #include "config.h"
 #include "fhost_wpa.h"
 
-
-//In order to do coexistence test, Made a temporary patch
-#ifdef CFG_FOR_COEXISTENCE_TEST_STOPAP_PATCH
-struct wpa_global *g_global = NULL;
-#endif
 void wpa_supplicant_main(void *env)
 {
 	int exitcode = 0;
@@ -34,11 +29,6 @@ void wpa_supplicant_main(void *env)
 	global = wpa_supplicant_init(&params);
 	if (global == NULL)
 		goto end;
-//In order to do coexistence test, Made a temporary patch
-#ifdef CFG_FOR_COEXISTENCE_TEST_STOPAP_PATCH
-	g_global = global;
-	printf("=========================g_global = 0x%08lx\r\n", (uint32_t)g_global);
-#endif
 	fhost_wpa_send_event(FHOST_WPA_STARTED, global->params.ctrl_interface, 0, FHOST_WPA_GLOBAL_VIF);
 	global->params.ctrl_interface = NULL;
 
@@ -50,7 +40,6 @@ void wpa_supplicant_main(void *env)
 	fhost_wpa_send_event(FHOST_WPA_EXIT, (void *)exitcode, 0, FHOST_WPA_GLOBAL_VIF);
 	rtos_task_delete(NULL);
 }
-
 
 
 

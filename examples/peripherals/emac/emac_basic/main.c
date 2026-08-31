@@ -103,7 +103,7 @@ int emac_test_init(void)
     };
 
     /* emac init */
-    emacx = bsp_emac_get_device(BSP_EMAC_RMII_DEFAULT_PORT);
+    emacx = bsp_emac_get_device(CONFIG_EMAC0_RMII_ID);
     if (emacx == NULL) {
         LOG_E("device_get error\r\n");
         return -1;
@@ -112,13 +112,13 @@ int emac_test_init(void)
     bflb_emac_irq_attach(emacx, emac_irq_cb, NULL);
 
     /* scan eth_phy */
-    phy_ctrl.mac_mdio_dev = bsp_emac_get_device(BSP_EMAC_MDIO_DEFAULT_PORT);
+    phy_ctrl.mac_mdio_dev = bsp_emac_get_device(CONFIG_EMAC0_MDIO_ID);
     if (phy_ctrl.mac_mdio_dev == NULL) {
         LOG_E("mdio device_get error\r\n");
         return -1;
     }
 
-    ret = eth_phy_scan(&phy_ctrl, BSP_EMAC_PHY_DEFAULT_SCAN_START, BSP_EMAC_PHY_DEFAULT_SCAN_END);
+    ret = eth_phy_scan(&phy_ctrl, EPHY_ADDR_MIN, EPHY_ADDR_MAX);
     if (ret < 0) {
         return -1;
     }
@@ -130,8 +130,7 @@ int emac_test_init(void)
     }
 
     /* LAN8720 Timing Adjustment: When in ref_clk input mode, invert the rx_clk. */
-    if( (emac_cfg.clk_internal_mode == false) &&
-        (phy_ctrl.phy_drv->phy_id == EPHY_LAN8720_ID)) {
+    if ((emac_cfg.clk_internal_mode == false) && (phy_ctrl.phy_drv->phy_id == EPHY_LAN8720_ID)) {
         LOG_W("Invert rx_clk for LAN8720 Timing Adjustment.\r\n");
         bflb_emac_feature_control(emacx, EMAC_CMD_SET_MAC_RX_CLK_INVERT, true);
     }
@@ -164,7 +163,8 @@ int emac_test_init(void)
         bflb_emac_feature_control(emacx, EMAC_CMD_SET_SPEED_10M, true);
 #else
         LOG_E("10M speed not supported!!!!\r\n");
-        while(1);
+        while (1)
+            ;
 #endif
     } else {
         bflb_emac_feature_control(emacx, EMAC_CMD_SET_SPEED_100M, true);
@@ -244,16 +244,20 @@ void emac_test(void)
             tx_total_size_old = tx_total_size;
             uint32_t tx_cnt = tx_success_cnt - tx_cnt_old;
             tx_cnt_old = tx_success_cnt;
-            LOG_I("TX: Speed: %dMbps, valid_data_speed: %dMbps\r\n", (uint32_t)(tx_cnt * 64 * 8 / 2 / 1000 / 1000), (uint32_t)(tx_size * 8 / 2 / 1000 / 1000));
-            LOG_I("    success cnt:%d, error cnt:%d, total size:%lldByte\r\n", tx_success_cnt, tx_error_cnt, tx_total_size);
+            LOG_I("TX: Speed: %dMbps, valid_data_speed: %dMbps\r\n", (uint32_t)(tx_cnt * 64 * 8 / 2 / 1000 / 1000),
+                  (uint32_t)(tx_size * 8 / 2 / 1000 / 1000));
+            LOG_I("    success cnt:%d, error cnt:%d, total size:%lldByte\r\n", tx_success_cnt, tx_error_cnt,
+                  tx_total_size);
             LOG_I("    push_cnt:%d, tx_db available:%d\r\n", tx_push_cnt, tx_db_avail);
 
             uint64_t rx_size = rx_total_size - rx_total_size_old;
             rx_total_size_old = rx_total_size;
             uint32_t rx_cnt = rx_success_cnt - rx_cnt_old;
             rx_cnt_old = rx_success_cnt;
-            LOG_I("RX: Speed: %dMbps, valid_data_speed: %dMbps\r\n", (uint32_t)(rx_cnt * 64 * 8 / 2 / 1000 / 1000), (uint32_t)(rx_size * 8 / 2 / 1000 / 1000));
-            LOG_I("    success cnt:%d, error cnt:%d, total size:%lldByte\r\n", rx_success_cnt, rx_error_cnt, rx_total_size);
+            LOG_I("RX: Speed: %dMbps, valid_data_speed: %dMbps\r\n", (uint32_t)(rx_cnt * 64 * 8 / 2 / 1000 / 1000),
+                  (uint32_t)(rx_size * 8 / 2 / 1000 / 1000));
+            LOG_I("    success cnt:%d, error cnt:%d, total size:%lldByte\r\n", rx_success_cnt, rx_error_cnt,
+                  rx_total_size);
             LOG_I("    push_cnt:%d, rx_db available:%d, busy cnt:%d\r\n", rx_push_cnt, rx_db_avail, rx_busy_cnt);
             LOG_RI("\r\n");
 
@@ -301,8 +305,8 @@ int main(void)
 {
     board_init();
     /* emac gpio init */
-    board_emac_rmii_gpio_init(BSP_EMAC_RMII_DEFAULT_PORT);
-    board_emac_mdio_gpio_init(BSP_EMAC_MDIO_DEFAULT_PORT);
+    board_emac_rmii_gpio_init(CONFIG_EMAC0_RMII_ID);
+    board_emac_mdio_gpio_init(CONFIG_EMAC0_MDIO_ID);
 
     bflb_mtimer_delay_ms(100);
 

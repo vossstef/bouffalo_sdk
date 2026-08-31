@@ -28,6 +28,7 @@
 
 #include <fhost.h>
 #include <wifi_mgmr_ext.h>
+#include <wifi_mgmr_coex.h>
 #include <wifi_mgmr.h>
 
 #include <rfparam_adapter.h>
@@ -135,6 +136,7 @@ static void wifi_event_handler(async_input_event_t ev, void *priv)
         } break;
         case CODE_WIFI_ON_DISCONNECT: {
             LOG_I("[APP] [EVT] %s, CODE_WIFI_ON_DISCONNECT\r\n", __func__);
+            (void)wifi_mgmr_coex_stop();
         } break;
         case CODE_WIFI_ON_AP_STARTED: {
             LOG_I("[APP] [EVT] %s, CODE_WIFI_ON_AP_STARTED\r\n", __func__);
@@ -196,8 +198,7 @@ otbr_lwip_netif_type_t otbr_getInfraNetif(void)
 void otrAppProcess(ot_system_event_t sevent) 
 {
     if (OT_APP_NOTIFY_WIFI_INIT_EVENT & sevent) {
-        wifi_mgmr_sta_coex_enable();
-        int iret = wifi_mgmr_sta_coex_duty_set(30);
+        int iret = wifi_mgmr_coex_duty_set(30);
         if (iret != 0) {
             LOG_E("Failed to set coexistence duty cycle with error code: %d\r\n", iret);
             return;
@@ -215,6 +216,21 @@ void otrAppProcess(ot_system_event_t sevent)
     }
 
     if (OT_APP_NOTIFY_WIFI_IP_EVENT & sevent) {
+        struct wifi_mgmr_coex_board_config board;
+        int iret = wifi_mgmr_coex_board_config_get(&board);
+
+        if (iret != WIFI_MGMR_COEX_BOARD_CONFIG_OK) {
+            LOG_E("Coexistence board config is not available: %d\r\n", iret);
+            return;
+        }
+
+        iret = wifi_mgmr_coex_start(
+            WIFI_MGMR_COEX_RUNTIME_PS_PTA_REQUIRED);
+        if (iret != WIFI_MGMR_COEX_OK) {
+            LOG_E("Failed to start coexistence with error code: %d\r\n", iret);
+            return;
+        }
+
         wifi_mgmr_sta_autoconnect_enable();
 
         if (strlen(otbr_wifi_ssid) == 0) {

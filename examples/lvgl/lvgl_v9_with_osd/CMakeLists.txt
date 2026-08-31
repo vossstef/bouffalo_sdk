@@ -52,6 +52,8 @@ elseif(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DPI_JD9165BA")
     set(UI_DIR ${UI_DIR_1024}) # JD9165BA 1024x600
 elseif(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DSI_AXS15231B_HS035")
     set(UI_DIR ${UI_DIR_172}) # AXS15231B 172x640
+elseif(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DSI_AXS15231E_JX371")
+    set(UI_DIR ${UI_DIR_258x960}) # AXS15231E 258x960
 elseif(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DSI_ILI9806E_KD050FWFIA019")
     set(UI_DIR ${UI_DIR_854}) # KD050FWFIA019 480x854 (ILI9806E)
 elseif(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DSI_ILI9881C_")
@@ -60,6 +62,8 @@ elseif(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DSI_ST7102_YH494")
     set(UI_DIR ${UI_DIR_480}) # YH-494BSAC002N1 480x960
 elseif(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DSI_ST7102_KD027HVF")
     set(UI_DIR ${UI_DIR_320}) # KD027HVFID009 320x320
+elseif(_lcd_conf MATCHES "\n[ \t]*#define[ \t]+LCD_DSI_EK79007_WKS70WSV114")
+    set(UI_DIR ${UI_DIR_1024}) # LCD_DSI_EK79007_WKS70WSV114 1024x600
 else()
     message(FATAL_ERROR "lcd_conf_user.h: no UI mapping for the selected panel; add a mapping in CMakeLists.txt")
 endif()
@@ -70,7 +74,7 @@ if(UI_DIR)
     sdk_add_include_directories(${UI_DIR})
     sdk_add_compile_definitions(-DLVGL_WITH_SQUARELINE_UI=1)
 else()
-    message(STATUS "No SquareLine UI (DPI built-in demo)")
+    message(STATUS "No SquareLine UI (built-in lv_demo_benchmark)")
     set(ui_sources "")
 endif()
 

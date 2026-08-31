@@ -45,7 +45,7 @@
 #define MBEDTLS_ECDH_C
 #define MBEDTLS_ECDSA_C
 
-/* ECP curves follow Kconfig (build/generated/autoconf.h) for easier tuning.
+/* ECP curves follow Kconfig (build/generated/autoconfig.h) for easier tuning.
  * Keep secp256r1 as a safe default if no curve macro is selected.
  */
 #if defined(CONFIG_MBEDTLS_ECP_DP_SECP192R1_ENABLED)

@@ -297,7 +297,11 @@ int32_t ATTR_TCM_SECTION bflb_sp_boot2_set_encrypt(uint8_t index, boot2_image_co
     uint32_t aes_enabled = 0;
     uint32_t len = 0;
 
-    if (g_boot_img_cfg->img_valid == 0) {
+    if ((g_boot_img_cfg->img_valid == 0)
+#if defined(CONFIG_APP_ENCRYPT_AFTER_SIGN)
+        && !g_boot_img_cfg->encrypt_after_sign
+#endif
+    ) {
         return BFLB_BOOT2_SUCCESS;
     }
     /* FIXME:,1:lock, should be 1??*/
@@ -338,6 +342,23 @@ int32_t ATTR_TCM_SECTION bflb_sp_boot2_set_encrypt(uint8_t index, boot2_image_co
         bflb_sf_ctrl_aes_enable_be();
         bflb_sf_ctrl_aes_enable();
     }
+
+    return BFLB_BOOT2_SUCCESS;
+}
+
+int32_t ATTR_TCM_SECTION bflb_sp_boot2_set_encrypt_region_state(uint8_t index, boot2_image_config *g_boot_img_cfg, uint8_t enable)
+{
+    uint32_t len = g_boot_img_cfg->basic_cfg.img_len_cnt;
+
+    if ((g_boot_img_cfg->basic_cfg.encrypt_type == 0U) || (len == 0U) ||
+        (g_boot_img_cfg->basic_cfg.aes_region_lock != 0U)) {
+        return BFLB_BOOT2_IMG_DEC_ERROR;
+    }
+
+    bflb_sf_ctrl_aes_set_region(index, enable, 1,
+                                g_boot_img_cfg->basic_cfg.group_image_offset,
+                                g_boot_img_cfg->basic_cfg.group_image_offset + len - 1U,
+                                0);
 
     return BFLB_BOOT2_SUCCESS;
 }

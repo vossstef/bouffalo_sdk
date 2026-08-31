@@ -15,28 +15,39 @@
 #include "bflb_mtimer.h"
 #include "board.h"
 #include "bl_lp.h"
+#if defined(BL618DG)
+#include "bl618dg_pm.h"
+#include "bl618dg_glb.h"
+#include "bl618dg_hbn.h"
+#else
 #include "bl616_pm.h"
-#include "bflb_uart.h"
-#include "bflb_gpio.h"
-#include "bflb_clock.h"
 #include "bl616_glb.h"
 #include "bl616_glb_gpio.h"
 #include "bl616_hbn.h"
+#endif
+#include "bflb_uart.h"
+#include "bflb_gpio.h"
+#include "bflb_clock.h"
 #include "bflb_rtc.h"
 #include "shell.h"
 #include "pm_manager.h"
 
-
 int pwr_info_clear(void)
 {
+#if defined(BL618DG)
+    if (iot2lp_para->lp_info != NULL) {
+        bl_lp_info_clear(iot2lp_para->lp_info);
+    }
+#else
     bl_lp_info_clear();
+#endif
 
     return 0;
 }
 
-#define SLEEP_PDS_US        80
-#define ACTIVE_LPFW_US      38000
-#define ACTIVE_APP_US       57000
+#define SLEEP_PDS_US   80
+#define ACTIVE_LPFW_US 38000
+#define ACTIVE_APP_US  57000
 
 uint64_t pwr_info_get(void)
 {
@@ -46,12 +57,15 @@ uint64_t pwr_info_get(void)
     printf("\r\nVirtual time: %llu us\r\n", bl_lp_get_virtual_us());
     printf("Power info dump:\r\n");
     printf("LPFW try recv bcn: %d, loss %d\r\n", lp_info.lpfw_recv_cnt, lp_info.lpfw_loss_cnt);
+    printf("LPFW try ble adv: %u, loss %u\r\n", lp_info.ble_lpfw_adv_success_cnt, lp_info.ble_lpfw_adv_loss_cnt);
     printf("Total time %lldms\r\n", lp_info.time_total_us / 1000);
     printf("PDS sleep: %lldms\r\n", lp_info.sleep_pds_us / 1000);
     printf("LPFW active: %lldms\r\n", lp_info.active_lpfw_us / 1000);
     printf("APP active: %lldms\r\n", lp_info.active_app_us / 1000);
 
-    uint64_t current = (lp_info.sleep_pds_us * SLEEP_PDS_US + lp_info.active_lpfw_us * ACTIVE_LPFW_US + lp_info.active_app_us * ACTIVE_APP_US) / lp_info.time_total_us;
+    uint64_t current = (lp_info.sleep_pds_us * SLEEP_PDS_US + lp_info.active_lpfw_us * ACTIVE_LPFW_US +
+                        lp_info.active_app_us * ACTIVE_APP_US) /
+                       lp_info.time_total_us;
 
     printf("Predict current: %llduA\r\n", current);
 
@@ -65,23 +79,16 @@ void timerCallback(TimerHandle_t xTimer)
     xTimerDelete(xTimer, portMAX_DELAY);
 }
 
-void createAndStartTimer(const char* timerName, TickType_t timerPeriod)
+void createAndStartTimer(const char *timerName, TickType_t timerPeriod)
 {
-    TimerHandle_t timer = xTimerCreate(timerName,
-                                       timerPeriod,
-                                       pdTRUE,
-                                       0,
-                                       timerCallback
-                                    );
+    TimerHandle_t timer = xTimerCreate(timerName, timerPeriod, pdTRUE, 0, timerCallback);
 
-    if (timer == NULL)
-    {
+    if (timer == NULL) {
         printf("Failed to create timer.\n");
         return;
     }
 
-    if (xTimerStart(timer, 0) != pdPASS)
-    {
+    if (xTimerStart(timer, 0) != pdPASS) {
         printf("Failed to start timer.\n");
         return;
     }
