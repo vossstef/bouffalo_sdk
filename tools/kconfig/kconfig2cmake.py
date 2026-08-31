@@ -17,6 +17,17 @@ import sys
 import os
 
 
+def render_cmake(values, source):
+    lines = [
+        "# Auto-generated config file from {}".format(source),
+        "# Do not edit manually",
+        "",
+    ]
+    for name, value in values.items():
+        lines.append("set({} {})".format(name, value))
+    return "\n".join(lines) + "\n"
+
+
 def parse_kconfig_value(value_str):
     """
     Parse Kconfig value and convert to appropriate CMake format.
@@ -62,10 +73,7 @@ def convert_kconfig_to_cmake(config_file, output_file):
         print(f"Error reading input file: {e}", file=sys.stderr)
         return False
 
-    cmake_lines = []
-    cmake_lines.append("# Auto-generated config file from .config")
-    cmake_lines.append("# Do not edit manually")
-    cmake_lines.append("")
+    values = {}
 
     for line_num, line in enumerate(lines, 1):
         line = line.strip()
@@ -76,7 +84,7 @@ def convert_kconfig_to_cmake(config_file, output_file):
         match = re.match(r'# CONFIG_([A-Za-z0-9_]+) is not set$', line)
         if match:
             config_name = match.group(1)
-            cmake_lines.append(f"set(CONFIG_{config_name} n)")
+            values[f"CONFIG_{config_name}"] = 'n'
             continue
 
         # Skip empty lines and comments
@@ -93,13 +101,12 @@ def convert_kconfig_to_cmake(config_file, output_file):
             cmake_value, is_enabled = parse_kconfig_value(config_value)
             
             # Generate CMake set command
-            cmake_lines.append(f"set(CONFIG_{config_name} {cmake_value})")
+            values[f"CONFIG_{config_name}"] = cmake_value
             continue
-            
+
     try:
         with open(output_file, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(cmake_lines))
-            f.write('\n')  # Add final newline
+            f.write(render_cmake(values, config_file))
     except Exception as e:
         print(f"Error writing output file: {e}", file=sys.stderr)
         return False
@@ -116,7 +123,6 @@ def main():
     parser.add_argument('--output', '-o',
                        default='config.cmake',
                        help='Output config.cmake file (default: config.cmake)')
-    
     args = parser.parse_args()
     
     if not os.path.exists(args.config):
